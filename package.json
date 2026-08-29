@@ -1,0 +1,74 @@
+{
+  "name": "jskelet",
+  "version": "0.1.0",
+  "description": "SEO ve hız odaklı, framework'süz hissettiren framework: Express + EJS sunucu render, vanilla JS island'lar, HTML TTL cache.",
+  "type": "module",
+  "license": "MIT",
+  "keywords": [
+    "ssr",
+    "islands",
+    "express",
+    "ejs",
+    "esbuild",
+    "tailwind",
+    "seo",
+    "isr"
+  ],
+  "bin": {
+    "jskelet": "./bin/jskelet.mjs"
+  },
+  "main": "./src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./server": "./src/index.js",
+    "./client": "./src/client/index.js",
+    "./html": "./src/views/helpers/html.js",
+    "./tags": "./src/views/helpers/tags.js",
+    "./log": "./src/log.mjs",
+    "./register": "./src/runtime/register.mjs",
+    "./layout": "./src/templates/layout.ejs"
+  },
+  "files": [
+    "bin",
+    "src",
+    "docs",
+    "README.md",
+    "AGENTS.md"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "lint": "eslint",
+    "test": "node --test test/",
+    "example:minimal": "npm --prefix examples/minimal run dev",
+    "example:blog": "npm --prefix examples/blog run dev"
+  },
+  "dependencies": {
+    "ejs": "^6.0.1",
+    "esbuild": "^0.28.2",
+    "express": "^5.2.1",
+    "tailwind-merge": "^3.5.0"
+  },
+  "peerDependencies": {
+    "@phosphor-icons/core": "^2.1.1",
+    "@tailwindcss/postcss": "^4.3.3",
+    "lightningcss": "^1.32.0",
+    "postcss": "^8.5.26",
+    "sharp": "^0.35.4",
+    "tailwindcss": "^4.3.3"
+  },
+  "peerDependenciesMeta": {
+    "@phosphor-icons/core": { "optional": true },
+    "@tailwindcss/postcss": { "optional": true },
+    "lightningcss": { "optional": true },
+    "postcss": { "optional": true },
+    "sharp": { "optional": true },
+    "tailwindcss": { "optional": true }
+  },
+  "devDependencies": {
+    "@eslint/js": "^9",
+    "eslint": "^9",
+    "globals": "^16"
+  }
+}

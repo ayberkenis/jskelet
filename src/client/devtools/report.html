@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>JSkelet Dev · Detaylı İnceleme</title>
+    <link rel="icon" href="/__jskelet/dev/logo.png" />
+    <style>
+      :root {
+        --bg: #0a0c10;
+        --panel: #10131a;
+        --surface: rgba(255, 255, 255, 0.045);
+        --surface-hover: rgba(255, 255, 255, 0.08);
+        --line: rgba(255, 255, 255, 0.09);
+        --text: #eef1f5;
+        --muted: #8b95a3;
+        --good: #34d399;
+        --mid: #fbbf24;
+        --bad: #fb7185;
+        --info: #60a5fa;
+        color-scheme: dark;
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        background:
+          radial-gradient(1200px 600px at 20% -10%, #171c25 0%, transparent 60%),
+          var(--bg);
+        color: var(--text);
+        font: 400 13px/1.6 ui-sans-serif, system-ui, -apple-system, sans-serif;
+        min-height: 100vh;
+      }
+
+      a { color: inherit; }
+
+      header {
+        position: sticky; top: 0; z-index: 10;
+        display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+        padding: 14px 24px;
+        background: rgba(10, 12, 16, 0.86);
+        border-bottom: 1px solid var(--line);
+        backdrop-filter: blur(10px);
+      }
+      header img { width: 24px; height: 24px; object-fit: contain; }
+      header h1 { margin: 0; font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
+      header .spacer { flex: 1; }
+
+      .pill {
+        display: inline-flex; align-items: center; gap: 7px;
+        padding: 4px 10px; border-radius: 999px;
+        border: 1px solid var(--line); background: var(--surface);
+        color: var(--muted); font-size: 11.5px; font-weight: 600;
+      }
+      .pill .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--good); }
+
+      button, .btn {
+        display: inline-flex; align-items: center; gap: 7px;
+        background: var(--surface); border: 1px solid var(--line); color: var(--text);
+        border-radius: 9px; padding: 6px 11px; font-size: 12px; font-weight: 600;
+        cursor: pointer; font-family: inherit; text-decoration: none;
+        transition: background 0.15s ease, border-color 0.15s ease;
+      }
+      button:hover, .btn:hover { background: var(--surface-hover); }
+      button[aria-pressed="true"] { border-color: rgba(96, 165, 250, 0.5); color: #cfe3ff; }
+      button.danger { color: #ffc9d2; border-color: rgba(251, 113, 133, 0.28); background: rgba(251, 113, 133, 0.1); }
+      button.danger:hover { border-color: rgba(251, 113, 133, 0.55); background: rgba(251, 113, 133, 0.22); }
+
+      nav {
+        display: flex; gap: 6px; flex-wrap: wrap;
+        padding: 12px 24px 0;
+      }
+      nav button {
+        border-radius: 999px; color: var(--muted); background: transparent;
+        border-color: transparent;
+      }
+      nav button:hover { color: var(--text); background: var(--surface); }
+      nav button[aria-selected="true"] {
+        color: #fff; background: var(--surface-hover); border-color: var(--line);
+      }
+
+      main { padding: 18px 24px 60px; }
+      section[hidden] { display: none; }
+
+      h2 {
+        margin: 26px 0 12px; font-size: 11px; color: var(--muted);
+        text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700;
+      }
+      h2:first-child { margin-top: 6px; }
+      h2 .note { text-transform: none; letter-spacing: 0; font-weight: 600; color: #6c7684; margin-left: 8px; }
+
+      .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; }
+      .metric {
+        background: var(--panel); border: 1px solid var(--line);
+        border-radius: 14px; padding: 13px 15px 15px;
+      }
+      .metric .label { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; }
+      .metric .value { font-size: 24px; font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+      .metric .sub { color: var(--muted); font-size: 11px; }
+      .metric .bar { margin-top: 8px; height: 3px; border-radius: 999px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
+      .metric .bar span { display: block; height: 100%; background: var(--muted); }
+
+      .good { color: var(--good); } .mid { color: var(--mid); } .bad { color: var(--bad); }
+      .bar span.good { background: var(--good); } .bar span.mid { background: var(--mid); } .bar span.bad { background: var(--bad); }
+
+      .card {
+        background: var(--panel); border: 1px solid var(--line);
+        border-radius: 14px; padding: 14px 16px; margin-bottom: 12px;
+      }
+
+      .toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+      input[type="search"] {
+        flex: 1; min-width: 220px;
+        background: var(--surface); border: 1px solid var(--line); color: var(--text);
+        border-radius: 9px; padding: 7px 11px; font: inherit; font-size: 12px;
+      }
+      input[type="search"]::placeholder { color: #61697a; }
+
+      .table-wrap { overflow: auto; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); }
+      table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+      th, td { text-align: right; padding: 9px 12px; white-space: nowrap; border-bottom: 1px solid rgba(255, 255, 255, 0.05); }
+      th:first-child, td:first-child { text-align: left; }
+      th {
+        position: sticky; top: 0; z-index: 1;
+        background: #141821; color: var(--muted); font-size: 10.5px;
+        text-transform: uppercase; letter-spacing: 0.05em; cursor: pointer; user-select: none;
+      }
+      th:hover { color: var(--text); }
+      th[data-dir]::after { content: " ↓"; }
+      th[data-dir="asc"]::after { content: " ↑"; }
+      tbody tr:hover { background: var(--surface); }
+      tbody tr.clickable { cursor: pointer; }
+      tbody tr.selected { background: rgba(96, 165, 250, 0.1); }
+      td.path { font-family: ui-monospace, SFMono-Regular, monospace; font-size: 11.5px; max-width: 420px; overflow: hidden; text-overflow: ellipsis; }
+      td.path a { text-decoration: none; border-bottom: 1px solid transparent; }
+      td.path a:hover { border-bottom-color: rgba(255, 255, 255, 0.35); }
+
+      .tag {
+        border: 1px solid var(--line); border-radius: 999px; padding: 1px 7px;
+        font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+        color: var(--muted);
+      }
+      .tag.entry { color: #cfe3ff; border-color: rgba(96, 165, 250, 0.4); }
+      .tag.chunk { color: #ffeec2; border-color: rgba(251, 191, 36, 0.35); }
+
+      .split { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+      @media (max-width: 1000px) { .split { grid-template-columns: 1fr; } }
+
+      .bars { display: flex; flex-direction: column; gap: 7px; }
+      .barrow { display: grid; grid-template-columns: minmax(0, 1fr) 76px; gap: 10px; align-items: center; }
+      .barrow .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: ui-monospace, SFMono-Regular, monospace; font-size: 11px; color: #cfd6de; }
+      .barrow .track { grid-column: 1 / -1; height: 4px; border-radius: 999px; background: rgba(255, 255, 255, 0.07); overflow: hidden; margin-top: -4px; }
+      .barrow .track span { display: block; height: 100%; background: var(--info); }
+      .barrow .size { text-align: right; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+
+      .empty {
+        color: #5f6874; padding: 18px; text-align: center;
+        background: var(--panel); border: 1px dashed var(--line); border-radius: 14px;
+      }
+      code { font-family: ui-monospace, SFMono-Regular, monospace; font-size: 11.5px; background: rgba(0, 0, 0, 0.4); border: 1px solid var(--line); border-radius: 6px; padding: 1px 5px; }
+      .hint { color: var(--muted); font-size: 11.5px; }
+      .status { border-radius: 6px; padding: 1px 6px; font-size: 10.5px; font-weight: 700; background: rgba(52, 211, 153, 0.14); color: var(--good); }
+      .status.warn { background: rgba(251, 191, 36, 0.14); color: var(--mid); }
+      .status.bad { background: rgba(251, 113, 133, 0.14); color: var(--bad); }
+    </style>
+  </head>
+  <body>
+    <header>
+      <img src="/__jskelet/dev/logo.png" alt="" />
+      <h1>JSkelet Dev · Detaylı İnceleme</h1>
+      <span class="pill"><span class="dot"></span><span data-part="status">yükleniyor…</span></span>
+      <span class="spacer"></span>
+      <button data-action="refresh">Yenile</button>
+      <button data-action="auto" aria-pressed="false">Otomatik yenile</button>
+      <button class="danger" data-action="reset">Ölçümleri sıfırla</button>
+    </header>
+
+    <nav data-part="tabs"></nav>
+    <main data-part="main"></main>
+
+    <script type="module" src="/__jskelet/dev/report.js"></script>
+  </body>
+</html>

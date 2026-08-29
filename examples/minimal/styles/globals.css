@@ -1,0 +1,17 @@
+@import "tailwindcss" source(none);
+
+/**
+ * Tailwind'in sınıf taraması bu direktiflere bağlıdır. `source(none)` ile
+ * otomatik tespit kapatıldı: aksi hâlde yalnızca bu dosyanın dizini taranır
+ * ve şablonlarda geçen varyantlar sessizce düşer.
+ */
+@source "../views";
+@source "../client";
+@source "../routes";
+
+.wrapper {
+  max-width: 48rem;
+  margin-inline: auto;
+  padding-inline: 1rem;
+  padding-block: 2rem;
+}

@@ -1,0 +1,19 @@
+<%#
+  Fragment gövdesi. `/_fragment/*` uçları bunu layout'suz render eder, sekme
+  island'ı da aynı HTML'i alır — markup'ın tek kaynağı burada kalır.
+-%>
+<ul class="m-0 divide-y divide-slate-200 p-0">
+  <% posts.forEach(function (post) { %>
+  <li class="list-none py-3">
+    <%- link({
+      href: `/blog/${post.slug}`,
+      text: post.title,
+      class: "font-medium hover:underline",
+    }) %>
+    <p class="clamp-2 m-0 mt-1 text-sm text-slate-500"><%= post.excerpt %></p>
+  </li>
+  <% }); %>
+  <% if (!posts.length) { %>
+  <li class="list-none py-3 text-sm text-slate-500">Bu etikette yazı yok.</li>
+  <% } %>
+</ul>

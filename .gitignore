@@ -1,0 +1,7 @@
+node_modules/
+.jskelet/
+public/assets/
+examples/*/public/assets/
+examples/*/.jskelet/
+.env
+*.log

@@ -1,0 +1,31 @@
+<section class="wrapper">
+  <h2 class="text-2xl font-bold"><%= metadata.title %></h2>
+
+  <div class="mt-4">
+    <%- tagList(tags) %>
+  </div>
+
+  <%#
+    Arama island'ı: sunucu tam listeyi bastığı için JS gelmeden de sayfa
+    kullanılabilir; island yalnızca filtreleme ekler.
+  -%>
+  <div class="mt-6" data-island="search" data-island-eager>
+    <input
+      type="search"
+      data-search-input
+      placeholder="Yazılarda ara…"
+      class="w-full rounded border border-slate-300 px-3 py-2"
+      aria-label="Yazılarda ara"
+    >
+
+    <div class="mt-6 grid gap-5 sm:grid-cols-2" data-search-list>
+      <% posts.forEach(function (post) { %>
+      <%- postCard({ post, attrs: {} }) %>
+      <% }); %>
+    </div>
+
+    <p class="mt-6 hidden text-sm text-slate-500" data-search-empty>
+      Aramanızla eşleşen yazı yok.
+    </p>
+  </div>
+</section>

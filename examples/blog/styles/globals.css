@@ -1,0 +1,45 @@
+@import "tailwindcss" source(none);
+
+/**
+ * Tailwind sınıf taraması: `source(none)` otomatik tespiti kapatır, çünkü
+ * varsayılan davranış yalnızca bu dosyanın dizinini tarar ve şablonlardaki
+ * sınıflar sessizce çıktıdan düşer.
+ */
+@source "../views";
+@source "../client";
+@source "../routes";
+
+/**
+ * Tema `dark` sınıfına bağlanır; `theme-toggle` island'ı bunu
+ * `<html>` üzerinde açıp kapatır. Cache'lenen HTML herkese aynı gittiği
+ * için tema sunucuda karara bağlanamaz.
+ */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme inline {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+}
+
+/**
+ * Sayfa kabuğu. Tailwind sınıflarıyla da yazılabilirdi, ama her şablonda
+ * tekrar eden bir ölçü olduğu için tek sınıfta toplamak daha okunur.
+ */
+.wrapper {
+  max-width: var(--layout-content-max, 64rem);
+  margin-inline: auto;
+  padding-inline: 1rem;
+  padding-block: 2rem;
+}
+
+/** Kart özetlerinde iki satırdan sonrasını kırpar. */
+.clamp-2 {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+.dark body {
+  background-color: var(--color-slate-950);
+  color: var(--color-slate-100);
+}

@@ -1,0 +1,44 @@
+<%#
+  JSkelet varsayılan layout'u.
+
+  Uygulama `views/layout.ejs` oluşturduğu anda bu dosya devre dışı kalır;
+  amacı yeni bir projenin tek route ile çalışabilmesi. Kopyalayıp başlangıç
+  noktası olarak kullanın.
+
+  Kullanılabilir local'ler: metadata, headMeta, extraHead, structuredData,
+  body, bodyClass, entries, pathname, lang, devtools, devBasePath, asset,
+  hasAsset + tüm html/tag helper'ları ve views/components/** export'ları.
+  `hooks.layoutContext()` döndürdüğü her alan da buraya eklenir.
+-%>
+<!DOCTYPE html>
+<html lang="<%= lang %>">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <%# Kaynak ipuçları en başta: preconnect ve LCP preload'ını geciktirmek
+        doğrudan LCP'ye yazılır. Sayfaya özel head buradan gelir. %>
+    <%- extraHead %>
+    <%# Tek, render-blocking stylesheet — build çalışmadıysa hiç basılmaz. %>
+    <% if (hasAsset('app.css')) { %>
+    <link rel="stylesheet" href="<%= asset('app.css') %>">
+    <% } %>
+    <%- headMeta %>
+    <% structuredData.forEach(function (item) { %>
+    <script type="application/ld+json"><%- jsonScript(item) %></script>
+    <% }); %>
+  </head>
+  <body class="<%= bodyClass %>">
+    <%- body %>
+    <%# Island runtime; entry yoksa sayfa yine tam çalışır (sadece JS'siz). %>
+    <% if (hasAsset('main.js')) { %>
+    <script type="module" src="<%= asset('main.js') %>"></script>
+    <% } %>
+    <% entries.forEach(function (entry) { %>
+    <script type="module" src="<%= asset(entry) %>"></script>
+    <% }); %>
+    <%# Dev overlay: prod build'de yok, yalnızca `jskelet dev` sunucusundan. %>
+    <% if (devtools) { %>
+    <script type="module" src="<%= devBasePath %>/overlay.js"></script>
+    <% } %>
+  </body>
+</html>

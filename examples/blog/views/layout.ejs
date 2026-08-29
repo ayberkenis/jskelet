@@ -1,0 +1,47 @@
+<%#
+  Uygulamanın layout'u. `hooks.layoutContext()` döndürdüğü her alan burada
+  local olarak hazır (nav, structuredData, bodyClass, pathname).
+-%>
+<!DOCTYPE html>
+<html lang="<%= lang %>" class="h-full antialiased">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <%# Kaynak ipuçları en başta: preconnect ve LCP preload'ını geciktirmek
+        doğrudan LCP'ye yazılır. %>
+    <%- extraHead %>
+    <%# Yalnızca gövde ve başlık ağırlıkları preload edilir; üçünü birden
+        çekmek LCP görseliyle bant genişliği için yarışıyor. %>
+    <% if (hasAsset('inter-400.woff2')) { %>
+    <link rel="preload" href="<%= asset('inter-400.woff2') %>" as="font" type="font/woff2" crossorigin>
+    <% } %>
+    <%# Tek, küçük ve render-blocking stylesheet — gerekçesi docs/02-mimari.md %>
+    <% if (hasAsset('app.css')) { %>
+    <link rel="stylesheet" href="<%= asset('app.css') %>">
+    <% } %>
+    <%- headMeta %>
+    <% structuredData.forEach(function (item) { %>
+    <script type="application/ld+json"><%- jsonScript(item) %></script>
+    <% }); %>
+  </head>
+  <body class="<%= bodyClass %> flex min-h-full flex-col">
+    <%- await include('partials/header') %>
+
+    <main class="min-w-0 flex-1"><%- body %></main>
+
+    <%- await include('partials/footer') %>
+
+    <%# Overlay portal: modal/drawer içeriği buraya taşınır, böylece
+        `overflow: hidden` taşıyan bir ata element onu kırpmaz. %>
+    <div id="jskelet-overlays"></div>
+
+    <script type="module" src="<%= asset('main.js') %>"></script>
+    <%# Sayfaya özel entry'ler: controller `entries: [...]` bildirirse. %>
+    <% entries.forEach(function (entry) { %>
+    <script type="module" src="<%= asset(entry) %>"></script>
+    <% }); %>
+    <% if (devtools) { %>
+    <script type="module" src="<%= devBasePath %>/overlay.js"></script>
+    <% } %>
+  </body>
+</html>

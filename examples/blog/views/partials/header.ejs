@@ -1,0 +1,35 @@
+<header class="border-b border-slate-200">
+  <div class="wrapper flex items-center justify-between gap-6 py-4">
+    <%#
+      Ana sayfada logo <h1>, diğer sayfalarda <a>. `pathname` boş varsayılanı
+      bu yüzden önemli: "/" yazmak her sayfayı ana sayfa sanmaya yol açıyor.
+    -%>
+    <% if (pathname === "/") { %>
+    <h1 class="text-lg font-bold">JSkelet Blog</h1>
+    <% } else { %>
+    <%- link({ href: "/", text: "JSkelet Blog", class: "text-lg font-bold" }) %>
+    <% } %>
+
+    <nav class="flex items-center gap-4 text-sm">
+      <% nav.forEach(function (item) { %>
+      <%- link({
+        href: item.href,
+        text: item.label,
+        class: pathname === item.href ? "font-semibold underline" : "hover:underline",
+      }) %>
+      <% }); %>
+
+      <%#
+        `data-island-eager`: görünürlüğü beklemeden hemen bağlanır. Global
+        davranışlar (tema, menü, çerez bandı) için doğru seçim.
+      -%>
+      <button
+        type="button"
+        data-island="theme-toggle"
+        data-island-eager
+        class="rounded border border-slate-300 px-2 py-1"
+        aria-label="Temayı değiştir"
+      ><%- icon({ name: "Moon", size: 16 }) %></button>
+    </nav>
+  </div>
+</header>

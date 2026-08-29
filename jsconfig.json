@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "checkJs": false,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "target": "es2022",
+    "lib": ["es2022", "dom"],
+    "baseUrl": ".",
+    "paths": {
+      "jskelet": ["./src/index.js"],
+      "jskelet/client": ["./src/client/index.js"],
+      "jskelet/html": ["./src/views/helpers/html.js"],
+      "jskelet/tags": ["./src/views/helpers/tags.js"]
+    }
+  },
+  "exclude": ["node_modules", "**/public/assets", "src/client/devtools"]
+}

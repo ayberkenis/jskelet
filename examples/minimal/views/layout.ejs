@@ -1,0 +1,33 @@
+<%#
+  Uygulamanın kendi layout'u. Bu dosya varsa framework'ün varsayılan
+  layout'u (node_modules/jskelet/src/templates/layout.ejs) devre dışı kalır.
+-%>
+<!DOCTYPE html>
+<html lang="<%= lang %>">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <%- extraHead %>
+    <% if (hasAsset('app.css')) { %>
+    <link rel="stylesheet" href="<%= asset('app.css') %>">
+    <% } %>
+    <%- headMeta %>
+  </head>
+  <body class="<%= bodyClass %>">
+    <header class="border-b border-slate-200">
+      <nav class="wrapper flex gap-4 py-4">
+        <%- link({ href: "/", text: "Ana sayfa", class: "font-semibold" }) %>
+        <%- link({ href: "/hakkinda", text: "Hakkında" }) %>
+      </nav>
+    </header>
+
+    <main><%- body %></main>
+
+    <% if (hasAsset('main.js')) { %>
+    <script type="module" src="<%= asset('main.js') %>"></script>
+    <% } %>
+    <% if (devtools) { %>
+    <script type="module" src="<%= devBasePath %>/overlay.js"></script>
+    <% } %>
+  </body>
+</html>
