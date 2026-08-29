@@ -1,0 +1,22 @@
+{
+  "name": "jskelet-example-marketing",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "jskelet dev",
+    "build": "jskelet build",
+    "start": "jskelet start",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "jskelet": "file:../.."
+  },
+  "devDependencies": {
+    "@phosphor-icons/core": "^2.1.1",
+    "@tailwindcss/postcss": "^4.3.3",
+    "lightningcss": "^1.32.0",
+    "postcss": "^8.5.26",
+    "tailwindcss": "^4.3.3"
+  }
+}

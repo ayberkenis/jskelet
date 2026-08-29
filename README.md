@@ -131,14 +131,19 @@ kuralları özetler.
 ## Örnekler
 
 ```bash
-npm --prefix examples/minimal install && npm --prefix examples/minimal run dev
-npm --prefix examples/blog    install && npm --prefix examples/blog    run dev
+npm --prefix examples/minimal   install && npm --prefix examples/minimal   run dev
+npm --prefix examples/blog      install && npm --prefix examples/blog      run dev
+npm --prefix examples/marketing install && npm --prefix examples/marketing run dev
 ```
 
 - **`examples/minimal`** — iki route, bir bileşen, bir island. En küçük çalışan hâl.
 - **`examples/blog`** — dinamik route'lar, etiket sayfaları, tüm config
   bölümleri, fragment ile gelen sekmeler, form, prewarm, RSS/sitemap ve dört
   island.
+- **`examples/marketing`** — framework'ün tanıtım sitesi: kıyaslama tablosu,
+  uzun TTL, tüm sayfaları ısıtan prewarm. Sayfadaki bayt sayıları sitenin kendi
+  build çıktısından ölçülüyor, gecikme sayıları da tarayıcıda; uydurma benchmark
+  yok.
 
 Sunucu ayaktayken `node smoke.mjs` uçların beklendiği gibi yanıt verdiğini
 doğrular.

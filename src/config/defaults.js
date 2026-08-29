@@ -61,6 +61,32 @@ export const DEFAULT_PREWARM = {
 export const DEFAULT_PREWARM_SKIP = ["/api/", "/_fragment/", "/__jskelet/"];
 
 /**
+ * Site içi gezinme ipuçları (Speculation Rules + view transition).
+ *
+ * Varsayılan bilinçli olarak ölçülü: `prefetch` açık, çünkü yalnızca belgeyi
+ * indirir ve sayfanın JS'ini çalıştırmaz — yanlış tahmin edilse bile tek
+ * maliyeti bir istektir. `prerender` kapalı, çünkü hedef sayfanın script'leri
+ * gerçekten çalışır; ölçüm kodunu `prerenderingchange` olayına bağlamayan bir
+ * uygulamada ziyaret sayıları şişer. `viewTransition` kapalı, çünkü uygulamanın
+ * kendi geçiş animasyonlarıyla çakışabilir.
+ */
+export const DEFAULT_NAVIGATION = {
+  /** `false` ya da eagerness: "conservative" | "moderate" | "eager". */
+  prefetch: /** @type {false | "conservative" | "moderate" | "eager"} */ ("moderate"),
+  /** @type {false | "conservative" | "moderate" | "eager"} */
+  prerender: false,
+  /** `@view-transition { navigation: auto }` basılsın mı. */
+  viewTransition: false,
+};
+
+/**
+ * Hiçbir koşulda önden getirilmeyecek yollar. Yan etkisi olan ya da gezinme
+ * hedefi olmayan uçların spekülatif istekle tetiklenmesi gerçek bir hata
+ * kaynağı; uygulama kendi listesini `navigation.exclude` ile ekler.
+ */
+export const DEFAULT_NAVIGATION_EXCLUDE = ["/api/*", "/_fragment/*"];
+
+/**
  * Markalama. Header adı ve dev overlay yolu tek yerden değişsin diye
  * config'ten okunur — fork eden proje kendi adını verebilir.
  */

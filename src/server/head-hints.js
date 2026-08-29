@@ -9,7 +9,7 @@
  */
 import { getConfig } from "../config/index.js";
 import { preloadImage } from "../views/helpers/tags.js";
-import { esc } from "../views/helpers/html.js";
+import { esc, jsonScript } from "../views/helpers/html.js";
 
 /** @type {string | null} */
 let cached = null;
@@ -36,6 +36,77 @@ export function preconnectHints() {
     .join("");
 
   return cached;
+}
+
+/**
+ * Spekülasyondan her koşulda muaf tutulan bağlantılar. `nofollow` ve
+ * `target=_blank` zaten site içi gezinme değil; `data-no-prefetch` ise
+ * uygulamanın tek bir bağlantıyı elle dışarıda bırakma yolu (oturum kapatma
+ * gibi yan etkili hedefler için).
+ */
+const EXEMPT_SELECTORS = ["[rel~=nofollow]", "[target=_blank]", "[data-no-prefetch]"];
+
+/**
+ * Speculation Rules gövdesini üretir. `getConfig()`ten ayrı tutulmasının
+ * sebebi test edilebilirlik: kural üretimi saf bir dönüşüm.
+ *
+ * @param {import('../config/index.js').NavigationConfig} navigation
+ * @returns {object | null} Hiç kural yoksa `null`.
+ */
+export function buildSpeculationRules(navigation) {
+  /** @type {Record<string, object[]>} */
+  const rules = {};
+
+  // `href_matches: "/*"` yalnızca aynı origin'deki yolları eşler; dış
+  // bağlantılar için spekülasyon hem anlamsız hem gizlilik açısından istenmez.
+  const where = {
+    and: [
+      { href_matches: "/*" },
+      ...navigation.exclude.map((pattern) => ({ not: { href_matches: pattern } })),
+      ...EXEMPT_SELECTORS.map((selector) => ({ not: { selector_matches: selector } })),
+    ],
+  };
+
+  if (navigation.prefetch) {
+    rules.prefetch = [{ where, eagerness: navigation.prefetch }];
+  }
+  if (navigation.prerender) {
+    rules.prerender = [{ where, eagerness: navigation.prerender }];
+  }
+
+  return Object.keys(rules).length ? rules : null;
+}
+
+/** @type {string | null} */
+let navigationCached = null;
+
+/**
+ * Site içi gezinme ipuçları: Speculation Rules + cross-document view
+ * transition. İkisi de her sayfada aynı olduğu için bir kez hesaplanır.
+ *
+ * Bunlar bilinçli olarak client runtime'ı değil: tarayıcı bağlantı üzerinde
+ * duraksamayı, önceliklendirmeyi ve iptali kendisi yönetiyor. Aynı davranışı
+ * JS ile yazmak hem daha fazla bayt hem daha kötü bir tahmin demek.
+ *
+ * @returns {string}
+ */
+export function navigationHints() {
+  if (navigationCached != null) return navigationCached;
+
+  const { navigation } = getConfig();
+  const rules = buildSpeculationRules(navigation);
+
+  // Geçiş kuralı hem eski hem yeni belgede bulunmalı; her sayfaya basılan
+  // satır içi bir kural bunu build çıktısına bağımlı olmadan garanti eder.
+  const transition = navigation.viewTransition
+    ? "<style>@view-transition{navigation:auto}</style>"
+    : "";
+
+  navigationCached =
+    (rules ? `<script type="speculationrules">${jsonScript(rules)}</script>` : "") +
+    transition;
+
+  return navigationCached;
 }
 
 /**

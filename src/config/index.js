@@ -26,6 +26,8 @@ import {
   DEFAULT_BRAND,
   DEFAULT_DEV_GATE_BYPASS,
   DEFAULT_DIRS,
+  DEFAULT_NAVIGATION,
+  DEFAULT_NAVIGATION_EXCLUDE,
   DEFAULT_PREWARM,
   DEFAULT_PREWARM_SKIP,
   DEFAULT_STATIC,
@@ -35,6 +37,16 @@ import {
 export const FRAMEWORK_ROOT = path.resolve(import.meta.dirname, "..", "..");
 
 const CONFIG_FILE = "jskelet.config.mjs";
+
+/**
+ * @typedef {"conservative" | "moderate" | "eager"} Eagerness
+ *
+ * @typedef {object} NavigationConfig
+ * @property {false | Eagerness} prefetch
+ * @property {false | Eagerness} prerender
+ * @property {boolean} viewTransition
+ * @property {string[]} exclude Spekülasyon dışı bırakılan href desenleri.
+ */
 
 /**
  * @typedef {import('./pattern.js').CompiledPattern} CompiledPattern
@@ -55,6 +67,7 @@ const CONFIG_FILE = "jskelet.config.mjs";
  * @property {{ extensions: Set<string>, prefixes: string[] }} static
  * @property {string[]} devGateBypass
  * @property {string[]} preconnect
+ * @property {NavigationConfig} navigation
  * @property {string[]} prewarmSkip
  * @property {string[]} watch Dev sunucusunun izlediği ek dizinler.
  * @property {{ family: string, slug?: string, weights: number[] }[]} fonts
@@ -167,6 +180,66 @@ function normalizeCache(raw) {
   return { html, prewarm: { ...DEFAULT_PREWARM, ...(raw?.prewarm ?? {}) } };
 }
 
+/** Speculation Rules'un tanıdığı eagerness değerleri. */
+const EAGERNESS = new Set(["conservative", "moderate", "eager"]);
+
+/**
+ * `true` → varsayılan eagerness, `false` → kapalı, string → doğrulanır.
+ * Geçersiz bir değer siteyi düşürmemeli; uyarı basılıp varsayılana dönülür.
+ *
+ * @param {unknown} value
+ * @param {false | Eagerness} fallback
+ * @param {string} label
+ * @returns {false | Eagerness}
+ */
+function normalizeEagerness(value, fallback, label) {
+  if (value === undefined) return fallback;
+  if (value === false) return false;
+  if (value === true) return fallback === false ? "moderate" : fallback;
+  if (typeof value === "string" && EAGERNESS.has(value)) {
+    return /** @type {Eagerness} */ (value);
+  }
+
+  console.warn(
+    `[config] navigation.${label} geçersiz (${String(value)}), varsayılana dönüldü`,
+  );
+  return fallback;
+}
+
+/**
+ * @param {unknown} raw
+ * @param {Record<string, unknown>} brand
+ * @returns {NavigationConfig}
+ */
+function normalizeNavigation(raw, brand) {
+  const source = /** @type {Record<string, unknown>} */ (raw ?? {});
+
+  // Dev araçlarının yolu spekülasyona kapalı: overlay ve rapor uçları gerçek
+  // sayfa değil, önden getirilmelerinin hiçbir karşılığı yok.
+  const devBase = typeof brand.devBasePath === "string" ? brand.devBasePath : null;
+
+  return {
+    prefetch: normalizeEagerness(
+      source.prefetch,
+      DEFAULT_NAVIGATION.prefetch,
+      "prefetch",
+    ),
+    prerender: normalizeEagerness(
+      source.prerender,
+      DEFAULT_NAVIGATION.prerender,
+      "prerender",
+    ),
+    viewTransition: source.viewTransition === true,
+    exclude: [
+      ...DEFAULT_NAVIGATION_EXCLUDE,
+      ...(devBase ? [`${devBase}/*`] : []),
+      ...asArray(source.exclude, "navigation.exclude").filter(
+        (entry) => typeof entry === "string",
+      ),
+    ].map(String),
+  };
+}
+
 /**
  * Dizin adlarını mutlak yola çevirir. `styles` bir dosya yolu olduğu için
  * de aynı çözümlemeden geçer; ayrı bir alan tutmaya değmez.
@@ -268,6 +341,7 @@ export async function loadConfig(options = {}) {
 
   const { html, prewarm } = normalizeCache(cache);
   const dirs = resolveDirs(root, source.paths);
+  const brand = { ...DEFAULT_BRAND, ...(source.brand ?? {}) };
 
   config = {
     root,
@@ -278,7 +352,7 @@ export async function loadConfig(options = {}) {
     rewrites: normalizeRewrites(rewrites),
     html,
     prewarm,
-    brand: { ...DEFAULT_BRAND, ...(source.brand ?? {}) },
+    brand,
     hooks: source.hooks ?? {},
     layout: resolveLayout(dirs, source.layout),
     routes: Array.isArray(source.routes) ? source.routes : null,
@@ -288,6 +362,7 @@ export async function loadConfig(options = {}) {
     },
     devGateBypass: source.devGateBypass ?? DEFAULT_DEV_GATE_BYPASS,
     preconnect: source.preconnect ?? [],
+    navigation: normalizeNavigation(source.navigation, brand),
     prewarmSkip: source.prewarmSkip ?? DEFAULT_PREWARM_SKIP,
     // `routes`, `views` ve `lib` zaten izlenir; buraya yalnızca ek dizinler.
     watch: source.watch ?? [],

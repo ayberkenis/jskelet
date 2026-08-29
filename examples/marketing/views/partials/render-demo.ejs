@@ -1,0 +1,10 @@
+<%#
+  Ölçümün kontrol grubu: cache'lenmeyen uçtan dönen, gerçekten render edilen
+  bir parça. İçeriğin ne olduğu önemli değil, işin gerçek olması önemli — bu
+  yüzden sayfadaki en ağır bileşen olan kıyaslama tablosunun satırları basılıyor.
+-%>
+<ul class="grid list-none gap-1 p-0 text-sm">
+  <% rows.forEach(function (row) { %>
+  <li><%= row.label %>: <%= row.values.map((value) => value.text).join(" / ") %></li>
+  <% }); %>
+</ul>

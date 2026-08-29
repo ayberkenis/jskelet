@@ -17,6 +17,20 @@ export default {
   /** Client bundle'a gömülecek env anahtarları (Next'teki `NEXT_PUBLIC_*`). */
   clientEnv: ["SITE_URL"],
 
+  /**
+   * Site içi gezinme ipuçları. `prerender` bilinçli olarak kapalı: prerender
+   * edilen sayfanın script'leri gerçekten çalışır, yani ölçüm kodunu
+   * `prerenderingchange` olayına bağlamadan açmak ziyaret sayılarını şişirir.
+   *
+   * `exclude`: footer'daki RSS ve sitemap bağlantıları gezinme hedefi değil,
+   * önden indirilmeleri boşa istek.
+   */
+  navigation: {
+    prefetch: "moderate",
+    viewTransition: true,
+    exclude: ["/rss.xml", "/sitemap.xml"],
+  },
+
   /** Build zamanı indirilip `public/fonts/` altına konur, sonra commit edilir. */
   fonts: [{ family: "Inter", weights: [400, 700] }],
 

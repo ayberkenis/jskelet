@@ -111,7 +111,7 @@ Dikkat edilecek noktalar:
 | --- | --- | --- |
 | `metadata` | `object` | `hooks.metadata()` + controller `metadata` (controller kazanır) |
 | `headMeta` | `string` | `metadata`dan üretilmiş hazır `<head>` etiketleri |
-| `extraHead` | `string` | `preconnect` ipuçları + controller `head` + `context.extraHead` |
+| `extraHead` | `string` | `preconnect` ipuçları + `navigation` ipuçları + controller `head` + `context.extraHead` |
 | `structuredData` | `unknown[]` | `hooks.layoutContext()` → `structuredData`; varsayılan `[]` |
 | `body` | `string` | Sayfa şablonunun render çıktısı |
 | `bodyClass` | `string` | controller `bodyClass` → `context.bodyClass` → `""` |

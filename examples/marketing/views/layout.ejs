@@ -1,0 +1,64 @@
+<%#
+  `hooks.layoutContext()` döndürdüğü her alan burada local: nav, pathname,
+  structuredData, bodyClass.
+
+  Bu sitede font preload yok, çünkü web font de yok. Head'de tek indirilebilir
+  kaynak stylesheet; JS entry defer edilmiş modül olduğu için render'ı bloke
+  etmiyor.
+-%>
+<!DOCTYPE html>
+<html lang="<%= lang %>" class="h-full scroll-smooth antialiased">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#020617">
+    <%# Kaynak ipuçları en başta; preconnect'i geciktirmek doğrudan LCP'ye yazılır. %>
+    <%- extraHead %>
+    <% if (hasAsset('app.css')) { %>
+    <link rel="stylesheet" href="<%= asset('app.css') %>">
+    <% } %>
+    <%- headMeta %>
+    <% structuredData.forEach(function (item) { %>
+    <script type="application/ld+json"><%- jsonScript(item) %></script>
+    <% }); %>
+    <%#
+      Tema kararı client'ta veriliyor ama ilk boyamadan önce uygulanmak zorunda:
+      aksi halde koyu tema tercih eden kullanıcı bir kare beyaz görür. Bu yüzden
+      küçük ve satır içi; island'a bırakılamaz çünkü island'ın modülü sonra iner.
+    -%>
+    <script>
+      try {
+        var stored = localStorage.getItem("jskelet-theme");
+        var dark = stored
+          ? stored === "dark"
+          : matchMedia("(prefers-color-scheme: dark)").matches;
+        if (dark) document.documentElement.classList.add("dark");
+      } catch (error) {
+        void error;
+      }
+    </script>
+  </head>
+  <body class="<%= bodyClass %> flex min-h-full flex-col font-sans">
+    <a
+      href="#content"
+      class="sr-only focus:not-sr-only focus:absolute focus:top-3 focus:left-3 focus:z-50 focus:rounded focus:bg-slate-900 focus:px-3 focus:py-2 focus:text-white"
+    >İçeriğe geç</a>
+
+    <%- await include('partials/header') %>
+
+    <main id="content" class="min-w-0 flex-1"><%- body %></main>
+
+    <%- await include('partials/footer') %>
+
+    <%# Overlay portal: `overflow: hidden` taşıyan bir ata element modalı kırpmasın. %>
+    <div id="jskelet-overlays"></div>
+
+    <script type="module" src="<%= asset('main.js') %>"></script>
+    <% entries.forEach(function (entry) { %>
+    <script type="module" src="<%= asset(entry) %>"></script>
+    <% }); %>
+    <% if (devtools) { %>
+    <script type="module" src="<%= devBasePath %>/overlay.js"></script>
+    <% } %>
+  </body>
+</html>

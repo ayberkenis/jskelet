@@ -39,7 +39,7 @@ belirli bir konuyu arıyorsanız doğrudan ilgili başlığa gidin.
 
 ## Çalışan örnekler
 
-İkisi de çalışır durumda; belgelerdeki örneklerin çoğu buralardan alınmıştır.
+Üçü de çalışır durumda; belgelerdeki örneklerin çoğu buralardan alınmıştır.
 
 **`examples/minimal/`** — iki route, bir bileşen, bir island, minimal config.
 Framework'ün en küçük çalışan hâli.
@@ -59,5 +59,17 @@ npm --prefix examples/blog install
 npm --prefix examples/blog run dev
 ```
 
-Her iki örnekte `node smoke.mjs` sunucu ayaktayken uçların beklendiği gibi
+**`examples/marketing/`** — framework'ün kendi tanıtım sitesi: hero, kıyaslama
+tablosu, canlı gecikme ölçümü, SSS ve belgeler dizini. Sayfadaki bayt sayıları
+`lib/payload.js` içinde sitenin **kendi** build çıktısından okunur; gecikme
+sayıları ise `latency` island'ında tarayıcıda ölçülür. Uzun TTL (bir saat) ve
+tüm sayfaları ısıtan prewarm ile, cache'in en verimli çalıştığı profili
+gösterir.
+
+```bash
+npm --prefix examples/marketing install
+npm --prefix examples/marketing run dev
+```
+
+Her üç örnekte `node smoke.mjs` sunucu ayaktayken uçların beklendiği gibi
 yanıt verdiğini doğrular.

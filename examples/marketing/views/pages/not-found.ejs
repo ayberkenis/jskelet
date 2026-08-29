@@ -1,0 +1,13 @@
+<section class="wrapper py-24 text-center">
+  <p class="m-0 font-mono text-sm text-slate-400">404</p>
+  <h1 class="mt-3 text-3xl font-bold tracking-tight">Sayfa bulunamadı</h1>
+  <p class="mx-auto mt-3 max-w-md text-slate-600 dark:text-slate-300">
+    Bu yol route tablosunda yok. 404 yanıtları bilinçli olarak önbelleğe
+    alınmaz; bir sayfa eklendiğinde eski hata sayfası ortalıkta kalmasın.
+  </p>
+
+  <div class="mt-8 flex flex-wrap justify-center gap-3">
+    <%- buttonLink({ href: "/", text: "Ana sayfa" }) %>
+    <%- buttonLink({ href: "/belgeler", text: "Belgeler", variant: "ghost" }) %>
+  </div>
+</section>

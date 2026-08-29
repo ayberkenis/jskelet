@@ -19,7 +19,7 @@ import { withHtmlCache } from "./html-cache.js";
 import { getConfig, hook } from "../config/index.js";
 import { matchPattern } from "../config/pattern.js";
 import { encodeText, negotiateEncoding } from "./middleware/compression.js";
-import { preconnectHints } from "./head-hints.js";
+import { navigationHints, preconnectHints } from "./head-hints.js";
 import { withRequestCache } from "../http/request-cache.js";
 import { getUpstreamFailures, withUpstreamTracking } from "./upstream-tracking.js";
 import { isNotFoundError, isRedirectError } from "../http/control-flow.js";
@@ -135,7 +135,13 @@ export async function renderPage(page) {
       headMeta: renderHeadMeta(metadata),
       structuredData: context.structuredData ?? [],
       // Preconnect her sayfada aynı; LCP preload'ını sayfa kendisi ekler.
-      extraHead: preconnectHints() + (page.head ?? "") + (context.extraHead ?? ""),
+      // Gezinme ipuçları preconnect'ten sonra: spekülasyon bir sonraki sayfayı
+      // ilgilendiriyor, bu sayfanın LCP'sinin önüne geçmemeli.
+      extraHead:
+        preconnectHints() +
+        navigationHints() +
+        (page.head ?? "") +
+        (context.extraHead ?? ""),
       bodyClass: page.bodyClass ?? context.bodyClass ?? "",
       entries: page.entries ?? [],
       devtools: isDev,

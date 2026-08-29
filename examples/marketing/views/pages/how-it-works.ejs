@@ -1,0 +1,77 @@
+<section class="border-b border-slate-200 dark:border-slate-800">
+  <div class="wrapper py-16 sm:py-20">
+    <%- sectionHead({
+      eyebrow: "Nasıl çalışır",
+      title: "İstekten hidrasyona kadar beş adım",
+      lead: "Sihir yok: her adım tek bir dosyada okunabilir ve sıra sözleşmedir.",
+    }) %>
+  </div>
+</section>
+
+<section class="wrapper py-16">
+  <ol class="grid list-none gap-4 p-0">
+    <% pipeline.forEach(function (item) { %>
+    <li class="grid gap-4 rounded-xl border border-slate-200 p-6 sm:grid-cols-[3rem_1fr] dark:border-slate-800">
+      <span
+        class="inline-flex size-10 items-center justify-center rounded-lg bg-slate-900 font-mono text-sm font-semibold text-white dark:bg-white dark:text-slate-900"
+        aria-hidden="true"
+      ><%= item.step %></span>
+      <div>
+        <h3 class="m-0 text-base font-semibold"><%= item.title %></h3>
+        <p class="mt-2 mb-0 text-sm/6 text-slate-600 dark:text-slate-300"><%= item.body %></p>
+      </div>
+    </li>
+    <% }); %>
+  </ol>
+</section>
+
+<section class="border-t border-slate-200 bg-slate-50 py-16 dark:border-slate-800 dark:bg-slate-900/30">
+  <div class="wrapper grid gap-10 lg:grid-cols-2 lg:items-start">
+    <div>
+      <%- sectionHead({
+        eyebrow: "Island sözleşmesi",
+        title: "Etkileşim elemente bağlanır, sayfaya değil",
+        lead: "Sunucu HTML'i basar; island yalnızca davranışı devralır. Modül inmezse sayfa okunabilir kalır.",
+      }) %>
+
+      <ul class="mt-6 grid list-none gap-3 p-0 text-sm/6 text-slate-600 dark:text-slate-300">
+        <li class="flex gap-2"><span aria-hidden="true" class="text-sky-500">→</span> Varsayılan strateji görünürlük: IntersectionObserver 200px önceden indirir.</li>
+        <li class="flex gap-2"><span aria-hidden="true" class="text-sky-500">→</span> <code class="font-mono text-xs">data-island-eager</code> global davranışlar için, <code class="font-mono text-xs">data-island-idle</code> acelesi olmayanlar için.</li>
+        <li class="flex gap-2"><span aria-hidden="true" class="text-sky-500">→</span> Props <code class="font-mono text-xs">data-island-props</code> ile JSON olarak geçer; sunucu verisi ikinci kez fetch edilmez.</li>
+        <li class="flex gap-2"><span aria-hidden="true" class="text-sky-500">→</span> <code class="font-mono text-xs">mount()</code> bir temizleme fonksiyonu döndürebilir.</li>
+      </ul>
+    </div>
+
+    <div class="grid gap-4">
+      <%- codeBlock({
+        label: "views/pages/home.ejs",
+        // Örnek kodda EJS etiketi olamaz: kapanış ikilisi bu çıktı etiketini
+        // erken kapatır ve şablon derlenmez.
+        code: `<div\n  data-island="pricing-calculator"\n  data-island-props='{"currency":"TRY"}'\n>\n  <!-- fiyat tablosunun HTML'i sunucudan geldi -->\n  <table data-seats-table>...</table>\n</div>`,
+      }) %>
+
+      <%- codeBlock({
+        label: "client/islands/pricing-calculator.js",
+        code: `import { on, qs } from "jskelet/client";\n\nexport function mount(element, props) {\n  const input = qs(element, "[data-seats]");\n\n  return on(input, "input", () => {\n    // Fiyat tablosunun HTML'i sunucudan geldi;\n    // island yalnızca sayıyı günceller.\n    paint(element, Number(input.value), props.currency);\n  });\n}`,
+      }) %>
+    </div>
+  </div>
+</section>
+
+<section class="wrapper py-16">
+  <%- sectionHead({
+    eyebrow: "Karşılığı",
+    title: "Bu üç karar pratikte ne getiriyor",
+  }) %>
+
+  <div class="mt-10 grid gap-5 md:grid-cols-3">
+    <% pillars.forEach(function (item) { %>
+    <%- featureCard(item) %>
+    <% }); %>
+  </div>
+
+  <div class="mt-10 flex flex-wrap gap-3">
+    <%- buttonLink({ href: "/kiyaslama", text: "Kıyaslama ve canlı ölçüm", icon: "ArrowRight" }) %>
+    <%- buttonLink({ href: "/belgeler", text: "Belgeler", variant: "ghost" }) %>
+  </div>
+</section>

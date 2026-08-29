@@ -112,8 +112,8 @@ sessizce çıktıdan düşer.
 ## Örnekleri güncel tut
 
 Framework'ün genel yüzeyini değiştirdiysen (`route()` imzası, hook adları,
-config alanları, client API'si) `examples/minimal` ve `examples/blog`'u da
-güncelle. Örnekler belgelerdeki kod parçalarının kaynağı; kaymaları en hızlı
+config alanları, client API'si) `examples/minimal`, `examples/blog` ve
+`examples/marketing`'i de güncelle. Örnekler belgelerdeki kod parçalarının kaynağı; kaymaları en hızlı
 fark edilen yer orası.
 
 ## Windows notları
