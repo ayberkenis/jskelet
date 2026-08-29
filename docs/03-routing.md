@@ -371,7 +371,7 @@ fiilen kullanılan alt küme bilinçli olarak seçildi.
 | Desen | Anlamı |
 | --- | --- |
 | `/haber/:slug` | Tek segment yakalar (`[^/]+`) |
-| `/:path*` | Sıfır veya daha fazla segment yakalar (`.*`) |
+| `/:path*` | Sıfır veya daha fazla segment yakalar; öndeki `/` opsiyoneldir, yani `/blog/:path*` `/blog`u da kapsar |
 | `/:path*.svg` | Joker + sabit son ek; uzantı kuralları böyle yazılır |
 | `/etiket-:slug` | Segment ortasında parametre |
 

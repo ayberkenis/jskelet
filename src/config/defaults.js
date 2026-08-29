@@ -51,6 +51,10 @@ export const DEFAULT_PREWARM = {
   enabled: true,
   max: 400,
   intervalSeconds: 0,
+  /** Paralel ısıtma isteği; dev'de sunucu tek süreç olduğu için düşürülür. */
+  concurrency: 4,
+  /** İki tur arasında beklenen süre: upstream'e ani yük binmesin. */
+  delayMs: 0,
 };
 
 /** Oturuma bağlı sayfalar ısıtılmaz; uygulama kendi listesini verebilir. */
@@ -62,6 +66,8 @@ export const DEFAULT_PREWARM_SKIP = ["/api/", "/_fragment/", "/__jskelet/"];
  */
 export const DEFAULT_BRAND = {
   name: "JSkelet",
+  /** `<html lang>`; uygulama kendi dilini config'te bildirir. */
+  lang: "en",
   poweredBy: "JSkelet",
   cacheHeader: "X-JSkelet-Cache",
   devBasePath: "/__jskelet/dev",

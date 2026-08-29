@@ -40,7 +40,7 @@
   },
   "scripts": {
     "lint": "eslint",
-    "test": "node --test test/",
+    "test": "node --test \"test/**/*.test.mjs\"",
     "example:minimal": "npm --prefix examples/minimal run dev",
     "example:blog": "npm --prefix examples/blog run dev"
   },

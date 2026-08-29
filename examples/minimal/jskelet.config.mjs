@@ -3,7 +3,7 @@
  *
  * Bu dosyanın tamamı opsiyoneldir — silinse bile uygulama ayağa kalkar,
  * yalnızca metadata varsayılanları ve 404 sayfası framework'ün jenerik
- * hâline döner. Buradaki her alan `docs/configuration.md` içinde açıklanıyor.
+ * hâline döner. Buradaki her alan `docs/07-yapilandirma.md` içinde açıklanıyor.
  */
 export default {
   brand: { lang: "tr" },

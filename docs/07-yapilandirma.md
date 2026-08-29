@@ -485,7 +485,7 @@ literal kabul edilmez, uyarı üretir.
 | `/hakkinda` | tam eşleşme | `/hakkinda` |
 | `/haber/:slug` | `([^/]+)` — tek segment | `/haber/abc` (✗ `/haber/a/b`) |
 | `/:path*` | `(.*)` — sıfır veya daha fazla segment | `/`, `/a`, `/a/b/c` |
-| `/blog/:path*` | joker alt yol | `/blog/`, `/blog/a/b` |
+| `/blog/:path*` | joker alt yol; öndeki `/` opsiyonel | `/blog`, `/blog/`, `/blog/a/b` |
 | `/:path*.svg` | joker + sabit son ek | `/ikon.svg`, `/a/b/c.svg` |
 | `/etiket-:slug` | segment ortasında parametre | `/etiket-finans` |
 
@@ -496,6 +496,9 @@ Kurallar:
 - Parametre adı `[A-Za-z_][A-Za-z0-9_]*` kalıbına uymalıdır.
 - Desen daima **baştan sona** eşleşir (`^…$`); önek eşleşmesi için `:path*`
   kullanın.
+- `:path*` sıfır segment de yakalar ve hemen öncesindeki `/` opsiyoneldir:
+  `/hesabim/:path*` bölümün kök yolunu (`/hesabim`) da kapsar. Aksi hâlde bir
+  bölümü tamamen kapatmak isteyen kural tam da giriş sayfasını atlıyordu.
 - Parametreler dışındaki tüm karakterler literal kabul edilir ve regex için
   kaçışlanır — `.` gerçekten nokta demektir.
 - Yakalanan değerler `destination` içindeki aynı adlı `:param`'lara yazılır.

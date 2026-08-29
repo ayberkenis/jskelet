@@ -55,8 +55,20 @@ export function compilePattern(source) {
 
     const [raw, name, wildcard] = match;
     keys.push(name);
-    // Joker parametre segment sınırlarını aşar; tek segmentli olan aşmaz.
-    pattern += wildcard ? "(.*)" : "([^/]+)";
+
+    if (!wildcard) {
+      // Tek segmentli parametre segment sınırını aşmaz.
+      pattern += "([^/]+)";
+      index += raw.length;
+      continue;
+    }
+
+    // Joker parametre segment sınırlarını aşar ve **sıfır** segment de
+    // yakalar: `/hesabim/:path*` kuralı `/hesabim`i de kapsamalı, aksi hâlde
+    // bir bölümün tamamını kapatmak isteyen kural kök yolu atlıyor. Bunun için
+    // hemen öncesindeki `/` de opsiyonele alınır.
+    const trailingSlash = pattern.endsWith("/");
+    pattern = trailingSlash ? `${pattern.slice(0, -1)}(?:/(.*))?` : `${pattern}(.*)`;
     index += raw.length;
   }
 

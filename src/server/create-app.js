@@ -64,9 +64,11 @@ export async function createApp(options = {}) {
     express.static(config.dirs.public, {
       index: false,
       redirect: false,
-      maxAge: "1y",
+      // Hash'siz dosyalar (favicon, robots eki, elle konmuş görseller) içerik
+      // değişse de aynı adla kalıyor; bir yıllık cache onları güncellenemez
+      // hâle getiriyordu. Hash'li çıktı aşağıda ayrıca immutable işaretlenir.
+      maxAge: "1h",
       setHeaders(res, filePath) {
-        // Hash'siz statik dosyalar için kısa cache; hash'liler immutable.
         if (filePath.includes(`${path.sep}assets${path.sep}`)) {
           res.setHeader("Cache-Control", IMMUTABLE_CACHE);
         }

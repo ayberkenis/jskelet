@@ -15,7 +15,7 @@ const FILES = {
  * JSkelet yapılandırması. Tüm alanlar opsiyoneldir; bu dosyayı silseniz de
  * uygulama varsayılanlarla çalışır.
  *
- * Ayrıntılar: node_modules/jskelet/docs/configuration.md
+ * Ayrıntılar: node_modules/jskelet/docs/07-yapilandirma.md
  */
 export default {
   brand: { lang: "tr" },

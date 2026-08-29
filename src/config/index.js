@@ -56,6 +56,7 @@ const CONFIG_FILE = "jskelet.config.mjs";
  * @property {string[]} devGateBypass
  * @property {string[]} preconnect
  * @property {string[]} prewarmSkip
+ * @property {string[]} watch Dev sunucusunun izlediği ek dizinler.
  * @property {{ family: string, slug?: string, weights: number[] }[]} fonts
  * @property {{ scan?: string[] } | false} icons
  * @property {{ widths?: number[], quality?: number, skip?: string[] } | false} images

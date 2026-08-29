@@ -21,6 +21,7 @@ export default [
       "examples/*/routes/**/*.mjs",
       "examples/*/lib/**/*.js",
       "examples/*/*.mjs",
+      "test/**/*.mjs",
     ],
     languageOptions: {
       ecmaVersion: 2024,

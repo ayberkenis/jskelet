@@ -30,6 +30,7 @@ zaten tartışılmış:
 
 ```bash
 npm run lint
+npm test     # desen derleyicisi ve HTML cache için birim testler
 ```
 
 Davranış değiştiren bir iş yaptıysan örneklerden biriyle uçtan uca dene:

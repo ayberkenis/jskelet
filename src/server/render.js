@@ -207,6 +207,13 @@ export function route(controller, options = {}) {
 const revalidateByPath = new Map();
 
 /**
+ * Yakalayıcı bir route'ta (`/:slug`) her benzersiz yol burada kalıcı bir girdi
+ * bırakıyor; sınır olmadan bu, uzun ömürlü süreçte bellek sızıntısına dönüşür.
+ * Desen taraması ucuz olduğu için en eski girdileri atmak güvenli.
+ */
+const REVALIDATE_CACHE_MAX = 2000;
+
+/**
  * @param {string} pathname
  * @param {number | undefined} fallback
  * @returns {number | undefined}
@@ -220,6 +227,12 @@ function resolveRevalidate(pathname, fallback) {
   }
 
   const match = rules.find((rule) => matchPattern(rule.pattern, pathname));
+
+  if (revalidateByPath.size >= REVALIDATE_CACHE_MAX) {
+    const oldest = revalidateByPath.keys().next().value;
+    if (oldest !== undefined) revalidateByPath.delete(oldest);
+  }
+
   revalidateByPath.set(pathname, match?.seconds);
   return match ? match.seconds : fallback;
 }
