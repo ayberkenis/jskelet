@@ -1,0 +1,11 @@
+# Build context depo kökü olduğu için (bkz. examples/marketing/Dockerfile),
+# örneklerin kurulmuş bağımlılıkları ve üretilen çıktıları context'e girmesin:
+# imaj içinde hepsi yeniden üretiliyor ve kopyalanan node_modules host'un
+# platformuna ait ikili dosyaları taşıyor.
+node_modules
+examples/*/node_modules
+examples/*/.jskelet
+examples/*/public/assets
+.git
+.env
+*.log

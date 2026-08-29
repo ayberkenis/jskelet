@@ -65,6 +65,9 @@ export default function register(app, { route, notFound }) {
   ve `data-island-idle` ile strateji seçilir.
 - **HTML TTL cache.** Route başına `revalidate`, TTL dolduğunda eski HTML anında
   döner ve tazeleme arkada yürür. Açılışta prewarm önbelleği doldurur.
+- **Hızlı gezinme.** `navigation` bölümü Speculation Rules ile bağlantıları
+  önden getirir ya da prerender eder ve view transition'ı açar — hiç client
+  runtime'ı eklemeden.
 - **Tanıdık yapılandırma.** `redirects()`, `rewrites()`, `headers()` ve `cache()`
   — `next.config` sözdiziminin fiilen kullanılan alt kümesiyle aynı.
 - **Build hattı.** Fontlar, kullanılan ikonlardan üretilen SVG sprite, Tailwind

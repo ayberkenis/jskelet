@@ -64,6 +64,7 @@ başlığı elle okuyun.
 | Next.js | JSkelet | Not |
 | --- | --- | --- |
 | `next/link` | `link({ href, text })` — `jskelet/tags` | `title` otomatik, dış bağlantıya `rel`/`target` otomatik |
+| `next/link` prefetch'i | `navigation: { prefetch, prerender }` | Speculation Rules; client runtime'ı yok ([07](./07-yapilandirma.md)) |
 | `next/image` | `image({ src, alt, priority })` — `jskelet/tags` | `srcset` build manifest'inden |
 | `next/font/google` | `fonts: [{ family, weights }]` | Self-host woff2, commit edilir |
 | `@phosphor-icons/react` | `icon({ name, weight })` — `jskelet/tags` | Build zamanı SVG sprite |
@@ -89,6 +90,9 @@ Bunları taşıma planında baştan hesaba katın:
 - **Streaming / Suspense / kısmi prerender.** Yanıt tek parça üretilir.
 - **İstemci tarafı yönlendirme.** Gezinme gerçek sayfa yüklemesidir. Sunucu HTML'i
   önbellekten geldiği için pratikte çok hızlıdır, ama SPA geçişleri yoktur.
+  Aradaki farkı kapatan şey `navigation` bölümü: prefetch/prerender tıklamadan
+  önce belgeyi hazırlar, `viewTransition` geçişi yumuşatır
+  ([07](./07-yapilandirma.md)).
 - **Server Actions.** Form gönderimleri normal `app.post(...)` handler'larıdır.
 - **Tek tek yol geçersizleme (`revalidatePath`).** Şimdilik tüm önbelleği
   temizlemek (`clearHtmlCache()`) ya da TTL'in dolmasını beklemek var.

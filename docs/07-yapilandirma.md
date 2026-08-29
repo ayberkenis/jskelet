@@ -61,6 +61,14 @@ export default {
 
   devGateBypass: ["/api/healthcheck", "/robots.txt"],
   preconnect: ["https://cdn.ornek.com"],
+
+  navigation: {
+    prefetch: "moderate",
+    prerender: "conservative",
+    viewTransition: true,
+    exclude: ["/cikis"],
+  },
+
   prewarmSkip: ["/api/", "/_fragment/", "/__ornek/"],
   watch: ["data"],
 
@@ -228,6 +236,59 @@ bir yapılandırmadır.
 
 ```js
 preconnect: ["https://cdn.ornek.com", "https://api.ornek.com"]
+```
+
+## `navigation`
+
+**Tip:** `object` — **Varsayılan:**
+`{ prefetch: "moderate", prerender: false, viewTransition: false, exclude: [] }`
+
+Site içi gezinmeyi hızlandıran `<head>` ipuçları. JSkelet klasik MPA olduğu için
+her tıklama tam sayfa yüklemesidir; bu bölüm o yüklemeyi tarayıcının **önceden**
+yapmasını sağlar. Client runtime'ı eklenmez — Speculation Rules ve view
+transition tarayıcı yetenekleridir, desteklemeyen tarayıcıda sessizce yok
+sayılırlar.
+
+| Alan | Tip | Varsayılan | Anlamı |
+| --- | --- | --- | --- |
+| `prefetch` | `false \| "conservative" \| "moderate" \| "eager"` | `"moderate"` | Bağlantı hedefinin **belgesini** önceden indirir |
+| `prerender` | aynı | `false` | Hedefi arka planda **tam render eder**; tıklama anında açılır |
+| `viewTransition` | `boolean` | `false` | `@view-transition { navigation: auto }` basar |
+| `exclude` | `string[]` | `[]` | Spekülasyon dışı bırakılacak href desenleri |
+
+`true` verilirse `prefetch`/`prerender` varsayılan eagerness'a düşer; tanınmayan
+bir değer uyarı basıp varsayılana döner.
+
+**Eagerness ne demek:** `conservative` bağlantıya basıldığı an, `moderate`
+bağlantı üzerinde bir süre duraksandığında, `eager` bağlantı görünür olur olmaz
+tetikler. Yukarı çıktıkça isabet artar, boşa giden istek de artar.
+
+**`prerender` neden kapalı geliyor.** Prerender edilen sayfanın script'leri
+gerçekten çalışır. Ölçüm kodunu `prerenderingchange` olayına bağlamayan bir
+uygulamada ziyaret sayıları şişer. Açmadan önce analytics'i gözden geçirin;
+sunucu tarafındaki maliyeti düşüktür, çünkü spekülatif istek de HTML
+önbelleğinden karşılanır ([06-cache.md](./06-cache.md)).
+
+**Her koşulda muaf olanlar.** `/api/*`, `/_fragment/*` ve `brand.devBasePath`
+altındaki yollar otomatik dışlanır; `exclude` bunların üstüne eklenir. Ayrıca
+`rel="nofollow"`, `target="_blank"` ve `data-no-prefetch` taşıyan bağlantılar
+hiçbir kurala girmez. Yan etkisi olan tek bir bağlantıyı dışarıda bırakmanın en
+kolay yolu sonuncusu:
+
+```html
+<a href="/cikis" data-no-prefetch>Çıkış</a>
+```
+
+**CSP kullanıyorsanız** kurallar satır içi bir `<script type="speculationrules">`
+olarak basılır; `script-src` politikanızın buna izin vermesi gerekir.
+
+```js
+navigation: {
+  prefetch: "moderate",
+  prerender: "conservative",
+  viewTransition: true,
+  exclude: ["/cikis", "/sepet/*"],
+}
 ```
 
 ## `prewarmSkip`
