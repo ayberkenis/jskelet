@@ -98,8 +98,12 @@ export function navigationHints() {
 
   // Geçiş kuralı hem eski hem yeni belgede bulunmalı; her sayfaya basılan
   // satır içi bir kural bunu build çıktısına bağımlı olmadan garanti eder.
+  // Hareket azaltma tercihi burada karşılanır: sayfa geçişi tam ekran bir
+  // çapraz geçiş üretir ve bu, vestibüler rahatsızlığı olan kullanıcılar için
+  // kaçınılması gereken türden bir animasyon.
   const transition = navigation.viewTransition
-    ? "<style>@view-transition{navigation:auto}</style>"
+    ? "<style>@view-transition{navigation:auto}" +
+      "@media (prefers-reduced-motion:reduce){@view-transition{navigation:none}}</style>"
     : "";
 
   navigationCached =

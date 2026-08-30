@@ -7,7 +7,12 @@
   etmiyor.
 -%>
 <!DOCTYPE html>
-<html lang="<%= lang %>" class="h-full scroll-smooth antialiased">
+<%#
+  Arka plan rengi bilinçli olarak `<html>`de, `<body>`de değil: view transition
+  sırasında gövdenin arka planı anlık görüntünün içinde kalır ve altta kalan
+  canvas görünür. Koyu temada bu, geçiş başına bir kare beyaz flaş demek.
+-%>
+<html lang="<%= lang %>" class="h-full scroll-smooth bg-white antialiased dark:bg-slate-950">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">

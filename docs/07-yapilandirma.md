@@ -279,6 +279,20 @@ kolay yolu sonuncusu:
 <a href="/cikis" data-no-prefetch>Çıkış</a>
 ```
 
+**`viewTransition` açarken arka planı `<html>`e verin.** Geçiş sırasında tarayıcı
+eski ve yeni sayfanın anlık görüntülerini çapraz geçirir; `<body>`ye verilmiş bir
+arka plan bu görüntünün içinde kalır ve altta kalan canvas görünür. Sonuç, her
+geçişte bir kare beyaz flaştır ve koyu temada gözden kaçmaz. Renk `<html>` (ya da
+`:root`) üzerindeyse böyle bir boşluk oluşmaz:
+
+```html
+<html lang="tr" class="bg-white dark:bg-slate-950">
+  <body class="text-slate-900 dark:text-slate-100">
+```
+
+Hareket azaltma tercihi framework tarafından karşılanır: `prefers-reduced-motion:
+reduce` altında geçiş kapatılır, ayrıca bir şey yazmanız gerekmez.
+
 **CSP kullanıyorsanız** kurallar satır içi bir `<script type="speculationrules">`
 olarak basılır; `script-src` politikanızın buna izin vermesi gerekir.
 

@@ -104,7 +104,8 @@ export default {
     layoutContext({ pathname }) {
       return {
         pathname,
-        bodyClass: "bg-white text-slate-900 dark:bg-slate-950 dark:text-slate-100",
+        // Arka plan burada değil `<html>`de; gerekçesi layout'un başında.
+        bodyClass: "text-slate-900 dark:text-slate-100",
         nav: [
           { href: "/nasil-calisir", label: "Nasıl çalışır" },
           { href: "/kiyaslama", label: "Kıyaslama" },
