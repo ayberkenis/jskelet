@@ -609,7 +609,7 @@ export default {
     },
     cta: {
       title: "Bu sürümü kurun",
-      body: "Paket npm'de olmadığı için kurulum doğrudan depodan çözülür.",
+      body: "npm'den tek komut; kurulan sürüm yukarıda yazan sürüm oluyor.",
       primary: "İndirme sayfası",
       secondary: "Belgeler",
     },
@@ -769,7 +769,7 @@ export default {
     hero: {
       eyebrow: "Kurulum",
       title: "Boş bir dizinden çalışan bir siteye.",
-      lead: "Paket npm'de yayınlanmadığı için doğrudan depodan kurulur. Dört komut ve sayfa sunuyorsunuz.",
+      lead: "Paket npm'de yayında. Dört komut ve sayfa sunuyorsunuz.",
       versionLabel: "Sürüm",
       licenseLabel: "Lisans",
       nodeLabel: "Gereksinim",
@@ -787,7 +787,7 @@ export default {
         {
           label: "1 · Paketi kur",
           command: "install",
-          note: "Paket npm'de olmadığı için depodan çözülür.",
+          note: "Framework'ü ve dört çalışma zamanı bağımlılığını npm'den çeker.",
         },
         {
           label: "2 · İskeleti oluştur",

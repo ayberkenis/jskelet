@@ -29,11 +29,11 @@ import { getConfig } from "jskelet";
  */
 
 const REPOSITORY = "https://github.com/ayberkenis/jskelet";
-const SPEC = "github:ayberkenis/jskelet";
+const SPEC = "jskelet";
 
 /**
- * Paket npm'de olmadığı için kurulum git üzerinden yapılıyor; komutlar bu
- * belirteci paylaşıyor ve tek yerde duruyor.
+ * Komutlar paket belirtecini tek yerden paylaşıyor: kurulum satırı hem indirme
+ * sayfasında hem sürüm geçmişinde geçiyor ve ikisinin ayrışmaması gerekiyor.
  */
 export const COMMANDS = {
   install: `npm install ${SPEC}`,

@@ -620,7 +620,7 @@ export default {
     },
     cta: {
       title: "Install this release",
-      body: "The package is not on npm, so installs resolve straight from the repository.",
+      body: "One command from npm, and the version above is the one you get.",
       primary: "Download page",
       secondary: "Documentation",
     },
@@ -789,7 +789,7 @@ export default {
     hero: {
       eyebrow: "Install",
       title: "From an empty folder to a running site.",
-      lead: "The package is not published on npm, so it installs straight from the repository. Four commands and you are serving pages.",
+      lead: "The package is published on npm. Four commands and you are serving pages.",
       versionLabel: "Version",
       licenseLabel: "License",
       nodeLabel: "Requires",
@@ -807,7 +807,7 @@ export default {
         {
           label: "1 · Install the package",
           command: "install",
-          note: "Resolves from the repository, since the package is not on npm.",
+          note: "Pulls the framework and its four runtime dependencies from npm.",
         },
         {
           label: "2 · Scaffold the skeleton",
