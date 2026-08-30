@@ -22,6 +22,7 @@ import {
   trackServerFetch,
 } from "./report.js";
 import { startVersionCheck, versionStatus } from "./version-check.mjs";
+import { broadcastSocket, socketCount, upgradeToSocket } from "./socket.js";
 
 /** Overlay dosyaları framework paketinden servis edilir, uygulamadan değil. */
 const DEVTOOLS_DIR = path.join(FRAMEWORK_ROOT, "src", "client", "devtools");
@@ -115,6 +116,7 @@ export function recordServerError(level, message, extra = {}) {
   });
   trim(errors);
   persist();
+  pushStats();
 }
 
 /**
@@ -177,12 +179,82 @@ function timing() {
       requests.push(entry);
       trim(requests);
       persist();
+      pushStats();
       // Terminalde canlı istek satırı.
       log.http(entry);
     });
 
     next();
   };
+}
+
+/* ----------------------------------------------------------- istatistikler */
+
+/**
+ * Overlay'in gösterdiği her şey tek pakette. `GET /stats` ve WebSocket aynı
+ * gövdeyi kullanır ki panel hangi yoldan beslenirse beslensin aynı şeyi
+ * görsün.
+ *
+ * @returns {object}
+ */
+function statsPayload() {
+  const usage = process.memoryUsage();
+
+  return {
+    type: "stats",
+    pid: process.pid,
+    // Overlay yeniden başlatmayı bu kimlikten anlar; kendi durumunu
+    // sıfırlamadan yalnızca "restarted" bilgisini gösterir.
+    boot: BOOT_ID,
+    uptime: process.uptime(),
+    node: process.version,
+    version: versionStatus(),
+    memory: { rss: usage.rss, heapUsed: usage.heapUsed },
+    prewarm: { ...prewarmProgress },
+    requests: requests.slice(-25).reverse(),
+    errors: errors.slice(-25).reverse(),
+  };
+}
+
+/** @type {NodeJS.Timeout | null} */
+let statsTimer = null;
+
+/**
+ * Değişiklikleri panele iter. Bir sayfa yüklemesi arka arkaya birçok kayıt
+ * üretiyor (istek + uyarılar); paket başına bir çerçeve yerine kısa bir
+ * sessizlikten sonra tek çerçeve gönderilir.
+ */
+function pushStats() {
+  if (statsTimer || !socketCount()) return;
+
+  statsTimer = setTimeout(() => {
+    statsTimer = null;
+    broadcastSocket(statsPayload());
+  }, 120);
+
+  statsTimer.unref?.();
+}
+
+/**
+ * Zamana bağlı alanlar (uptime, bellek) ve ısıtma ilerlemesi bir olay
+ * üretmiyor; onlar için düşük frekanslı bir kalp atışı gerekiyor. Isıtma
+ * sürerken sayaç akıcı görünsün diye sıklaşır.
+ *
+ * Bağlı panel yokken hiçbir şey hesaplanmaz.
+ */
+function startHeartbeat() {
+  let tick = 0;
+
+  const timer = setInterval(() => {
+    if (!socketCount()) return;
+
+    tick += 1;
+    if (!prewarmProgress.active && tick % 4 !== 0) return;
+
+    broadcastSocket(statsPayload());
+  }, 1000);
+
+  timer.unref?.();
 }
 
 /* ------------------------------------------------------------ live reload */
@@ -198,8 +270,14 @@ function send(res, payload) {
   res.write(`data: ${JSON.stringify(payload)}\n\n`);
 }
 
-/** @param {object} payload */
+/**
+ * Canlı yenileme olayları. Panel normalde WebSocket üzerinden dinler; SSE
+ * yalnızca soket kurulamadığında devreye giren yedek yol.
+ *
+ * @param {object} payload
+ */
 function broadcast(payload) {
+  broadcastSocket(payload);
   for (const client of clients) send(client, payload);
 }
 
@@ -285,22 +363,10 @@ function router() {
     req.on("close", () => clients.delete(res));
   });
 
+  // WebSocket kurulamadığında panelin düştüğü yedek uç.
   api.get("/stats", (req, res) => {
-    const usage = process.memoryUsage();
     res.setHeader("Cache-Control", "no-store");
-    res.json({
-      pid: process.pid,
-      // Overlay yeniden başlatmayı bu kimlikten anlar; kendi durumunu
-      // sıfırlamadan yalnızca "restarted" bilgisini gösterir.
-      boot: BOOT_ID,
-      uptime: process.uptime(),
-      node: process.version,
-      version: versionStatus(),
-      memory: { rss: usage.rss, heapUsed: usage.heapUsed },
-      prewarm: { ...prewarmProgress },
-      requests: requests.slice(-25).reverse(),
-      errors: errors.slice(-25).reverse(),
-    });
+    res.json(statsPayload());
   });
 
   // Detaylı rapor: kendi sayfası, script'i ve veri ucu.
@@ -364,6 +430,7 @@ function router() {
     errors.length = 0;
     requests.length = 0;
     persist();
+    pushStats();
     res.json({ ok: true });
   });
 
@@ -382,6 +449,30 @@ export function mountDevtools(app) {
   trackServerFetch();
   watchManifest();
   startVersionCheck();
+  startHeartbeat();
   app.use(timing());
   app.use(brand.devBasePath, router());
+}
+
+/**
+ * Canlı kanalı HTTP sunucusuna bağlar.
+ *
+ * Express uygulamasına takılamıyor: WebSocket el sıkışması `upgrade` olayında
+ * geçiyor ve o olay middleware zincirine hiç uğramıyor. Bu yüzden `listen`
+ * sonrası ayrı bir adım.
+ *
+ * @param {import('node:http').Server} server
+ */
+export function attachDevSocket(server) {
+  const endpoint = `${getConfig().brand.devBasePath}/ws`;
+
+  server.on("upgrade", (req, socket) => {
+    // Uygulamanın kendi WebSocket uçları olabilir; yalnızca bizimkini alırız.
+    if ((req.url ?? "").split("?")[0] !== endpoint) return;
+
+    upgradeToSocket(req, socket, (send) => {
+      send({ type: "hello", boot: BOOT_ID });
+      send(statsPayload());
+    });
+  });
 }

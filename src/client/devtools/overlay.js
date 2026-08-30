@@ -11,6 +11,7 @@
  */
 
 const BASE = "/__jskelet/dev";
+/** Soket kurulamadığında düşülen yedek yoklama sıklığı. */
 const POLL_MS = 2000;
 const MAX_ERRORS = 100;
 
@@ -386,50 +387,112 @@ let restarts = 0;
 /* -------------------------------------------------------- canlı yenileme */
 
 /**
- * Sunucu olay akışı. Amaç titremeyi bitirmek: CSS değiştiğinde sayfa
- * yenilenmez, yalnızca stylesheet yeni sürümle takas edilir. Sunucu yeniden
- * başladığında (boot kimliği değişince) tek sefer tam yenileme yapılır;
- * overlay durumu sekme belleğinde durduğu için panel açık kalmaya devam eder.
+ * Sunucudan gelen her şey tek bir WebSocket üzerinden akar: istatistikler,
+ * CSS takası ve yeniden başlatma bildirimi. Eskiden istatistikler iki saniyede
+ * bir çekiliyordu; her açık sekme, panel kapalıyken bile sunucuya sürekli
+ * istek atıyordu.
+ *
+ * CSS değiştiğinde sayfa yenilenmez, yalnızca stylesheet yeni sürümle takas
+ * edilir. Sunucu yeniden başladığında (boot kimliği değişince) tek sefer tam
+ * yenileme yapılır; overlay durumu sekme belleğinde durduğu için panel açık
+ * kalmaya devam eder.
  */
-function connectEvents() {
-  const source = new EventSource(`${BASE}/events`);
+function connectSocket() {
+  let socket;
+  try {
+    socket = new WebSocket(
+      `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}${BASE}/ws`,
+    );
+  } catch {
+    startFallback();
+    return;
+  }
 
-  source.addEventListener("message", (event) => {
-    /** @type {{ type: string, boot?: string, href?: string }} */
-    const payload = JSON.parse(event.data);
+  // Soket hiç açılamazsa (proxy WebSocket'i geçirmiyor olabilir) eski
+  // SSE + yoklama yoluna düşülür; dev akışı bir ara katman yüzünden körelmesin.
+  let opened = false;
 
-    if (payload.type === "hello") {
-      offline = false;
-      const previous = sessionStorage.getItem(BOOT_KEY);
-      sessionStorage.setItem(BOOT_KEY, payload.boot);
-
-      if (previous && previous !== payload.boot) {
-        restarts += 1;
-        location.reload();
-        return;
-      }
-
-      bootId = payload.boot;
-      render();
-      return;
-    }
-
-    if (payload.type === "css") {
-      swapStylesheet(payload.href);
-      return;
-    }
-
-    if (payload.type === "reload") location.reload();
+  socket.addEventListener("open", () => {
+    opened = true;
   });
 
+  socket.addEventListener("message", (event) => {
+    handleServerMessage(JSON.parse(event.data));
+  });
+
+  socket.addEventListener("close", () => {
+    if (!opened) {
+      startFallback();
+      return;
+    }
+
+    // Sunucu yeniden başlıyor: gösterge "bağlantı yok"a döner ve kısa aralıkla
+    // yeniden denenir. Açılışta gelen `hello` yeniden başlatmayı bildirir.
+    if (!offline) {
+      offline = true;
+      render();
+    }
+    setTimeout(connectSocket, 500);
+  });
+}
+
+/**
+ * Hem soketten hem yedek SSE akışından gelen paketler burada işlenir.
+ * @param {{ type: string, boot?: string, href?: string }} payload
+ */
+function handleServerMessage(payload) {
+  if (payload.type === "stats") {
+    applyStats(payload);
+    return;
+  }
+
+  if (payload.type === "hello") {
+    offline = false;
+    const previous = sessionStorage.getItem(BOOT_KEY);
+    sessionStorage.setItem(BOOT_KEY, payload.boot);
+
+    if (previous && previous !== payload.boot) {
+      restarts += 1;
+      location.reload();
+      return;
+    }
+
+    bootId = payload.boot;
+    render();
+    return;
+  }
+
+  if (payload.type === "css") {
+    swapStylesheet(payload.href);
+    return;
+  }
+
+  if (payload.type === "reload") location.reload();
+}
+
+/**
+ * WebSocket kurulamadığında eski yol: SSE + periyodik yoklama. Bir kez
+ * başlatılır.
+ */
+let fallbackStarted = false;
+
+function startFallback() {
+  if (fallbackStarted) return;
+  fallbackStarted = true;
+
+  const source = new EventSource(`${BASE}/events`);
+  source.addEventListener("message", (event) =>
+    handleServerMessage(JSON.parse(event.data)),
+  );
   source.addEventListener("error", () => {
-    // Sunucu yeniden başlarken bağlantı düşer; EventSource kendi kendine
-    // yeniden bağlanır, biz yalnızca göstergeyi güncelleriz.
     if (!offline) {
       offline = true;
       render();
     }
   });
+
+  setInterval(pollServer, POLL_MS);
+  pollServer();
 }
 
 /**
@@ -446,24 +509,30 @@ function swapStylesheet(href) {
   current.after(next);
 }
 
+/**
+ * Sunucudan gelen istatistik paketini panele işler.
+ * @param {object} stats
+ */
+function applyStats(stats) {
+  // Süreç kimliği değiştiyse sunucu yeniden başlamıştır. Overlay kapanmaz,
+  // yalnızca sayacı artar; günlükler sunucuda kalıcı olduğu için de silinmez.
+  if (bootId && stats.boot !== bootId) restarts += 1;
+  bootId = stats.boot ?? bootId;
+
+  offline = false;
+  serverStats = stats;
+  render();
+}
+
+/** Yalnızca yedek yolda kullanılır; canlı veri soketten gelir. */
 async function pollServer() {
+  if (!fallbackStarted) return;
+
   try {
     const response = await fetch(`${BASE}/stats`, { cache: "no-store" });
     if (!response.ok) return;
 
-    const stats = await response.json();
-
-    // Süreç kimliği değiştiyse sunucu yeniden başlamıştır. Overlay kapanmaz,
-    // yalnızca sayacı artar; günlükler sunucuda kalıcı olduğu için de silinmez.
-    if (bootId && stats.boot !== bootId) restarts += 1;
-    bootId = stats.boot ?? bootId;
-
-    offline = false;
-    serverStats = stats;
-    render();
-
-    // Isıtma sürerken sayaç akıcı görünsün diye yoklama sıklaşır.
-    if (stats.prewarm?.active) setTimeout(pollServer, 600);
+    applyStats(await response.json());
   } catch {
     // Yeniden başlatma penceresi: eldeki veriler korunur, yalnızca durum
     // göstergesi "bağlantı yok"a döner.
@@ -1763,13 +1832,9 @@ function start() {
   bind(ensureRoot());
   render();
 
-  connectEvents();
-
-  setInterval(() => {
-    // Panel kapalıyken de rozet güncel kalsın diye sunucu yine yoklanır.
-    pollServer();
-  }, POLL_MS);
-  pollServer();
+  // Panel kapalıyken de rozet güncel kalsın diye kanal her zaman açılır;
+  // maliyeti tek bir bağlantı ve yalnızca değişiklik oldukça gelen paketler.
+  connectSocket();
 
   // Ölçümler oturmadan gönderilmesin; sonra sekmeden ayrılırken güncellenir.
   setTimeout(() => sendPageReport(), 3000);

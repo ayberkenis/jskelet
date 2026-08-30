@@ -111,9 +111,9 @@ Restart satırı değişen dosyayı ya da sayısını gösterir:
 
 ## CSS hot-swap ve tam yenileme
 
-Dev sunucusu `.jskelet/manifest.json` dosyasını izler ve bir SSE kanalı
-(`<devBasePath>/events`) üzerinden tarayıcıya olay yayınlar. Manifest her build
-turunda yeniden yazıldığı için değişiklik tespiti manifest üzerinden yapılır.
+Dev sunucusu `.jskelet/manifest.json` dosyasını izler ve olayları canlı kanal
+(`<devBasePath>/ws`) üzerinden tarayıcıya yayınlar. Manifest her build turunda
+yeniden yazıldığı için değişiklik tespiti manifest üzerinden yapılır.
 
 | Değişen | Davranış |
 | --- | --- |
@@ -130,6 +130,27 @@ dışı kalır ve gerisi çalışır.
 Sunucu yeniden başladığında overlay bunu **boot kimliğinden** anlar: her süreç
 kendine özgü bir `boot` değeri yayınlar, overlay değişikliği görüp "restarted"
 bilgisini gösterir ve kendi durumunu sıfırlamaz.
+
+## Canlı kanal
+
+Overlay'e giden her şey — istatistikler, live reload ve CSS hot-swap olayları —
+tek bir WebSocket üzerinden gelir (`<devBasePath>/ws`). Panel eskiden
+istatistikleri iki saniyede bir çekiyordu; açık her sekme, panel kapalıyken bile
+sunucuya sürekli istek atıyordu. Artık sunucu değişiklik oldukça iter: bir istek
+ya da hata kaydedildiğinde (120 ms birleştirilerek), ısıtma sürerken saniyede
+bir, geri kalan zamanda yalnızca uptime/bellek tazelensin diye dört saniyede bir.
+Bağlı panel yoksa hiçbir şey hesaplanmaz.
+
+El sıkışma HTTP `upgrade` olayında geçtiği ve o olay middleware zincirine hiç
+uğramadığı için kanal `listen` sonrası doğrudan sunucuya bağlanır
+(`attachDevSocket`). Sunucu tarafı `ws` gibi bir bağımlılık kullanmaz: yalnızca
+sunucu→istemci metin çerçevesi yazmak ve istemcinin ping/close çerçevelerini
+yanıtlamak gerekiyor.
+
+Soket hiç açılamazsa (araya giren bir proxy WebSocket'i geçirmiyor olabilir)
+overlay eski yola düşer: `/events` SSE akışı + `/stats` yoklaması. Soket kurulup
+sonra düşerse — yani sunucu yeniden başlıyorsa — yarım saniyede bir yeniden
+bağlanır ve gösterge bu sırada "bağlantı yok" der.
 
 ## Devtools overlay
 
@@ -236,8 +257,9 @@ Rapor katmanı yalnızca development'ta yüklenir, üretim çıktısına hiç gi
 | --- | --- | --- |
 | `/overlay.js` | GET | Overlay script'i |
 | `/logo.png` | GET | Overlay logosu |
-| `/events` | GET | SSE: live reload ve CSS hot-swap olayları |
-| `/stats` | GET | Anlık istatistikler (overlay 2 saniyede bir çeker) |
+| `/ws` | GET (upgrade) | Canlı kanal: istatistikler, live reload ve CSS hot-swap olayları |
+| `/events` | GET | SSE: yalnızca WebSocket kurulamazsa kullanılan yedek olay akışı |
+| `/stats` | GET | Anlık istatistikler; aynı yedek yolun veri ucu |
 | `/report` | GET | Rapor sayfası (HTML) |
 | `/report.js` | GET | Rapor sayfasının script'i |
 | `/report/data` | GET | Raporun tek veri kaynağı (JSON) |

@@ -47,6 +47,12 @@ one is listed under a **Breaking** heading.
 
 ### Changed
 
+- The dev tools panel is now fed over a WebSocket (`<devBasePath>/ws`) instead of
+  polling `/stats` every two seconds. The server pushes statistics as they change
+  and sends live reload and CSS hot-swap events over the same connection, so an
+  open tab no longer keeps hitting the server while the panel is closed. No new
+  dependency is involved; if the socket cannot be opened, the panel falls back to
+  the previous SSE plus polling path.
 - `notFound()` is no longer served as a 404 when a transient upstream failure
   (`429`, `5xx`, network error) happened during the same render. The page is
   retried first and, if upstream is still failing, responds with an uncached

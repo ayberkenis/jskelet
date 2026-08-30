@@ -168,7 +168,14 @@ export async function startServer(options = {}) {
   });
 
   return new Promise((resolve) => {
-    const server = app.listen(port, host, () => {
+    const server = app.listen(port, host, async () => {
+      // Dev panelinin canlı kanalı: el sıkışma `upgrade` olayında geçtiği
+      // için middleware zincirine değil, doğrudan sunucuya bağlanır.
+      if (process.env.NODE_ENV === "development") {
+        const { attachDevSocket } = await import("./dev/devtools.js");
+        attachDevSocket(server);
+      }
+
       // Bu satırın biçimi sözleşme: `jskelet dev` sunucunun hazır olduğunu
       // buradan anlar ve özet satırını ona göre basar.
       console.log(

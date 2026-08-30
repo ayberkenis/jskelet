@@ -116,7 +116,7 @@ If `JSKELET_VERBOSE=1` is set, all files are listed when more than one changed.
 ## CSS hot-swap and full reload
 
 The dev server watches `.jskelet/manifest.json` and broadcasts events to the
-browser over an SSE channel (`<devBasePath>/events`). Since the manifest is
+browser over the live channel (`<devBasePath>/ws`). Since the manifest is
 rewritten on every build round, change detection is done through the manifest.
 
 | What changed | Behavior |
@@ -133,6 +133,28 @@ reload is disabled and everything else keeps working.
 When the server restarts, the overlay figures it out from the **boot id**: every
 process broadcasts a unique `boot` value, the overlay sees the change, shows the
 "restarted" note and does not reset its own state.
+
+## The live channel
+
+Everything the overlay shows — statistics, live reload and CSS hot-swap events —
+arrives over a single WebSocket (`<devBasePath>/ws`). The panel used to poll for
+statistics every two seconds, so every open tab kept hitting the server even
+while the panel was closed. Now the server pushes as things change: when a
+request or an error is recorded (coalesced over 120 ms), once per second while
+prewarming runs, and every four seconds otherwise so uptime and memory stay
+fresh. Nothing is computed when no panel is connected.
+
+The handshake happens on the HTTP `upgrade` event, and that event never reaches
+the middleware chain, so the channel is attached straight to the server after
+`listen` (`attachDevSocket`). The server side pulls in no dependency such as
+`ws`: all it needs is to write server-to-client text frames and to answer the
+client's ping/close frames.
+
+If the socket cannot be opened at all (a proxy in between may not pass WebSocket
+through), the overlay falls back to the old path: the `/events` SSE stream plus
+polling `/stats`. If the socket opens and later drops — that is, the server is
+restarting — it reconnects every half second and the indicator reads
+"server restarting…" in the meantime.
 
 ## Devtools overlay
 
@@ -240,8 +262,9 @@ Under `brand.devBasePath` (default `/__jskelet/dev`):
 | --- | --- | --- |
 | `/overlay.js` | GET | The overlay script |
 | `/logo.png` | GET | The overlay logo |
-| `/events` | GET | SSE: live reload and CSS hot-swap events |
-| `/stats` | GET | Current statistics (the overlay polls every 2 seconds) |
+| `/ws` | GET (upgrade) | Live channel: statistics, live reload and CSS hot-swap events |
+| `/events` | GET | SSE: the fallback event stream, used only when WebSocket cannot be established |
+| `/stats` | GET | Current statistics; the data endpoint of that same fallback |
 | `/report` | GET | The report page (HTML) |
 | `/report.js` | GET | The report page's script |
 | `/report/data` | GET | The report's single data source (JSON) |
