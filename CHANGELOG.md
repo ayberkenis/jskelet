@@ -10,6 +10,7 @@ one is listed under a **Breaking** heading.
 
 ### Added
 
+- An npm version badge in the `README`, linking to the package page.
 - English `README`, plus `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`,
   a `LICENSE` file, issue and pull request templates, and a CI workflow.
 

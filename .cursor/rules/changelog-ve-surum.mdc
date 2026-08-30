@@ -1,0 +1,42 @@
+---
+description: Framework davranışını değiştiren her işten sonra CHANGELOG.md ve sürüm taşıyan yerleri güncelle
+alwaysApply: true
+---
+
+# Changelog ve sürüm bakımı
+
+Kullanıcıya görünen bir şey değiştiyse (`src/**`, CLI, config alanları, hook
+adları, belgeler, README, örneklerin genel yüzeyi) **aynı işte** changelog'u da
+güncelle. Sadece iç refactor, test ya da yorum değişikliğinde gerekmez.
+
+## Her değişiklikte
+
+1. `CHANGELOG.md` → `## [Unreleased]` altında uygun başlığa madde ekle:
+   `Added`, `Changed`, `Fixed`, `Removed`, `Breaking`. Başlık yoksa oluştur.
+   Maddeler İngilizce, kullanıcının gördüğü davranışı anlatır — commit mesajı
+   ya da dosya adı listesi değil.
+2. Yeni bir dışa açık yüzey eklediysen `package.json` → `exports`, `src/index.js`
+   / `src/client/index.js` barrel'ları ve `docs/` de aynı işte güncellenir.
+
+```markdown
+## [Unreleased]
+
+### Added
+
+- An npm version badge in the README, linking to the package page.
+```
+
+## Sürüm yükseltirken (yalnızca kullanıcı isterse)
+
+Sürüm numarasını kendi başına yükseltme; istendiğinde şu yerlerin **hepsini**
+tek seferde güncelle:
+
+- `package.json` → `version`
+- `CHANGELOG.md`: `[Unreleased]` maddelerini `## [x.y.z]` başlığı altına taşı,
+  tarih ekle ve dosya sonundaki `[Unreleased]` / `[x.y.z]` bağlantılarını yenile
+- `examples/marketing/lib/content/en.js` ve `tr.js` → `entries` dizisinin başına
+  yeni sürüm girdisi; eski girdinin `status`'u `"current"` → `"previous"`
+- `.github/ISSUE_TEMPLATE/bug_report.yml` → sürüm alanının `placeholder`'ı
+
+`0.x` boyunca minor sürümler kırıcı olabilir; kırıcı değişiklik her zaman
+**Breaking** başlığı altında listelenir.
