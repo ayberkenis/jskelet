@@ -106,10 +106,11 @@ function readFrames(socket) {
  *
  * @param {import('node:http').IncomingMessage} req
  * @param {import('node:net').Socket} socket
+ * @param {Buffer} head Node'un istekle birlikte okuduğu artakalan baytlar.
  * @param {(send: (payload: object) => void) => void} onOpen
  *   Bağlantı kurulunca çağrılır; ilk paketi göndermek için kullanılır.
  */
-export function upgradeToSocket(req, socket, onOpen) {
+export function upgradeToSocket(req, socket, head, onOpen) {
   const key = req.headers["sec-websocket-key"];
   if (!key) {
     socket.destroy();
@@ -130,10 +131,22 @@ export function upgradeToSocket(req, socket, onOpen) {
   socket.on("close", () => sockets.delete(socket));
 
   readFrames(socket);
+  // İstekle aynı okumada gelen baytlar varsa akışa geri konur; yoksa
+  // istemcinin ilk çerçevesi sessizce kaybolur.
+  if (head?.length) socket.unshift(head);
   sockets.add(socket);
 
-  onOpen((payload) => {
+  /** @param {object} payload */
+  const send = (payload) => {
     if (!socket.destroyed) socket.write(frame(JSON.stringify(payload)));
+  };
+
+  // İlk paketler bir sonraki tur'a bırakılır. Aynı yazma turunda gönderilirse
+  // el sıkışma yanıtıyla tek bir TCP parçasına düşüyor ve tarayıcı o parçada
+  // artakalan baytları HTTP gövdesi sanıp bağlantıyı sessizce kapatıyor: ham
+  // bir istemci sorun görmez, Chrome "finished" deyip çıkar.
+  setImmediate(() => {
+    if (!socket.destroyed) onOpen(send);
   });
 }
 

@@ -44,7 +44,7 @@ considering in production:
 | --- | --- | --- |
 | `NODE_ENV` | `production` | Template cache, reading the manifest once, throwing on a broken route module |
 | `PORT` | `3000` | The port your orchestrator expects |
-| `HOST` | `0.0.0.0` | For external access inside a container (the default) |
+| `HOST` | `0.0.0.0` | Only if you need to listen on IPv4 alone; the `::` default already listens dual-stack |
 | `PREWARM_MAX` | Depends on site size | Number of pages warmed at startup |
 | `PREWARM_INTERVAL_SECONDS` | `0` or a long value | If you want to keep never-visited pages warm |
 | `DEV_TOKEN` | Staging only | Hides an environment that is not public yet |

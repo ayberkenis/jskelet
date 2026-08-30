@@ -156,7 +156,14 @@ export async function createApp(options = {}) {
 export async function startServer(options = {}) {
   const app = await createApp(options);
   const port = Number(options.port ?? process.env.PORT ?? 3000);
-  const host = options.host ?? process.env.HOST ?? "0.0.0.0";
+
+  // Varsayılan `::`, `0.0.0.0` değil: ikisi de "tüm arayüzler" demek, ama
+  // yalnızca IPv6 soketi çift yığın çalışır ve `localhost`un `::1`e çözüldüğü
+  // durumu da kapsar. Tarayıcılar `localhost` için önce `::1` deniyor; sıradan
+  // isteklerde IPv4'e düşüyorlar ama WebSocket el sıkışması bu geri düşüşü
+  // yapmadan "failed" veriyordu. IPv6'sı olmayan bir makinede bağlama hata
+  // verir; aşağıda IPv4'e dönülür.
+  const host = options.host ?? process.env.HOST ?? null;
 
   // Tek bir istek hatası süreci düşürmesin; logla ve ayakta kal. Bir haber
   // sitesinde tek sayfanın hatası tüm siteyi indirmemeli.
@@ -176,17 +183,40 @@ export async function startServer(options = {}) {
       ? (await import("./dev/devtools.js")).attachDevSocket
       : null;
 
-  return new Promise((resolve) => {
-    const server = app.listen(port, host, () => {
-      // Bu satırın biçimi sözleşme: `jskelet dev` sunucunun hazır olduğunu
-      // buradan anlar ve özet satırını ona göre basar.
-      console.log(
-        `jskelet → http://localhost:${port} (${process.env.NODE_ENV ?? "production"})`,
-      );
-      startPrewarm({ port });
-      resolve(server);
-    });
+  return new Promise((resolve, reject) => {
+    /** @param {string} address */
+    const listen = (address) => {
+      const server = app.listen(port, address, () => {
+        // Bu satırın biçimi sözleşme: `jskelet dev` sunucunun hazır olduğunu
+        // buradan anlar ve özet satırını ona göre basar.
+        console.log(
+          `jskelet → http://localhost:${port} (${process.env.NODE_ENV ?? "production"})`,
+        );
+        startPrewarm({ port });
+        resolve(server);
+      });
 
-    attachDevSocket?.(server);
+      server.on("error", (error) => {
+        // IPv6 desteklenmiyorsa yalnızca varsayılan adres için IPv4'e dönülür;
+        // kullanıcı bir adres verdiyse sessizce başkasını dinlemek yanlış olur.
+        if (!host && isAddressUnsupported(error)) {
+          listen("0.0.0.0");
+          return;
+        }
+        reject(error);
+      });
+
+      attachDevSocket?.(server);
+    };
+
+    listen(host ?? "::");
   });
+}
+
+/**
+ * @param {NodeJS.ErrnoException} error
+ * @returns {boolean} adres ailesi bu makinede kullanılamıyor mu
+ */
+function isAddressUnsupported(error) {
+  return error.code === "EAFNOSUPPORT" || error.code === "EADDRNOTAVAIL";
 }

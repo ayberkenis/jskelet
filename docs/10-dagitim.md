@@ -43,7 +43,7 @@ ayarlamayı düşünmeniz gerekenler:
 | --- | --- | --- |
 | `NODE_ENV` | `production` | Şablon cache'i, manifest'in bir kez okunması, bozuk route modülünde fırlatma |
 | `PORT` | `3000` | Orkestratörünüzün beklediği port |
-| `HOST` | `0.0.0.0` | Kapsayıcı içinde dışarıdan erişim için (varsayılan) |
+| `HOST` | `0.0.0.0` | Yalnızca IPv4 dinlemek gerekiyorsa. Varsayılan `::` zaten çift yığın dinler |
 | `PREWARM_MAX` | Site boyutuna göre | Açılışta ısıtılacak sayfa sayısı |
 | `PREWARM_INTERVAL_SECONDS` | `0` ya da uzun bir değer | Hiç ziyaret edilmeyen sayfaları sıcak tutmak isterseniz |
 | `DEV_TOKEN` | Yalnızca staging'de | Yayına açılmamış ortamı gizler |

@@ -13,26 +13,36 @@ const TYPES = {
     icon: "Plus",
     class:
       "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-400/25 dark:bg-emerald-400/10 dark:text-emerald-200",
+    rule: "bg-emerald-400/70 dark:bg-emerald-400/50",
+    bullet: "bg-emerald-500/70 dark:bg-emerald-400/70",
   },
   changed: {
     icon: "Wrench",
     class:
       "border-cyan-200 bg-cyan-50 text-cyan-800 dark:border-cyan-400/25 dark:bg-cyan-400/10 dark:text-cyan-200",
+    rule: "bg-cyan-400/70 dark:bg-cyan-400/50",
+    bullet: "bg-cyan-500/70 dark:bg-cyan-400/70",
   },
   fixed: {
     icon: "Bug",
     class:
       "border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-400/25 dark:bg-amber-400/10 dark:text-amber-100",
+    rule: "bg-amber-400/70 dark:bg-amber-400/50",
+    bullet: "bg-amber-500/70 dark:bg-amber-400/70",
   },
   removed: {
     icon: "Minus",
     class:
       "border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-400/25 dark:bg-rose-400/10 dark:text-rose-200",
+    rule: "bg-rose-400/70 dark:bg-rose-400/50",
+    bullet: "bg-rose-500/70 dark:bg-rose-400/70",
   },
   breaking: {
     icon: "Warning",
     class:
       "border-orange-300 bg-orange-50 text-orange-900 dark:border-orange-400/30 dark:bg-orange-400/10 dark:text-orange-100",
+    rule: "bg-orange-400/80 dark:bg-orange-400/60",
+    bullet: "bg-orange-500/80 dark:bg-orange-400/70",
   },
 };
 
@@ -51,7 +61,7 @@ const TYPES = {
  *   render?: (item: string) => string }} props
  * @returns {string}
  */
-export function changelogEntry({ entry, labels, current = false, render }) {
+export function changelogEntry({ entry, labels, current = false, render, last = false }) {
   const status = entry.unreleased ? "unreleased" : current ? "current" : "previous";
   const highlight = current && !entry.unreleased;
 
@@ -63,73 +73,118 @@ export function changelogEntry({ entry, labels, current = false, render }) {
         .map(
           (item) =>
             `<li class="flex gap-2.5">
-              <span aria-hidden="true" class="mt-2 size-1.5 shrink-0 rounded-full bg-slate-300 dark:bg-slate-600"></span>
+              <span aria-hidden="true" class="${cn("mt-2 size-1.5 shrink-0 rounded-full", type.bullet)}"></span>
               <span>${render ? render(item) : esc(item)}</span>
             </li>`,
         )
         .join("");
 
-      return `<div class="grid gap-2.5">
-        <span class="${cn("inline-flex w-fit items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-bold tracking-wide uppercase", type.class)}">
-          ${icon({ name: type.icon, size: 12 })}${esc(labels.types[group.type] ?? group.type)}
-        </span>
+      return `<section class="relative overflow-hidden rounded-2xl border border-slate-200/80 bg-slate-50/70 p-4 pl-5 dark:border-white/5 dark:bg-white/[0.02]">
+        <span aria-hidden="true" class="${cn("absolute inset-y-0 left-0 w-1", type.rule)}"></span>
+        <div class="mb-3 flex items-center gap-2">
+          <span class="${cn("inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-bold tracking-wide uppercase", type.class)}">
+            ${icon({ name: type.icon, size: 12 })}${esc(labels.types[group.type] ?? group.type)}
+          </span>
+          <span class="font-mono text-xs text-slate-500 dark:text-slate-500">${group.items.length}</span>
+        </div>
         <ul class="m-0 grid list-none gap-2 p-0 text-sm/6 text-slate-700 dark:text-slate-300">${items}</ul>
-      </div>`;
+      </section>`;
     })
     .join("");
 
-  return `<article id="v${esc(entry.version)}" class="${cn(
-    "grid gap-6 rounded-3xl border p-6 sm:p-8 lg:grid-cols-[13rem_1fr]",
-    highlight
-      ? "border-cyan-300 bg-gradient-to-br from-cyan-50 to-white shadow-xl shadow-cyan-950/5 dark:border-cyan-400/30 dark:from-cyan-400/10 dark:to-white/[0.03]"
-      : "border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-white/[0.03]",
-  )}">
-    <div class="grid content-start gap-3">
+  const title = entry.unreleased
+    ? esc(labels.statuses.unreleased ?? "unreleased")
+    : `v${esc(entry.version)}`;
+
+  return `<article id="v${esc(entry.version)}" class="relative grid scroll-mt-24 gap-5 lg:grid-cols-[12rem_1fr] lg:gap-10">
+    <div class="lg:sticky lg:top-24 grid content-start gap-3 lg:h-fit">
       <div class="flex items-center gap-2.5">
         <span class="${cn(
-          "inline-flex size-9 items-center justify-center rounded-xl",
+          "inline-flex size-9 shrink-0 items-center justify-center rounded-xl",
           highlight
-            ? "bg-gradient-to-br from-cyan-600 to-indigo-600 text-white"
+            ? "bg-gradient-to-br from-cyan-600 to-indigo-600 text-white shadow-lg shadow-cyan-950/20"
             : "bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-slate-300",
         )}">${icon({
           name: highlight ? "RocketLaunch" : entry.unreleased ? "GitBranch" : "Tag",
           size: 18,
         })}</span>
-        <p class="m-0 font-mono text-2xl font-bold tracking-tight">${
-          entry.unreleased
-            ? esc(labels.statuses.unreleased ?? "unreleased")
-            : `v${esc(entry.version)}`
-        }</p>
+        <a href="#v${esc(entry.version)}" class="m-0 font-mono text-2xl font-bold tracking-tight no-underline hover:text-cyan-700 dark:hover:text-cyan-300">${title}</a>
       </div>
 
-      <span class="${cn(
-        "inline-flex w-fit items-center rounded-full border px-2.5 py-1 text-[11px] font-bold tracking-wide uppercase",
-        highlight
-          ? "border-cyan-300 bg-white/70 text-cyan-800 dark:border-cyan-400/30 dark:bg-white/10 dark:text-cyan-200"
-          : "border-slate-200 bg-slate-50 text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-slate-300",
-      )}">${esc(labels.statuses[status] ?? status)}</span>
-
-      ${
-        entry.date
-          ? `<p class="m-0 text-xs text-slate-600 dark:text-slate-400">
-              <span class="block font-bold tracking-[0.16em] uppercase">${esc(labels.dateLabel)}</span>
-              <time datetime="${esc(entry.date)}" class="font-mono">${esc(entry.date)}</time>
-            </p>`
-          : ""
-      }
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="${cn(
+          "inline-flex w-fit items-center rounded-full border px-2.5 py-1 text-[11px] font-bold tracking-wide uppercase",
+          highlight
+            ? "border-cyan-300 bg-cyan-50 text-cyan-800 dark:border-cyan-400/30 dark:bg-cyan-400/10 dark:text-cyan-200"
+            : "border-slate-200 bg-slate-50 text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-slate-300",
+        )}">${esc(labels.statuses[status] ?? status)}</span>
+        ${
+          entry.date
+            ? `<time datetime="${esc(entry.date)}" class="font-mono text-xs text-slate-500 dark:text-slate-400" title="${esc(labels.dateLabel)}">${esc(entry.date)}</time>`
+            : ""
+        }
+      </div>
     </div>
 
-    <div class="grid gap-6">
-      ${
-        entry.summary
-          ? `<p class="m-0 text-base/7 font-medium text-slate-800 dark:text-slate-200">${
-              render ? render(entry.summary) : esc(entry.summary)
-            }</p>`
-          : ""
-      }
-      <div class="grid gap-5 sm:grid-cols-2">${groups}</div>
+    <div class="relative pl-6 sm:pl-8 lg:pl-10">
+      <span aria-hidden="true" class="${cn(
+        "absolute top-3 left-1.5 w-px bg-gradient-to-b from-slate-300 to-transparent sm:left-2.5 lg:left-3.5 dark:from-white/15",
+        last ? "bottom-4" : "-bottom-14",
+      )}"></span>
+      <span aria-hidden="true" class="${cn(
+        "absolute top-2 left-0 size-3 rounded-full ring-4 ring-white sm:left-1 lg:left-2 dark:ring-[#070b18]",
+        highlight
+          ? "bg-gradient-to-br from-cyan-500 to-indigo-600"
+          : "bg-slate-300 dark:bg-slate-600",
+      )}"></span>
+
+      <div class="${cn(
+        "grid gap-5 rounded-3xl border p-5 sm:p-7",
+        highlight
+          ? "border-cyan-300 bg-gradient-to-br from-cyan-50/80 to-white shadow-xl shadow-cyan-950/5 dark:border-cyan-400/30 dark:from-cyan-400/[0.08] dark:to-white/[0.03]"
+          : "border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-white/[0.03]",
+      )}">
+        ${
+          entry.summary
+            ? `<p class="m-0 text-base/7 font-medium text-slate-800 dark:text-slate-200">${
+                render ? render(entry.summary) : esc(entry.summary)
+              }</p>`
+            : ""
+        }
+        <div class="grid gap-4 xl:grid-cols-2">${groups}</div>
+      </div>
     </div>
   </article>`;
+}
+
+/**
+ * Sürüm listesinin üstündeki hızlı geçiş şeridi. Kayıt sayısı arttıkça sayfa
+ * uzuyor; kullanıcı aradığı sürüme tek tıkla insin diye.
+ *
+ * @param {{ entries: Array<{ version: string, unreleased?: boolean }>,
+ *   labels: { statuses: Record<string, string> }, current: string }} props
+ * @returns {string}
+ */
+export function versionRail({ entries, labels, current }) {
+  if (entries.length < 2) return "";
+
+  const chips = entries
+    .map((entry) => {
+      const active = entry.version === current && !entry.unreleased;
+      const text = entry.unreleased
+        ? (labels.statuses.unreleased ?? "unreleased")
+        : `v${entry.version}`;
+
+      return `<a href="#v${esc(entry.version)}" class="${cn(
+        "inline-flex items-center rounded-full border px-3 py-1.5 font-mono text-xs font-bold no-underline transition-colors",
+        active
+          ? "border-cyan-300 bg-cyan-50 text-cyan-800 dark:border-cyan-400/30 dark:bg-cyan-400/10 dark:text-cyan-200"
+          : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:text-white",
+      )}">${esc(text)}</a>`;
+    })
+    .join("");
+
+  return `<nav class="flex flex-wrap gap-2">${chips}</nav>`;
 }
 
 /**

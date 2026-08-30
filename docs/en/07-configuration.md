@@ -764,7 +764,7 @@ and no warning is printed.
 | --- | --- | --- | --- |
 | `NODE_ENV` | everywhere | `production` (start/build), `development` (dev) | Determines the dev overlay, EJS cache, manifest re-reading, route error behaviour and prewarm defaults. `jskelet dev` sets it itself — `cross-env` is not needed. |
 | `PORT` | `startServer` | `3000` | Port to listen on |
-| `HOST` | `startServer` | `0.0.0.0` | Interface to bind to |
+| `HOST` | `startServer` | `::` | Interface to bind to. The default listens dual-stack (IPv6 + IPv4); it falls back to `0.0.0.0` where IPv6 is unavailable |
 | `JSKELET_SECRET` | `jskelet/cookies` | — | The signed cookie secret. Read when `security.cookieSecret` is not set; if neither exists, the signed cookie API throws. [12](./12-dashboards-and-sessions.md) |
 | `DEV_TOKEN` | `devGate`, `prewarm` | — | If set, every request without a token gets a 404. Prewarming carries the token as a cookie. [09](./09-dev-tools.md) |
 | `PREWARM` | `startPrewarm` | — | `0` turns prewarming off; `1` overrides `enabled: false` in the config and turns it on |

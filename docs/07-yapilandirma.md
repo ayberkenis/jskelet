@@ -747,7 +747,7 @@ basılmaz.
 | --- | --- | --- | --- |
 | `NODE_ENV` | her yer | `production` (start/build), `development` (dev) | Dev overlay, EJS cache, manifest yeniden okuma, route hata davranışı ve prewarm varsayılanlarını belirler. `jskelet dev` bunu kendisi ayarlar — `cross-env` gerekmez. |
 | `PORT` | `startServer` | `3000` | Dinlenecek port |
-| `HOST` | `startServer` | `0.0.0.0` | Bağlanılacak arayüz |
+| `HOST` | `startServer` | `::` | Bağlanılacak arayüz. Varsayılan çift yığın dinler (IPv6 + IPv4); IPv6 yoksa `0.0.0.0`'a düşer |
 | `JSKELET_SECRET` | `jskelet/cookies` | — | İmzalı cookie sırrı. `security.cookieSecret` verilmediğinde buradan okunur; ikisi de yoksa imzalı cookie API'si hata verir. [12](./12-panel-ve-oturum.md) |
 | `DEV_TOKEN` | `devGate`, `prewarm` | — | Ayarlıysa token taşımayan her isteğe 404 döner. Isıtma token'ı çerez olarak taşır. [09](./09-dev-araclari.md) |
 | `PREWARM` | `startPrewarm` | — | `0` ısıtmayı kapatır; `1` config'teki `enabled: false`'u ezip açar |

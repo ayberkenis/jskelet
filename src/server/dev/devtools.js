@@ -461,11 +461,11 @@ export function mountDevtools(app) {
 export function attachDevSocket(server) {
   const endpoint = `${getConfig().brand.devBasePath}/ws`;
 
-  server.on("upgrade", (req, socket) => {
+  server.on("upgrade", (req, socket, head) => {
     // Uygulamanın kendi WebSocket uçları olabilir; yalnızca bizimkini alırız.
     if ((req.url ?? "").split("?")[0] !== endpoint) return;
 
-    upgradeToSocket(req, socket, (send) => {
+    upgradeToSocket(req, socket, head, (send) => {
       send({ type: "hello", boot: BOOT_ID });
       send(statsPayload());
     });

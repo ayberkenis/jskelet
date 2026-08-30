@@ -65,12 +65,21 @@ one is listed under a **Breaking** heading.
 
 ### Changed
 
+- The marketing example's changelog page is now a timeline: releases are laid out
+  along a rail with a sticky version column, each change group gets its own card
+  with a coloured rule and item count, and a row of version chips at the top
+  jumps straight to a release.
 - The dev tools panel is now fed over a WebSocket (`<devBasePath>/ws`) instead of
   polling `/stats` every two seconds. The server pushes statistics as they change
   and sends live reload and CSS hot-swap events over the same connection, so an
   open tab no longer keeps hitting the server while the panel is closed. No new
   dependency is involved; if the socket cannot be opened, the panel falls back to
   the previous SSE plus polling path.
+- The server now binds to `::` instead of `0.0.0.0` when no `HOST` is given, so a
+  single dual-stack socket answers both IPv6 and IPv4. Browsers resolve
+  `localhost` to `::1` first and, unlike ordinary requests, a WebSocket handshake
+  does not fall back to IPv4 — which made the dev panel's live channel fail on an
+  IPv4-only socket. Where IPv6 is unavailable the bind falls back to `0.0.0.0`.
 - Prewarming no longer holds up the rest of the dev server. In development it now
   runs with a single worker and a default limit of 4 requests per second
   (`prewarm.rps` / `PREWARM_RPS` still override it), so page requests and the dev
