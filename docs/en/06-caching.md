@@ -5,7 +5,7 @@ cache and its stale-while-revalidate behaviour, where `revalidate` comes from,
 how the cache key is built, the values of the `X-JSkelet-Cache` header, why the
 compressed body is kept in the cache, per-request memoization
 (`withRequestCache` / `cache()`), the data cache (`withDataCache`), how upstream
-failures affect the cache (`reportUpstreamFailure`) and the prewarm round at
+failures affect the cache (automatic tracking and `reportUpstreamFailure`) and the prewarm round at
 server startup. The
 measurement rationale behind the decisions is in
 [02-architecture.md](./02-architecture.md), and the full reference of config
@@ -324,9 +324,35 @@ If upstream went down during the render, the output contains missing data.
 Rather than serving such HTML for the whole TTL, the right behaviour is to
 **never write it** to the cache: the next request tries again.
 
-The dependency direction is deliberately inverted: the framework does not know
-about the data layer, the data layer notifies the framework. If nobody ever
-calls it, the cost is an empty array.
+This information arrives through two paths.
+
+### Automatic tracking (the default)
+
+At startup `createApp()` wraps `globalThis.fetch` and reports **transient**
+failures (`429`, `5xx`, network errors) from calls made during a render on its
+own. No application code is needed; if your API client talks over `fetch`, the
+rate limit protection is already in place.
+
+The details:
+
+- Only calls inside a render scope count. A `fetch` from a script, a cron job or
+  anywhere outside a request is left untouched.
+- Requests to our own server (`localhost`, `127.0.0.1`) are skipped: the warm-up
+  round and the health check are not upstream.
+- Deterministic answers such as `404`/`403` are **not** reported automatically.
+  In most APIs a `404` means "no such record"; treating it as missing data would
+  produce a false warning on every not-found page.
+- To turn it off: `cache().trackUpstream: false`. An application that wraps
+  `fetch` itself (metrics, retries, a circuit breaker) may prefer that.
+
+### Manual reporting
+
+For a client that does not use `fetch` (a database driver, gRPC, a vendor SDK),
+or for a layer that wants to flag permanent failures too, the contract is
+unchanged. The dependency direction is deliberately inverted: the framework does
+not know about the data layer, the data layer notifies the framework. If nobody
+ever calls it, the cost is an empty array. If the same failure arrives through
+both paths it is de-duplicated.
 
 ```js
 // lib/api/client.js
@@ -374,19 +400,45 @@ site into 404s when upstream is rate limited — and because those 404s enter th
 cache, a temporary quota problem becomes a "this page does not exist" answer for
 the whole TTL. For a search engine that is a permanent loss.
 
-The framework separates the two cases: if a **transient** upstream failure was
-reported during the render, `notFound()` is not served as a 404.
+The framework separates the two cases: if a **transient** upstream failure
+happened during the render, `notFound()` is not served as a 404. In order:
+
+1. The page is **retried** after a short delay (once by default, after 300 ms).
+   The retry runs in its own upstream and per-request cache scope, so neither
+   the first round's failure nor its memoized empty answers affect it.
+2. If the second round can produce the page, the visitor sees the **real
+   content** and the output is cached normally. Warm-up logs show this is
+   common: the same path returns 200 seconds later.
+3. If the retries are exhausted the response is a `503` — not cached, carrying
+   `Retry-After`, and the next request can still produce the real content.
 
 | During the render | Result of `notFound()` |
 | --- | --- |
-| A transient failure exists (`429`, `5xx`, network error) | `503`, `Retry-After: 30`, `no-store` — **not** written to the cache, the next request produces the real content |
-| A permanent failure (`404`, `403`…) or no failure | A normal `404` |
+| A transient failure exists (`429`, `5xx`, network error) | Retry → the page if it succeeds; otherwise `503`, `Retry-After: 30`, `no-store` |
+| The retry got a clean answer saying "not there" | A normal `404` |
+| A permanent failure (`404`, `403`…) or no failure | A normal `404`, no retry |
 
-The log line:
-`[render] /news/x returned notFound() while upstream is failing (429 /api/...), serving an uncached 503 instead`
+The log lines:
 
-So when upstream runs out of quota the page is produced dynamically, without
-being written to the cache; nothing is frozen as "missing".
+```
+[render] /news/x returned notFound() while upstream is failing (429 /api/...), retrying (1/1)
+[render] /news/x could not be produced, upstream is still failing (429 /api/...), serving an uncached 503 instead of a 404
+```
+
+So **an existing page never turns into a 404**: either the real content arrives,
+or an uncached 503 does. Nothing is frozen as "missing".
+
+The cost of a retry is a second round of requests on upstream, which is why the
+default is a single attempt. The setting is `cache().transientRetry`:
+
+```js
+cache: {
+  transientRetry: { attempts: 2, delayMs: 500 },
+}
+```
+
+`transientRetry: false` (or `attempts: 0`) disables the retry and falls straight
+through to the 503.
 
 ## Managing the cache
 
@@ -628,9 +680,12 @@ filled the cache.
   does not reach upstream.
 - **The warm-up list is longer than `max` and its tail never warms.** `rotate`
   may be `false`; the `over the limit` phrase in the log shows this.
-- **A whole section returns 404.** Upstream may be down. In that case a 503 that
-  does not enter the cache is now returned instead of a 404; look for the
-  `returned notFound() while upstream is failing` line in the log.
+- **A whole section returns 404.** Upstream may be down. The page is now retried
+  once and, failing that, a 503 that does not enter the cache is returned
+  instead of a 404; look for the `returned notFound() while upstream is failing`
+  line in the log. If you still see 404s, the failure may come from a non-`fetch`
+  client (which needs `reportUpstreamFailure()`) or `cache().trackUpstream` is
+  off.
 
 ## What's next
 

@@ -572,9 +572,9 @@ Details: [03-routing.md](./03-routing.md).
 ## `cache()`
 
 **Type:**
-`() => { html?: Record<string, number>, maxEntries?: number, data?: object, prewarm?: object }` —
+`() => { html?: Record<string, number>, maxEntries?: number, data?: object, trackUpstream?: boolean, transientRetry?: object | false, prewarm?: object }` —
 **Default:**
-`{ html: {}, maxEntries: 500, data: { maxEntries: 10000, staleFactor: 10 }, prewarm: { enabled: true, max: 400, intervalSeconds: 0 } }`
+`{ html: {}, maxEntries: 500, data: { maxEntries: 10000, staleFactor: 10 }, trackUpstream: true, transientRetry: { attempts: 1, delayMs: 300 }, prewarm: { enabled: true, max: 400, intervalSeconds: 0 } }`
 
 ### `cache().html`
 
@@ -612,6 +612,25 @@ The upstream data cache (`withDataCache`). Details:
 | --- | --- | --- | --- |
 | `maxEntries` | `number` | `10000` | The LRU entry limit. The limit is high because JSON is tens of times smaller than HTML. |
 | `staleFactor` | `number` | `10` | For how many TTLs an entry stays usable after the TTL expired. `0` → no stale serving. |
+
+### `cache().trackUpstream`
+
+**Type:** `boolean` — **Default:** `true`
+
+When on, `globalThis.fetch` is wrapped and transient upstream failures (`429`,
+`5xx`, network) during a render are reported automatically; calling
+`reportUpstreamFailure()` is not required. An application that wraps `fetch`
+itself can turn this off.
+
+### `cache().transientRetry`
+
+**Type:** `{ attempts?: number, delayMs?: number } | false` —
+**Default:** `{ attempts: 1, delayMs: 300 }`
+
+How many extra times a page is tried when `notFound()` was called because of a
+transient upstream failure. The point is that an existing page never turns into
+a 404; if the retries are exhausted the response is an uncached 503. `false` or
+`attempts: 0` disables the retry. Details: [06-caching.md](./06-caching.md).
 
 ### `cache().prewarm`
 

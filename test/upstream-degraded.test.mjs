@@ -13,7 +13,10 @@ import { loadConfig } from "../src/config/index.js";
 import { clearHtmlCache, getHtmlCacheSize } from "../src/server/html-cache.js";
 import { route } from "../src/server/render.js";
 import { notFound } from "../src/http/control-flow.js";
-import { reportUpstreamFailure } from "../src/server/upstream-tracking.js";
+import {
+  reportUpstreamFailure,
+  trackUpstreamFetch,
+} from "../src/server/upstream-tracking.js";
 
 const FIXTURE = path.join(import.meta.dirname, "fixtures", "private-app");
 
@@ -141,6 +144,69 @@ test("notFound() after a permanent upstream failure still serves 404", async () 
 
   assert.equal(res.statusCode, 404);
   assert.equal(res.getHeader("retry-after"), undefined);
+});
+
+test("a page that fails once is retried and served, not turned into a 404", async () => {
+  let calls = 0;
+
+  const handler = route(async () => {
+    calls += 1;
+    if (calls === 1) {
+      reportUpstreamFailure({ status: 429, path: "/api/haber/z" });
+      notFound();
+    }
+    return { view: "pages/hello", data: { who: "geldi" } };
+  });
+
+  const res = await run(handler, "/haber/z");
+
+  assert.equal(calls, 2, "geçici hatadan sonra bir kez daha denenmeli");
+  assert.equal(res.statusCode, 200);
+  // İkinci deneme temiz bir izleme bağlamında koştu: ilk turun 429'u sayfayı
+  // "eksik veriyle üretildi" saymamalı, yoksa gerçek içerik önbelleğe girmez.
+  assert.equal(getHtmlCacheSize(), 1);
+});
+
+test("a retry that finds a clean answer serves a real 404", async () => {
+  let calls = 0;
+
+  const handler = route(async () => {
+    calls += 1;
+    if (calls === 1) reportUpstreamFailure({ status: 429, path: "/api/haber/q" });
+    notFound();
+  });
+
+  const res = await run(handler, "/haber/q");
+
+  assert.equal(calls, 2);
+  assert.equal(res.statusCode, 404);
+  assert.equal(res.getHeader("retry-after"), undefined);
+});
+
+test("a transient fetch failure is reported without any app code", async () => {
+  const original = globalThis.fetch;
+
+  // Taklit önce konur, sarmalayıcı onun üstüne geçer: test ağa çıkmadan
+  // gerçek zincirin aynısı kurulmuş olur.
+  globalThis.fetch = /** @type {any} */ (
+    async () => new Response("slow down", { status: 429 })
+  );
+  trackUpstreamFetch();
+
+  try {
+    const handler = route(async () => {
+      await globalThis.fetch("https://api.example.com/haber/w");
+      notFound();
+    });
+
+    const res = await run(handler, "/haber/w");
+
+    assert.equal(res.statusCode, 503, "429 elle bildirilmese de 404'e düşmemeli");
+    assert.equal(res.getHeader("retry-after"), "30");
+    assert.equal(getHtmlCacheSize(), 0);
+  } finally {
+    globalThis.fetch = original;
+  }
 });
 
 test("a degraded 200 is not offered to shared caches", async () => {

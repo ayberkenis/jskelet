@@ -1,19 +1,16 @@
 /**
- * Sürüm notlarının veri katmanı. Liste elle yazılmıyor: kurulu paketin
+ * Sürüm notlarının veri katmanı. Liste elle yazılmıyor: deponun
  * `CHANGELOG.md` dosyası ayrıştırılıyor — `lib/docs.js` belgeler için ne
- * yapıyorsa aynısı. Böylece paket yükseldiğinde sürüm sayfası kendiliğinden
- * güncelleniyor ve aynı metni iki yerde tutmak gerekmiyor.
+ * yapıyorsa aynısı, okuma da aynı kapıdan (`lib/source.js`). Böylece yeni bir
+ * sürüm yayınlandığında sürüm sayfası kendiliğinden güncelleniyor ve aynı metni
+ * iki yerde tutmak gerekmiyor.
  *
  * Beklenen biçim Keep a Changelog: `## [0.1.1] - 2026-08-30` başlıkları,
  * altında `### Added` / `### Changed` / `### Fixed` / `### Removed` /
  * `### Breaking` bölümleri ve `-` ile başlayan maddeler.
  */
-import fs from "node:fs";
-import path from "node:path";
-
-import { getConfig } from "jskelet";
-
 import { plain, renderInline } from "./markdown.js";
+import { readSource } from "./source.js";
 
 /**
  * @typedef {object} ChangeGroup
@@ -35,17 +32,17 @@ const TYPES = new Set(["added", "changed", "fixed", "removed", "breaking"]);
 let memo = null;
 
 /**
- * Kurulu paketin sürüm notları, en yeniden eskiye.
+ * Sürüm notları, en yeniden eskiye.
  *
  * Sonuç süreç belleğinde: HTML cache sayfanın tamamını tutuyor ama cache
  * boşaltıldığında dosyayı yeniden ayrıştırmanın anlamı yok.
  *
- * @returns {ChangelogEntry[]}
+ * @returns {Promise<ChangelogEntry[]>}
  */
-export function getChangelog() {
+export async function getChangelog() {
   if (memo) return memo;
 
-  const source = read();
+  const source = await readSource("CHANGELOG.md");
   memo = source ? parse(source) : [];
   return memo;
 }
@@ -135,24 +132,4 @@ function parse(source) {
       groups: item.groups.filter((candidate) => candidate.items.length > 0),
     }))
     .filter((item) => item.groups.length > 0 || item.summary);
-}
-
-/**
- * @returns {string | null}
- */
-function read() {
-  const file = path.join(
-    getConfig().root,
-    "node_modules",
-    "jskelet",
-    "CHANGELOG.md",
-  );
-
-  try {
-    return fs.readFileSync(file, "utf8");
-  } catch {
-    // Paket başka bir yerden çözülüyor olabilir. Sayfa yine açılır: sürüm
-    // künyesi durur, liste boş kalır.
-    return null;
-  }
 }

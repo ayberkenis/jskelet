@@ -31,23 +31,42 @@ one is listed under a **Breaking** heading.
   retry pass, since rate limit windows are measured in seconds.
 - `cache().maxEntries` configures the HTML cache limit, which used to be a fixed
   500.
+- Transient upstream failures are now detected without any application code:
+  `globalThis.fetch` is wrapped during startup and `429`, `5xx` and network
+  errors raised inside a render are reported on their own, so rate limits stop
+  turning existing pages into 404s even when the data layer never calls
+  `reportUpstreamFailure()`. Requests outside a render and requests to the
+  server itself are ignored, deterministic answers such as `404` are not
+  reported, and the wrapper can be turned off with `cache().trackUpstream:
+  false`.
+- `cache().transientRetry` (`{ attempts: 1, delayMs: 300 }` by default) retries a
+  page that called `notFound()` while upstream was failing. Each attempt runs in
+  a fresh upstream and per-request cache scope, so a page whose data arrives on
+  the second try is served and cached as usual instead of degrading to an error.
 - The dev report now includes the data cache entry count under `cache.data`.
 
 ### Changed
 
 - `notFound()` is no longer served as a 404 when a transient upstream failure
-  (`429`, `5xx`, network error) was reported during the same render. Those pages
-  now respond with an uncached `503` and `Retry-After`, so a temporary rate limit
-  is not frozen into "this page does not exist" for the whole TTL.
+  (`429`, `5xx`, network error) happened during the same render. The page is
+  retried first and, if upstream is still failing, responds with an uncached
+  `503` and `Retry-After`. A temporary rate limit is no longer frozen into "this
+  page does not exist" for the whole TTL. A retry that gets a clean answer saying
+  the page is gone still returns a normal 404.
 - Responses produced with missing data are no longer offered to shared caches:
   a `degraded` render is sent with `private, no-store` instead of
   `public, s-maxage=…`. The `X-JSkelet-Cache` diagnostic header is still written.
 - The prewarm summary distinguishes paths left for the next pass
   (`700 deferred to the next pass`) from paths dropped entirely
   (`700 over the limit`).
-- The changelog page of the marketing example is generated from the installed
-  package's `CHANGELOG.md` instead of a hand-written list, and shows the version
-  published on npm next to the installed one.
+- The changelog page of the marketing example is generated from the project's
+  `CHANGELOG.md` instead of a hand-written list, and shows the version published
+  on npm next to the installed one.
+- The marketing example reads its markdown (documentation and changelog) from
+  the repository over GitHub's raw endpoint, falling back to the installed
+  package when the network is unavailable, so a deployment that ships without
+  `node_modules` can still serve the docs. In development the local file wins
+  and nothing is cached. The branch is overridable with `DOCS_REF`.
 
 ## [0.1.2] - 2026-08-30
 

@@ -27,7 +27,11 @@ import {
   guardRequest,
   withRequestContext,
 } from "../http/request-context.js";
-import { getUpstreamFailures, withUpstreamTracking } from "./upstream-tracking.js";
+import {
+  getUpstreamFailures,
+  isTransientStatus,
+  withUpstreamTracking,
+} from "./upstream-tracking.js";
 import { isNotFoundError, isRedirectError } from "../http/control-flow.js";
 import { renderHeadMeta } from "./metadata.js";
 import { asset, hasAsset } from "./assets.js";
@@ -471,49 +475,100 @@ async function sendHtml(req, res, body, encoded, options = {}) {
 }
 
 /**
+ * @typedef {{ html: string, status: number, degraded?: boolean,
+ *   storable?: boolean, retryAfter?: number }} Produced
+ */
+
+/**
+ * Controller'ı bir kez çalıştırır. `notFound()` fırlatıldığında sonucu
+ * ayırt edilebilir biçimde döner: çağıran taraf bunun gerçek bir 404 mü,
+ * yoksa upstream düştüğü için verinin gelmemesi mi olduğuna karar verecek.
+ *
  * @param {Function} controller
  * @param {{ pathname: string }} ctx
- * @returns {Promise<{ html: string, status: number, degraded?: boolean,
- *   storable?: boolean, retryAfter?: number }>}
+ * @returns {Promise<{ page: Produced } | { notFound: true,
+ *   transient: import('./upstream-tracking.js').UpstreamFailure[] }>}
  */
-async function produce(controller, ctx) {
+async function attempt(controller, ctx) {
   try {
     const page = await controller(ctx);
     const rendered = await renderPage({ pathname: ctx.pathname, ...page });
     return {
-      html: rendered,
-      status: page.status ?? 200,
-      degraded: hasUpstreamFailures(ctx.pathname),
-      // Kimliğe bağlı çıktı önbelleğe yazılmaz. Karar burada verilmeli:
-      // `withHtmlCache` yazma anında controller'ın ne okuduğunu bilemez.
-      storable: getRequestContext()?.tainted !== true,
+      page: {
+        html: rendered,
+        status: page.status ?? 200,
+        degraded: hasUpstreamFailures(ctx.pathname),
+        // Kimliğe bağlı çıktı önbelleğe yazılmaz. Karar burada verilmeli:
+        // `withHtmlCache` yazma anında controller'ın ne okuduğunu bilemez.
+        storable: getRequestContext()?.tainted !== true,
+      },
     };
   } catch (error) {
     if (isNotFoundError(error)) {
-      // Veri gelmediği için `notFound()` çağrılmış olabilir: geçici bir
-      // upstream hatası (429, 5xx, ağ) varken bunu 404 olarak servis etmek iki
-      // kere yanlış. Önbelleğe girip TTL boyunca "bu sayfa yok" cevabını
-      // sabitler ve arama motoru geçici bir rate limit'i kalıcı 404 sanar.
-      // Doğrusu 503: cache'lenmez, `Retry-After` ile gider, sonraki istek
-      // gerçek içeriği üretir.
-      const transient = transientUpstreamFailures();
-      if (transient.length) {
-        console.warn(
-          `[render] ${ctx.pathname} returned notFound() while upstream is failing ` +
-            `(${summarizeFailures(transient)}), serving an uncached 503 instead`,
-        );
-        return {
-          html: await renderStatusPage(503),
-          status: 503,
-          degraded: true,
-          retryAfter: RETRY_AFTER_SECONDS,
-        };
-      }
-
-      return { html: await renderNotFound(), status: 404 };
+      return { notFound: true, transient: transientUpstreamFailures() };
     }
     throw error;
   }
+}
+
+/**
+ * @param {Function} controller
+ * @param {{ pathname: string }} ctx
+ * @returns {Promise<Produced>}
+ */
+async function produce(controller, ctx) {
+  const first = await attempt(controller, ctx);
+  if ("page" in first) return first.page;
+  // Deterministik "böyle bir sayfa yok" cevabı: tekrar denemenin anlamı yok.
+  if (!first.transient.length) return { html: await renderNotFound(), status: 404 };
+
+  // Buraya gelindiyse `notFound()` veri gelmediği için çağrılmış. **Var olan
+  // bir sayfayı** 404 olarak servis etmek en kötü sonuç: arama motoru geçici
+  // bir rate limit'i kalıcı bir kayıp sanar. Bu yüzden sayfa yeniden denenir —
+  // ısıtma günlükleri gösteriyor ki aynı yol saniyeler sonra 200 dönüyor.
+  const { attempts, delayMs } = transientRetry();
+  let failures = first.transient;
+
+  for (let round = 1; round <= attempts; round += 1) {
+    console.warn(
+      `[render] ${ctx.pathname} returned notFound() while upstream is failing ` +
+        `(${summarizeFailures(failures)}), retrying (${round}/${attempts})`,
+    );
+
+    // Beklemeden tekrar denemek rate limit'e girmiş bir API'de aynı 429'u
+    // getirir; kısa bekleme hem pencerenin dönmesine şans verir hem de
+    // fırtınayı büyütmez.
+    await sleep(delayMs * round);
+
+    // Her deneme kendi upstream ve istek içi cache bağlamında çalışır: ilk
+    // turun hataları ikinci turun kararını kirletmesin ve memoize edilmiş
+    // boş cevaplar tekrar kullanılmasın.
+    const retried = await withUpstreamTracking(() =>
+      withRequestCache(() => attempt(controller, ctx)),
+    );
+
+    if ("page" in retried) return retried.page;
+    if (!retried.transient.length) {
+      // Bu kez upstream sağlam cevap verdi ve "yok" dedi: gerçek 404.
+      return { html: await renderNotFound(), status: 404 };
+    }
+
+    failures = retried.transient;
+  }
+
+  // Denemeler tükendi. 404 yerine 503: önbelleğe girmez, `Retry-After` taşır
+  // ve bir sonraki istek gerçek içeriği üretebilir.
+  console.warn(
+    `[render] ${ctx.pathname} could not be produced, upstream is still failing ` +
+      `(${summarizeFailures(failures)}), serving an uncached 503 instead of a 404`,
+  );
+
+  return {
+    html: await renderStatusPage(503),
+    status: 503,
+    degraded: true,
+    retryAfter: RETRY_AFTER_SECONDS,
+  };
 }
 
 /**
@@ -523,13 +578,31 @@ async function produce(controller, ctx) {
  */
 const RETRY_AFTER_SECONDS = 30;
 
-/** Ağ hatası (0) ve geçici olduğu varsayılan durumlar. */
-const TRANSIENT_STATUSES = new Set([0, 408, 425, 429]);
+/**
+ * Tekrar denemenin maliyeti upstream'e binen ikinci bir istek turu; bu yüzden
+ * varsayılan tek deneme ve kısa bekleme. Rate limit fırtınasında toplam yük
+ * iki katına çıkabilir, ama alternatifi var olan sayfaları 404'e düşürmek.
+ *
+ * @returns {{ attempts: number, delayMs: number }}
+ */
+function transientRetry() {
+  const raw = /** @type {any} */ (getConfig().transientRetry ?? {});
+  const attempts = Number(raw.attempts);
+  const delayMs = Number(raw.delayMs);
 
-/** @param {number} status */
-function isTransient(status) {
-  return TRANSIENT_STATUSES.has(status) || status >= 500;
+  return {
+    attempts: Number.isFinite(attempts) && attempts >= 0 ? Math.floor(attempts) : 1,
+    delayMs: Number.isFinite(delayMs) && delayMs >= 0 ? delayMs : 300,
+  };
 }
+
+/** @param {number} ms */
+function sleep(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms).unref?.();
+  });
+}
+
 
 /**
  * Render sırasında upstream düştüyse çıktı eksik veri içeriyor demektir.
@@ -548,8 +621,8 @@ function hasUpstreamFailures(pathname) {
   const failures = getUpstreamFailures();
   if (!failures.length) return false;
 
-  const transient = failures.filter((failure) => isTransient(failure.status));
-  const permanent = failures.filter((failure) => !isTransient(failure.status));
+  const transient = failures.filter((failure) => isTransientStatus(failure.status));
+  const permanent = failures.filter((failure) => !isTransientStatus(failure.status));
 
   if (permanent.length) {
     console.warn(
@@ -570,7 +643,7 @@ function hasUpstreamFailures(pathname) {
  * @returns {import('./upstream-tracking.js').UpstreamFailure[]}
  */
 function transientUpstreamFailures() {
-  return getUpstreamFailures().filter((failure) => isTransient(failure.status));
+  return getUpstreamFailures().filter((failure) => isTransientStatus(failure.status));
 }
 
 /**

@@ -38,6 +38,7 @@ import {
   DEFAULT_PREWARM_SKIP,
   DEFAULT_SECURITY,
   DEFAULT_STATIC,
+  DEFAULT_TRANSIENT_RETRY,
 } from "./defaults.js";
 
 /** Framework paketinin kökü — kendi şablonlarına ve varlıklarına erişir. */
@@ -68,6 +69,8 @@ const CONFIG_FILE = "jskelet.config.mjs";
  * @property {{ pattern: CompiledPattern, seconds: number }[]} html
  * @property {number} htmlMaxEntries HTML önbelleğinin girdi sınırı.
  * @property {Record<string, unknown>} data Upstream veri önbelleği ayarları.
+ * @property {boolean} trackUpstream `fetch` sarılıp geçici hatalar otomatik bildirilsin mi.
+ * @property {{ attempts: number, delayMs: number }} transientRetry
  * @property {Record<string, unknown>} prewarm
  * @property {{ source: string, test: (pathname: string) => boolean }[]} prewarmPriority
  * @property {Record<string, unknown>} brand
@@ -206,7 +209,9 @@ function normalizePriority(raw) {
 /**
  * @param {unknown} raw
  * @returns {{ html: ResolvedConfig["html"], htmlMaxEntries: number,
- *   data: Record<string, unknown>, prewarm: Record<string, unknown>,
+ *   data: Record<string, unknown>, trackUpstream: boolean,
+ *   transientRetry: { attempts: number, delayMs: number },
+ *   prewarm: Record<string, unknown>,
  *   prewarmPriority: ResolvedConfig["prewarmPriority"] }}
  */
 function normalizeCache(raw) {
@@ -230,6 +235,13 @@ function normalizeCache(raw) {
         ? Math.floor(maxEntries)
         : DEFAULT_HTML_CACHE_MAX_ENTRIES,
     data: { ...DEFAULT_DATA_CACHE, ...(raw?.data ?? {}) },
+    // Otomatik upstream izleme kapatılabilir olmalı: `fetch`i kendisi saran
+    // bir uygulama (ölçüm, retry, circuit breaker) çakışma yaşayabilir.
+    trackUpstream: raw?.trackUpstream !== false,
+    transientRetry:
+      raw?.transientRetry === false
+        ? { attempts: 0, delayMs: 0 }
+        : { ...DEFAULT_TRANSIENT_RETRY, ...(raw?.transientRetry ?? {}) },
     // Desenler derlenmiş hâlde ayrı alanda tutulur: `prewarm` sayısal
     // ayarların düz torbası olarak kalsın, her turda yeniden derlenmesin.
     prewarm,
@@ -440,8 +452,15 @@ export async function loadConfig(options = {}) {
     section("cache"),
   ]);
 
-  const { html, htmlMaxEntries, data, prewarm, prewarmPriority } =
-    normalizeCache(cache);
+  const {
+    html,
+    htmlMaxEntries,
+    data,
+    trackUpstream,
+    transientRetry,
+    prewarm,
+    prewarmPriority,
+  } = normalizeCache(cache);
   const dirs = resolveDirs(root, source.paths);
   const brand = { ...DEFAULT_BRAND, ...(source.brand ?? {}) };
 
@@ -455,6 +474,8 @@ export async function loadConfig(options = {}) {
     html,
     htmlMaxEntries,
     data,
+    trackUpstream,
+    transientRetry,
     prewarm,
     prewarmPriority,
     brand,

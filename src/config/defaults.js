@@ -89,6 +89,20 @@ export const DEFAULT_PREWARM = {
 export const DEFAULT_HTML_CACHE_MAX_ENTRIES = 500;
 
 /**
+ * `notFound()` geçici bir upstream hatasına denk geldiğinde sayfanın kaç kez
+ * daha denenmesi gerektiği.
+ *
+ * Varsayılan tek deneme: maliyeti upstream'e binen ikinci bir istek turu, ama
+ * alternatifi var olan bir sayfayı 404 olarak servis etmek — arama motoru için
+ * geçici bir rate limit'in kalıcı kayba dönüşmesi. `attempts: 0` tekrarı
+ * kapatır ve doğrudan önbelleğe girmeyen 503'e düşer.
+ */
+export const DEFAULT_TRANSIENT_RETRY = {
+  attempts: 1,
+  delayMs: 300,
+};
+
+/**
  * Upstream veri önbelleği.
  *
  * HTML önbelleğinden bilinçli olarak çok daha büyük: JSON, aynı sayfanın

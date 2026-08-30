@@ -104,7 +104,7 @@ function registerDocs(app, { route, notFound }, { locale, t, paths }) {
       pathname,
       route(
         async () => {
-          const doc = getDoc(locale, entry.slug, { copy, labels });
+          const doc = await getDoc(locale, entry.slug, { copy, labels });
 
           // Belge dosyası okunamıyorsa (paket belgeleri olmadan kurulmuş) sayfa
           // 500 yerine 404 dönüyor: eksik bir dosya sitenin hatası değil.
@@ -222,7 +222,7 @@ async function pageData(key, t, locale) {
 
     case "changelog":
       return {
-        entries: getChangelog(),
+        entries: await getChangelog(),
         release: getRelease(),
         published: await getPublishedRelease(),
         renderChange,

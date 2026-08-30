@@ -2,22 +2,17 @@
  * Belge bölümünün veri katmanı: hangi belge hangi dosyadan geliyor, hangi
  * sırada duruyor ve markdown içindeki dosya bağlantıları hangi URL'e çevriliyor.
  *
- * Belgeler sitenin içinde değil, **kurulu paketin içinde** yaşıyor:
- * `node_modules/jskelet/docs/`. Gerekçesi `lib/release.js` ile aynı — sayfada
- * görünen şey kurulu sürümün kendisi olsun. Pratik sonucu da güzel: paket
- * yükseldiğinde site yeni belgeleri kendiliğinden servis eder, kopyalanmış bir
- * dizin eskimeye başlamaz.
- *
- * Yol hesabı `getConfig().root` üzerinden yapılıyor; `../..` sayan bir satır
- * paket `node_modules` içine girdiğinde bozulur.
+ * Belgeler sitenin içinde değil, **depoda** yaşıyor ve `lib/source.js`
+ * üzerinden okunuyor: önce GitHub'ın raw ucu, olmazsa kurulu paketin kendi
+ * `docs/` dizini. Kopyalanmış bir dizin tutmamanın iki faydası var — belgeler
+ * eskimiyor ve `node_modules` taşımayan bir dağıtımda da site belgeleri
+ * servis edebiliyor.
  */
-import fs from "node:fs";
 import path from "node:path";
-
-import { getConfig } from "jskelet";
 
 import { DEFAULT_LOCALE, LOCALES, PAGES, localePath } from "./i18n.js";
 import { renderMarkdown } from "./markdown.js";
+import { readSource } from "./source.js";
 
 /**
  * @typedef {import("./i18n.js").Locale} Locale
@@ -212,9 +207,9 @@ export function docSummaries(locale, items) {
  * @param {string} slug
  * @param {{ copy?: { idle: string, done: string, failed: string },
  *   labels?: Record<string, string> }} [options]
- * @returns {DocPage | null}
+ * @returns {Promise<DocPage | null>}
  */
-export function getDoc(locale, slug, options = {}) {
+export async function getDoc(locale, slug, options = {}) {
   const position = DOCS.findIndex((doc) => doc.slug === slug);
   if (position === -1) return null;
   const entry = DOCS[position];
@@ -225,7 +220,7 @@ export function getDoc(locale, slug, options = {}) {
 
   const requested = entry.files[locale];
   const fallback = entry.files[DEFAULT_LOCALE];
-  const source = readDoc(requested) ?? readDoc(fallback);
+  const source = (await readDoc(requested)) ?? (await readDoc(fallback));
 
   // Çeviri dosyası eksikse sayfayı düşürmek yerine varsayılan dile düşüyoruz:
   // eksik bir dosya yüzünden belge bölümünün tamamının 500 dönmesi, okunabilir
@@ -343,22 +338,12 @@ function resolveDocLink(href, label, locale, labels) {
 
 /**
  * @param {string} file Paketin `docs/` dizinine göre yol
- * @returns {{ text: string, file: string } | null}
+ * @returns {Promise<{ text: string, file: string } | null>}
  */
-function readDoc(file) {
-  const absolute = path.join(
-    getConfig().root,
-    "node_modules",
-    "jskelet",
-    "docs",
-    ...file.split("/"),
-  );
+async function readDoc(file) {
+  const text = await readSource(`docs/${file}`);
 
-  try {
-    return { text: fs.readFileSync(absolute, "utf8"), file };
-  } catch {
-    // Paket başka bir yerden çözülüyor ya da belge dizini yayına girmemiş
-    // olabilir. Çağıran taraf `null` görürse 404 üretiyor.
-    return null;
-  }
+  // Ne depodan ne kurulu paketten okunabildi: çağıran taraf `null` görürse
+  // 404 üretiyor.
+  return text === null ? null : { text, file };
 }

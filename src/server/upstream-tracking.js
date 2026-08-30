@@ -1,22 +1,25 @@
 /**
  * Render başına upstream API hatalarını toplar.
  *
- * `render.js` her sayfayı bu bağlam içinde üretir; uygulamanın HTTP istemcisi
- * başarısız bir upstream yanıtında `reportUpstreamFailure()` çağırır. Böylece
- * HTML önbelleği "bu çıktı eksik veriyle üretildi" bilgisine sahip olur ve
- * bozuk sayfayı saklamaz.
+ * `render.js` her sayfayı bu bağlam içinde üretir. Böylece HTML önbelleği "bu
+ * çıktı eksik veriyle üretildi" bilgisine sahip olur ve bozuk sayfayı saklamaz;
+ * `notFound()` de geçici bir hataya denk geldiğinde 404 olmaktan çıkar.
  *
- * Bağımlılık yönü bilinçli olarak tersine çevrilmiş: framework veri katmanını
- * tanımaz, veri katmanı framework'e haber verir. Hiç çağıran olmazsa maliyet
- * boş bir dizidir.
+ * Bilgi iki yoldan gelir:
  *
- * Kullanım (uygulamanın `lib/api/client.js` içinde):
+ *   1. **Otomatik** — `trackUpstreamFetch()` `globalThis.fetch`i sarar ve
+ *      geçici hataları (429, 5xx, ağ) kendiliğinden bildirir. `createApp()`
+ *      bunu açılışta kurar, yani hiçbir uygulama kodu gerekmez.
+ *   2. **Elle** — `fetch` kullanmayan bir istemci (veritabanı sürücüsü, gRPC,
+ *      SDK) için:
  *
- *   import { reportUpstreamFailure } from "jskelet/server";
+ *        import { reportUpstreamFailure } from "jskelet";
  *
- *   if (!response.ok) {
- *     reportUpstreamFailure({ status: response.status, path: url });
- *   }
+ *        if (!response.ok) {
+ *          reportUpstreamFailure({ status: response.status, path: url });
+ *        }
+ *
+ * İki yol aynı hatayı bildirirse tekilleştirilir.
  */
 import { AsyncLocalStorage } from "node:async_hooks";
 
@@ -33,7 +36,94 @@ const storage = new AsyncLocalStorage();
  * @returns {void}
  */
 export function reportUpstreamFailure(failure) {
-  storage.getStore()?.failures.push(failure);
+  const store = storage.getStore();
+  if (!store) return;
+
+  // Aynı hatayı hem otomatik sarmalayıcı hem uygulamanın istemcisi
+  // bildirebilir; aynı satırı iki kez loglamanın faydası yok.
+  const duplicate = store.failures.some(
+    (existing) => existing.status === failure.status && existing.path === failure.path,
+  );
+  if (!duplicate) store.failures.push(failure);
+}
+
+/**
+ * Geçici sayılan durumlar: tekrar denemekle düzelebilenler. Bu liste
+ * `render.js` ile paylaşılır — hangi hatanın önbelleği engellediği ve hangi
+ * hatanın `notFound()`u 404 olmaktan çıkardığı tek yerde tanımlı olsun.
+ */
+const TRANSIENT_STATUSES = new Set([0, 408, 425, 429]);
+
+/**
+ * @param {number} status
+ * @returns {boolean}
+ */
+export function isTransientStatus(status) {
+  return TRANSIENT_STATUSES.has(status) || status >= 500;
+}
+
+/**
+ * `globalThis.fetch`i sarıp **geçici** upstream hatalarını kendiliğinden
+ * bildirir.
+ *
+ * Gerekçesi pratik: `reportUpstreamFailure()` sözleşmesi uygulamanın HTTP
+ * istemcisine bir satır eklemeyi gerektiriyor ve o satır yazılmadığında
+ * framework rate limit'i hiç göremiyor — veri gelmediği için `notFound()`
+ * çağıran sayfa 404 olarak servis ediliyordu. Otomatik izleme bu bilgiyi
+ * varsayılan hâle getirir; elle çağrı hâlâ geçerli ve tekilleştirilir.
+ *
+ * Yalnızca geçici durumlar bildirilir. `404`/`403` gibi deterministik
+ * cevaplar birçok API'de "böyle bir kayıt yok" anlamına geliyor ve onları
+ * otomatik olarak "eksik veri" saymak her sayfada yanlış uyarı üretirdi.
+ *
+ * Kendi sunucumuza yapılan istekler atlanır: ısıtma turu ve sağlık kontrolü
+ * upstream değil.
+ *
+ * @returns {void}
+ */
+export function trackUpstreamFetch() {
+  const original = globalThis.fetch;
+  if (/** @type {any} */ (original).__jskeletUpstreamTracked) return;
+
+  /** @type {typeof fetch} */
+  const wrapped = async (input, init) => {
+    // İstek bir render bağlamı içinde değilse (script, zamanlayıcı) hiçbir
+    // şey yapılmaz: sarmalayıcının maliyeti bir `getStore()` çağrısı.
+    if (!storage.getStore()) return original(input, init);
+
+    const url = requestUrl(input);
+    if (isSelfRequest(url)) return original(input, init);
+
+    try {
+      const response = await original(input, init);
+      if (!response.ok && isTransientStatus(response.status)) {
+        reportUpstreamFailure({ status: response.status, path: url });
+      }
+      return response;
+    } catch (error) {
+      // Yanıt hiç gelmedi: ağ hatası her zaman geçicidir.
+      reportUpstreamFailure({ status: 0, path: url });
+      throw error;
+    }
+  };
+
+  /** @type {any} */ (wrapped).__jskeletUpstreamTracked = true;
+  globalThis.fetch = wrapped;
+}
+
+/**
+ * @param {RequestInfo | URL} input
+ * @returns {string}
+ */
+function requestUrl(input) {
+  if (typeof input === "string") return input;
+  if (input instanceof URL) return input.href;
+  return /** @type {Request} */ (input)?.url ?? String(input);
+}
+
+/** @param {string} url */
+function isSelfRequest(url) {
+  return /^https?:\/\/(127\.0\.0\.1|\[::1\]|localhost)(:|\/|$)/i.test(url);
 }
 
 /**

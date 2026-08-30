@@ -560,9 +560,9 @@ Ayrıntı: [03-routing.md](./03-routing.md).
 ## `cache()`
 
 **Tip:**
-`() => { html?: Record<string, number>, maxEntries?: number, data?: object, prewarm?: object }` —
+`() => { html?: Record<string, number>, maxEntries?: number, data?: object, trackUpstream?: boolean, transientRetry?: object | false, prewarm?: object }` —
 **Varsayılan:**
-`{ html: {}, maxEntries: 500, data: { maxEntries: 10000, staleFactor: 10 }, prewarm: { enabled: true, max: 400, intervalSeconds: 0 } }`
+`{ html: {}, maxEntries: 500, data: { maxEntries: 10000, staleFactor: 10 }, trackUpstream: true, transientRetry: { attempts: 1, delayMs: 300 }, prewarm: { enabled: true, max: 400, intervalSeconds: 0 } }`
 
 ### `cache().html`
 
@@ -598,6 +598,24 @@ Upstream veri önbelleği (`withDataCache`). Ayrıntı: [06-cache.md](./06-cache
 | --- | --- | --- | --- |
 | `maxEntries` | `number` | `10000` | LRU girdi sınırı. JSON, HTML'e göre onlarca kat küçük olduğu için sınır yüksek. |
 | `staleFactor` | `number` | `10` | TTL dolduktan sonra girdinin kaç TTL boyunca daha kullanılabileceği. `0` → bayat servis yok. |
+
+### `cache().trackUpstream`
+
+**Tip:** `boolean` — **Varsayılan:** `true`
+
+Açıkken `globalThis.fetch` sarılır ve render sırasındaki geçici upstream
+hataları (`429`, `5xx`, ağ) kendiliğinden bildirilir; `reportUpstreamFailure()`
+çağırmak gerekmez. `fetch`i kendisi saran bir uygulama bunu kapatabilir.
+
+### `cache().transientRetry`
+
+**Tip:** `{ attempts?: number, delayMs?: number } | false` —
+**Varsayılan:** `{ attempts: 1, delayMs: 300 }`
+
+Geçici bir upstream hatası yüzünden `notFound()` çağrılan sayfa kaç kez daha
+denenir. Amaç var olan bir sayfanın 404'e dönüşmemesi; denemeler tükenirse yanıt
+önbelleğe girmeyen bir 503 olur. `false` ya da `attempts: 0` tekrarı kapatır.
+Ayrıntı: [06-cache.md](./06-cache.md).
 
 ### `cache().prewarm`
 

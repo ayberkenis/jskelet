@@ -5,8 +5,8 @@ Bu belge JSkelet'in ISR ikamesini bütün ayrıntılarıyla anlatır: HTML TTL
 cache anahtarının nasıl kurulduğu, `X-JSkelet-Cache` başlığının değerleri,
 sıkıştırılmış gövdenin neden önbellekte durduğu, istek içi memoizasyon
 (`withRequestCache` / `cache()`), veri önbelleği (`withDataCache`), upstream
-hatalarının önbelleği nasıl etkilediği (`reportUpstreamFailure`) ve sunucu
-açılışındaki ısıtma turu.
+hatalarının önbelleği nasıl etkilediği (otomatik izleme ve
+`reportUpstreamFailure`) ve sunucu açılışındaki ısıtma turu.
 Kararların arkasındaki ölçüm gerekçeleri [02-mimari.md](./02-mimari.md)'de,
 config alanlarının tam referansı [07-yapilandirma.md](./07-yapilandirma.md)'de.
 
@@ -315,9 +315,34 @@ Render sırasında upstream düştüyse çıktı eksik veri içeriyor demektir. 
 HTML'i tüm TTL boyunca servis etmek yerine önbelleğe **hiç yazmamak** doğru
 davranış: sonraki istek yeniden dener.
 
+Bu bilgi iki yoldan gelir.
+
+### Otomatik izleme (varsayılan)
+
+`createApp()` açılışta `globalThis.fetch`i sarar ve render sırasında yapılan
+çağrılardaki **geçici** hataları (`429`, `5xx`, ağ hatası) kendiliğinden
+bildirir. Uygulama tarafında hiçbir satır gerekmez; `fetch` ile konuşan bir API
+istemcisi varsa rate limit koruması hazırdır.
+
+Ayrıntılar:
+
+- Yalnızca bir render bağlamı içindeki çağrılar sayılır. Script'ten, cron'dan
+  ya da istek dışı bir yerden yapılan `fetch` dokunulmaz kalır.
+- Kendi sunucumuza yapılan istekler (`localhost`, `127.0.0.1`) atlanır: ısıtma
+  turu ve sağlık kontrolü upstream değildir.
+- `404`/`403` gibi deterministik cevaplar **otomatik olarak bildirilmez**. Çoğu
+  API'de `404` "böyle bir kayıt yok" demektir; onu eksik veri saymak her yok
+  sayfasında yanlış uyarı üretirdi.
+- Kapatmak için `cache().trackUpstream: false`. `fetch`i kendisi saran bir
+  uygulama (ölçüm, retry, circuit breaker) bunu tercih edebilir.
+
+### Elle bildirim
+
+`fetch` kullanmayan bir istemci (veritabanı sürücüsü, gRPC, satıcı SDK'sı) ya da
+kalıcı hataları da işaretlemek isteyen bir katman için sözleşme aynı kaldı.
 Bağımlılık yönü bilinçli olarak tersine çevrilmiştir: framework veri katmanını
 tanımaz, veri katmanı framework'e haber verir. Hiç çağıran olmazsa maliyet boş
-bir dizidir.
+bir dizidir. Aynı hata her iki yoldan bildirilirse tekilleştirilir.
 
 ```js
 // lib/api/client.js
@@ -366,18 +391,44 @@ geçici bir kota sorunu TTL boyunca "bu sayfa yok" cevabına dönüşür. Arama 
 için bu kalıcı bir kayıp.
 
 Framework bu durumu ayırır: render sırasında **geçici** bir upstream hatası
-bildirilmişse `notFound()` 404 olarak servis edilmez.
+varsa `notFound()` 404 olarak servis edilmez. Sırayla:
+
+1. Sayfa kısa bir beklemeden sonra **yeniden denenir** (varsayılan bir kez,
+   300 ms sonra). Deneme kendi upstream ve istek içi cache bağlamında koşar;
+   ilk turun hatası da memoize edilmiş boş cevabı da ikinci turu etkilemez.
+2. İkinci tur sayfayı üretebilirse ziyaretçi **gerçek içeriği** görür ve çıktı
+   normal şekilde önbelleğe girer. Isıtma günlükleri bunun sık olduğunu
+   gösteriyor: aynı yol saniyeler sonra 200 dönüyor.
+3. Denemeler tükendiyse yanıt `503` olur — önbelleğe girmez, `Retry-After`
+   taşır, sonraki istek yine gerçek içeriği üretebilir.
 
 | Render sırasında | `notFound()` sonucu |
 | --- | --- |
-| Geçici hata var (`429`, `5xx`, ağ hatası) | `503`, `Retry-After: 30`, `no-store` — önbelleğe **girmez**, sonraki istek gerçek içeriği üretir |
-| Kalıcı hata var (`404`, `403`…) ya da hata yok | Normal `404` |
+| Geçici hata var (`429`, `5xx`, ağ hatası) | Tekrar dene → başarılıysa sayfa; hâlâ olmuyorsa `503`, `Retry-After: 30`, `no-store` |
+| Tekrar denemede upstream sağlam cevap verip "yok" dedi | Normal `404` |
+| Kalıcı hata var (`404`, `403`…) ya da hata yok | Normal `404`, tekrar denenmez |
 
-Log satırı:
-`[render] /haber/x returned notFound() while upstream is failing (429 /api/...), serving an uncached 503 instead`
+Log satırları:
 
-Yani upstream'in kotası dolduğunda sayfa dinamik olarak, önbelleğe yazılmadan
-üretilir; hiçbir şey "yok" olarak dondurulmaz.
+```
+[render] /haber/x returned notFound() while upstream is failing (429 /api/...), retrying (1/1)
+[render] /haber/x could not be produced, upstream is still failing (429 /api/...), serving an uncached 503 instead of a 404
+```
+
+Yani **var olan bir sayfa hiçbir koşulda 404'e dönüşmez**: ya gerçek içerik
+gelir, ya önbelleğe girmeyen bir 503. Hiçbir şey "yok" olarak dondurulmaz.
+
+Tekrar denemenin maliyeti upstream'e binen ikinci bir istek turudur; bu yüzden
+varsayılan tek deneme. Ayar `cache().transientRetry`:
+
+```js
+cache: {
+  transientRetry: { attempts: 2, delayMs: 500 },
+}
+```
+
+`transientRetry: false` (ya da `attempts: 0`) tekrarı kapatır ve doğrudan 503'e
+düşer.
 
 ## Önbelleği yönetmek
 
@@ -612,8 +663,10 @@ turunun gerçekten `MISS` → önbellek doldurup doldurmadığını buradan gör
 - **Isıtma listesi `max`'tan uzun ve sonu hiç ısınmıyor.** `rotate: false`
   olabilir; logdaki `over the limit` ifadesi bunu gösterir.
 - **Bir bölümün tamamı 404 dönüyor.** Upstream düşmüş olabilir. Artık bu durumda
-  404 değil önbelleğe girmeyen 503 dönüyor; logda `returned notFound() while
-  upstream is failing` satırını arayın.
+  sayfa bir kez daha denenir, olmazsa 404 değil önbelleğe girmeyen 503 döner;
+  logda `returned notFound() while upstream is failing` satırını arayın. Hâlâ
+  404 görüyorsanız hata `fetch` dışı bir istemciden geliyor olabilir
+  (`reportUpstreamFailure()` gerekir) ya da `cache().trackUpstream` kapatılmış.
 
 ## Sırada ne var
 

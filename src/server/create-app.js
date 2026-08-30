@@ -34,6 +34,7 @@ import { registerRoutes } from "./router.js";
 import { renderNotFound } from "./render.js";
 import { renderStatusPage, statusFromError } from "./status-page.js";
 import { startPrewarm } from "./prewarm.js";
+import { trackUpstreamFetch } from "./upstream-tracking.js";
 import { isNotFoundError, isRedirectError } from "../http/control-flow.js";
 
 /**
@@ -44,6 +45,11 @@ export async function createApp(options = {}) {
   // Config middleware'lerden önce okunur; yoksa uyarı basar, akış durmaz.
   await loadConfig(options);
   const config = getConfig();
+
+  // Upstream hatalarının izlenmesi route'lardan önce kurulmalı: sarmalayıcı
+  // yalnızca render bağlamı içindeki `fetch` çağrılarına bakar, ama bağlamın
+  // ilk kurulduğu istek de kapsanmalı.
+  if (config.trackUpstream) trackUpstreamFetch();
 
   const app = express();
 
