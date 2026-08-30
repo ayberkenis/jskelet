@@ -10,6 +10,24 @@ one is listed under a **Breaking** heading.
 
 ### Added
 
+- Targeted HTML invalidation: `invalidateHtmlCache(target, { hard })` takes a
+  path, the config pattern syntax (`/news/:slug`), a regular expression or a list
+  of them, and returns how many entries were affected. By default it **stales**
+  the entries rather than deleting them, so a webhook that touches hundreds of
+  pages does not turn into hundreds of cold renders at the worst possible moment:
+  visitors keep getting the old HTML while the refresh runs in the background,
+  once per key. Matching is done against the path, so every query variant of a
+  page is covered by one call, and a render already in flight when the purge
+  arrives is not stored.
+- `clearDataCache()` now refreshes the HTML too. The `withDataCache` keys read
+  during a render are recorded, so dropping `news:abc` stales every page that
+  actually read it — the article, the home page listing it and the tag page —
+  without the application declaring any tags. Turn it off with
+  `cache().trackDependencies: false`; `getHtmlCacheEntries()` reports the
+  dependency count per page as `deps`.
+- Invalidated paths go to the front of the next prewarm pass, so an updated page
+  is refreshed without waiting for a visitor, while still respecting the `rps`
+  limit. The pass summary counts them separately.
 - An upstream data cache: `withDataCache(key, ttlSeconds, producer)` and the
   `dataCache(fn, { key, revalidate })` wrapper, with `clearDataCache(prefix?)`,
   `getDataCacheSize()` and `getDataCacheEntries()` alongside them. It keeps JSON
@@ -53,6 +71,11 @@ one is listed under a **Breaking** heading.
   open tab no longer keeps hitting the server while the panel is closed. No new
   dependency is involved; if the socket cannot be opened, the panel falls back to
   the previous SSE plus polling path.
+- Prewarming no longer holds up the rest of the dev server. In development it now
+  runs with a single worker and a default limit of 4 requests per second
+  (`prewarm.rps` / `PREWARM_RPS` still override it), so page requests and the dev
+  panel stay responsive while a warm-up round is going on. Production behaviour
+  is unchanged.
 - `notFound()` is no longer served as a 404 when a transient upstream failure
   (`429`, `5xx`, network error) happened during the same render. The page is
   retried first and, if upstream is still failing, responds with an uncached

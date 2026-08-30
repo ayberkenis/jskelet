@@ -560,9 +560,9 @@ Ayrıntı: [03-routing.md](./03-routing.md).
 ## `cache()`
 
 **Tip:**
-`() => { html?: Record<string, number>, maxEntries?: number, data?: object, trackUpstream?: boolean, transientRetry?: object | false, prewarm?: object }` —
+`() => { html?: Record<string, number>, maxEntries?: number, data?: object, trackUpstream?: boolean, trackDependencies?: boolean, transientRetry?: object | false, prewarm?: object }` —
 **Varsayılan:**
-`{ html: {}, maxEntries: 500, data: { maxEntries: 10000, staleFactor: 10 }, trackUpstream: true, transientRetry: { attempts: 1, delayMs: 300 }, prewarm: { enabled: true, max: 400, intervalSeconds: 0 } }`
+`{ html: {}, maxEntries: 500, data: { maxEntries: 10000, staleFactor: 10 }, trackUpstream: true, trackDependencies: true, transientRetry: { attempts: 1, delayMs: 300 }, prewarm: { enabled: true, max: 400, intervalSeconds: 0 } }`
 
 ### `cache().html`
 
@@ -607,6 +607,16 @@ Açıkken `globalThis.fetch` sarılır ve render sırasındaki geçici upstream
 hataları (`429`, `5xx`, ağ) kendiliğinden bildirilir; `reportUpstreamFailure()`
 çağırmak gerekmez. `fetch`i kendisi saran bir uygulama bunu kapatabilir.
 
+### `cache().trackDependencies`
+
+**Tip:** `boolean` — **Varsayılan:** `true`
+
+Açıkken bir render'ın okuduğu `withDataCache` anahtarları kaydedilir ve
+`clearDataCache()` o veriyi okumuş HTML sayfalarını da bayatlatır — hedefli
+invalidation için uygulamanın hiçbir şey bildirmesi gerekmez
+([06-cache.md](./06-cache.md)). `withDataCache` kullanmayan bir uygulamada
+kaydedilecek bir şey yok; kapatmak bağlam kurma maliyetini de kaldırır.
+
 ### `cache().transientRetry`
 
 **Tip:** `{ attempts?: number, delayMs?: number } | false` —
@@ -623,8 +633,8 @@ Ayrıntı: [06-cache.md](./06-cache.md).
 | --- | --- | --- | --- |
 | `enabled` | `boolean` | `true` | `false` ise ısıtma yapılmaz (`PREWARM=1` ile ezilebilir) |
 | `max` | `number` | `400` | Bir turda en fazla kaç yol ısıtılır |
-| `concurrency` | `number` | prod 4, dev 2 | Paralel işçi sayısı |
-| `rps` | `number` | `0` | Saniyedeki en fazla ısıtma isteği; `0` sınırsız. Upstream kotasını koruyan ayar bu. |
+| `concurrency` | `number` | prod 4, dev 1 | Paralel işçi sayısı |
+| `rps` | `number` | prod `0`, dev 4 | Saniyedeki en fazla ısıtma isteği; `0` sınırsız. Upstream kotasını koruyan ayar bu. Dev'deki varsayılan fren, ısıtmanın sayfa isteklerini bekletmemesi için. |
 | `delayMs` | `number` | prod 500, dev 3000 | Açılıştan sonra ilk turun gecikmesi |
 | `retryDelayMs` | `number` | `2000` | Tekrar turundan önce beklenen süre |
 | `intervalSeconds` | `number` | `0` | 0'dan büyükse tur periyodik tekrarlanır |
@@ -742,7 +752,7 @@ basılmaz.
 | `DEV_TOKEN` | `devGate`, `prewarm` | — | Ayarlıysa token taşımayan her isteğe 404 döner. Isıtma token'ı çerez olarak taşır. [09](./09-dev-araclari.md) |
 | `PREWARM` | `startPrewarm` | — | `0` ısıtmayı kapatır; `1` config'teki `enabled: false`'u ezip açar |
 | `PREWARM_MAX` | `prewarm` | `400` | En fazla kaç yol ısıtılır |
-| `PREWARM_CONCURRENCY` | `prewarm` | prod 4, dev 2 | Paralel işçi sayısı |
+| `PREWARM_CONCURRENCY` | `prewarm` | prod 4, dev 1 | Paralel işçi sayısı |
 | `PREWARM_RPS` | `prewarm` | `0` | Saniyedeki en fazla ısıtma isteği; `0` sınırsız |
 | `PREWARM_DELAY_MS` | `startPrewarm` | prod 500, dev 3000 | İlk turun gecikmesi |
 | `PREWARM_RETRY_DELAY_MS` | `prewarm` | `2000` | Tekrar turundan önceki bekleme |

@@ -315,8 +315,9 @@ The management surface:
 | `getDataCacheEntries()` | A dump: `{ key, stale, expiresIn }`. The value itself is not returned. |
 
 `clearDataCache("news:")` is the counterpart of a "this content was updated"
-webhook: it drops one section's data so the next HTML refresh picks up the new
-content.
+webhook: it drops one section's data **and stales the HTML pages that read it**,
+so the update shows up without waiting for a TTL. See "Automatic dependencies"
+below.
 
 ## Degraded render: `reportUpstreamFailure`
 
@@ -447,9 +448,71 @@ through to the 503.
 | Function | What it does |
 | --- | --- |
 | `withHtmlCache(key, ttlSeconds, producer)` | For using the cache directly. If `ttlSeconds` is 0 the producer always runs. |
+| `invalidateHtmlCache(target, options?)` | Stales the matching pages (or drops them with `{ hard: true }`) and returns how many were affected. |
 | `clearHtmlCache()` | Empties the store completely. |
 | `getHtmlCacheSize()` | The number of entries. |
-| `getHtmlCacheEntries()` | A dump: `{ key, bytes, status, stale, expiresIn, encodings }`. The HTML body is not returned, only its size. |
+| `getHtmlCacheEntries()` | A dump: `{ key, bytes, status, stale, expiresIn, encodings, deps }`. The HTML body is not returned, only its size. |
+
+### Targeted invalidation
+
+`invalidateHtmlCache()` fills the gap between waiting for the TTL and flushing
+the whole cache:
+
+```js
+import { invalidateHtmlCache } from "jskelet";
+
+invalidateHtmlCache("/news/abc");             // that path and everything under it
+invalidateHtmlCache("/news/:slug");           // the pattern syntax
+invalidateHtmlCache([/-comments$/, "/"]);     // regexps and lists
+```
+
+The default is to **stale** the entry, not to delete it: it is treated as
+expired and falls through the normal stale-while-revalidate path. When a webhook
+takes down five hundred pages at once, a hard delete starts five hundred cold
+renders at exactly the moment the content changed, and hammers the upstream.
+Staling instead hands the visitor the old HTML without a wait, and the refresh
+runs in the background, once per key. Use `{ hard: true }` when the old HTML is
+genuinely invalid.
+
+Since the key is `path?query`, matching is done against the **path**: every
+query variant of a path (including `?utm_source=…`) is covered by one call. For
+a plain string the prefix stops at a segment boundary — a `/news` rule does not
+touch `/newsletter`.
+
+An in-flight render is targeted too: a pass that started before the purge is
+carrying data that is now out of date, so it is **not** stored and the next
+request starts a fresh pass.
+
+### Automatic dependencies: `clearDataCache` refreshes the HTML too
+
+You do not have to declare which page is affected by which content. Every
+`withDataCache` key read during a render is recorded, and when `clearDataCache()`
+drops a key, every HTML entry that **actually read it** is staled.
+
+```js
+// the "this article changed" webhook
+clearDataCache(`news:${slug}`);
+```
+
+That single line refreshes the article page, the home page that lists it and the
+tag page together — because all three read that key. The most common mistake in
+manual tagging (marking the detail page and forgetting the listing) is
+structurally impossible here: nothing is declared, everything is observed.
+
+Details:
+
+- Dependencies are collected **on every refresh**, since the keys a page reads
+  can change over time.
+- A purge that lands while a render is in flight is caught as well: that pass
+  would be stale the moment it was born, so it is not stored.
+- The dependency count per page shows up as `deps` in the `getHtmlCacheEntries()`
+  dump. If an invalidation is not refreshing the page you expected, look there
+  first: the page may not be reading that data through `withDataCache`.
+- An application that does not use `withDataCache` has nothing to record;
+  tracking can be turned off entirely with `cache().trackDependencies: false`.
+- Staled paths go to the **front** of the prewarm queue. If `prewarm` is set up
+  the page is refreshed without waiting for a visitor, and the pass summary says
+  so: `[prewarm] warmed 12/12 pages, 3 invalidated (0.4s)`.
 
 To write an admin endpoint:
 
@@ -528,11 +591,13 @@ Rules:
 1. The list is collected. If it is longer than `max` (400 by default) a slice is
    selected: the paths matching `priority` are taken first **on every round**,
    and the remaining slots are filled from the queue.
-2. `concurrency` workers send requests in parallel (4 in prod, 2 in dev). Less
-   parallelism in dev: so the scan does not compete for CPU with the render of
+2. `concurrency` workers send requests in parallel (4 in prod, 1 in dev). A
+   single worker in dev: so the scan does not compete for CPU with the render of
    the page you currently have open in the browser.
 3. If `rps` is given, the round never goes above that rate — no matter the
-   parallelism.
+   parallelism. In dev, 4 requests per second apply by default: rendering runs
+   on a single event loop, so an unpaced round leaves page requests and the dev
+   panel's live channel waiting behind it.
 4. **A single serial retry round** is performed for the failed paths after
    waiting `retryDelayMs` (`concurrency: 1`). The wait is deliberate: rate limit
    windows are on the order of seconds, so retrying immediately just earns the
@@ -623,8 +688,8 @@ comes first so that one-off experiments can be done without editing the config.
 | --- | --- | --- | --- |
 | On/off | `PREWARM=0` disables it, `PREWARM=1` overrides the config and enables it | `enabled` | `true` |
 | Maximum paths per round | `PREWARM_MAX` | `max` | `400` |
-| Parallelism | `PREWARM_CONCURRENCY` | `concurrency` | prod 4, dev 2 |
-| Requests per second | `PREWARM_RPS` | `rps` | `0` (unlimited) |
+| Parallelism | `PREWARM_CONCURRENCY` | `concurrency` | prod 4, dev 1 |
+| Requests per second | `PREWARM_RPS` | `rps` | prod `0` (unlimited), dev 4 |
 | Startup delay (ms) | `PREWARM_DELAY_MS` | `delayMs` | prod 500, dev 3000 |
 | Retry round delay (ms) | `PREWARM_RETRY_DELAY_MS` | `retryDelayMs` | `2000` |
 | Period (seconds) | `PREWARM_INTERVAL_SECONDS` | `intervalSeconds` | `0` (off) |

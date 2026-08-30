@@ -70,6 +70,7 @@ const CONFIG_FILE = "jskelet.config.mjs";
  * @property {number} htmlMaxEntries HTML önbelleğinin girdi sınırı.
  * @property {Record<string, unknown>} data Upstream veri önbelleği ayarları.
  * @property {boolean} trackUpstream `fetch` sarılıp geçici hatalar otomatik bildirilsin mi.
+ * @property {boolean} trackDependencies Render'ın okuduğu veri anahtarları kaydedilsin mi.
  * @property {{ attempts: number, delayMs: number }} transientRetry
  * @property {Record<string, unknown>} prewarm
  * @property {{ source: string, test: (pathname: string) => boolean }[]} prewarmPriority
@@ -210,6 +211,7 @@ function normalizePriority(raw) {
  * @param {unknown} raw
  * @returns {{ html: ResolvedConfig["html"], htmlMaxEntries: number,
  *   data: Record<string, unknown>, trackUpstream: boolean,
+ *   trackDependencies: boolean,
  *   transientRetry: { attempts: number, delayMs: number },
  *   prewarm: Record<string, unknown>,
  *   prewarmPriority: ResolvedConfig["prewarmPriority"] }}
@@ -238,6 +240,10 @@ function normalizeCache(raw) {
     // Otomatik upstream izleme kapatılabilir olmalı: `fetch`i kendisi saran
     // bir uygulama (ölçüm, retry, circuit breaker) çakışma yaşayabilir.
     trackUpstream: raw?.trackUpstream !== false,
+    // Hangi sayfanın hangi veri anahtarını okuduğu kaydedilsin mi.
+    // `withDataCache` kullanmayan bir uygulamada kaydedilecek bir şey yok;
+    // kapatmak bağlam kurma maliyetini de kaldırır.
+    trackDependencies: raw?.trackDependencies !== false,
     transientRetry:
       raw?.transientRetry === false
         ? { attempts: 0, delayMs: 0 }
@@ -457,6 +463,7 @@ export async function loadConfig(options = {}) {
     htmlMaxEntries,
     data,
     trackUpstream,
+    trackDependencies,
     transientRetry,
     prewarm,
     prewarmPriority,
@@ -475,6 +482,7 @@ export async function loadConfig(options = {}) {
     htmlMaxEntries,
     data,
     trackUpstream,
+    trackDependencies,
     transientRetry,
     prewarm,
     prewarmPriority,

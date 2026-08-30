@@ -140,9 +140,11 @@ Everything the overlay shows — statistics, live reload and CSS hot-swap events
 arrives over a single WebSocket (`<devBasePath>/ws`). The panel used to poll for
 statistics every two seconds, so every open tab kept hitting the server even
 while the panel was closed. Now the server pushes as things change: when a
-request or an error is recorded (coalesced over 120 ms), once per second while
-prewarming runs, and every four seconds otherwise so uptime and memory stay
-fresh. Nothing is computed when no panel is connected.
+request or an error is recorded (coalesced over 120 ms), and every two seconds so
+the time-based fields (uptime, memory, the prewarm counter) stay fresh. The
+heartbeat is deliberately independent of prewarming: if the channel's tempo
+followed a background job, the panel would be tied to that job's rhythm. Nothing
+is computed when no panel is connected.
 
 The handshake happens on the HTTP `upgrade` event, and that event never reaches
 the middleware chain, so the channel is attached straight to the server after
@@ -324,7 +326,8 @@ redirect rules.
 | Broken route module | Warn + skip | Throw |
 | Devtools and report | Mounted | Never loaded |
 | `globalThis.fetch` | Wrapped (measurement) | Untouched |
-| Prewarm concurrency | 2 | 4 |
+| Prewarm concurrency | 1 | 4 |
+| Prewarm rate limit | 4 requests/second | Unlimited |
 | Prewarm delay | 3000 ms | 500 ms |
 | Missing icon warning | Emitted | Not emitted |
 | Precompress | Does not run in watch | Runs |

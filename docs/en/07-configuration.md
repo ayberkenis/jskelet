@@ -572,9 +572,9 @@ Details: [03-routing.md](./03-routing.md).
 ## `cache()`
 
 **Type:**
-`() => { html?: Record<string, number>, maxEntries?: number, data?: object, trackUpstream?: boolean, transientRetry?: object | false, prewarm?: object }` —
+`() => { html?: Record<string, number>, maxEntries?: number, data?: object, trackUpstream?: boolean, trackDependencies?: boolean, transientRetry?: object | false, prewarm?: object }` —
 **Default:**
-`{ html: {}, maxEntries: 500, data: { maxEntries: 10000, staleFactor: 10 }, trackUpstream: true, transientRetry: { attempts: 1, delayMs: 300 }, prewarm: { enabled: true, max: 400, intervalSeconds: 0 } }`
+`{ html: {}, maxEntries: 500, data: { maxEntries: 10000, staleFactor: 10 }, trackUpstream: true, trackDependencies: true, transientRetry: { attempts: 1, delayMs: 300 }, prewarm: { enabled: true, max: 400, intervalSeconds: 0 } }`
 
 ### `cache().html`
 
@@ -622,6 +622,17 @@ When on, `globalThis.fetch` is wrapped and transient upstream failures (`429`,
 `reportUpstreamFailure()` is not required. An application that wraps `fetch`
 itself can turn this off.
 
+### `cache().trackDependencies`
+
+**Type:** `boolean` — **Default:** `true`
+
+When on, the `withDataCache` keys a render reads are recorded, and
+`clearDataCache()` also stales the HTML pages that read that data — targeted
+invalidation without the application declaring anything
+([06-caching.md](./06-caching.md)). An application that does not use
+`withDataCache` has nothing to record; turning this off also removes the cost of
+setting up the context.
+
 ### `cache().transientRetry`
 
 **Type:** `{ attempts?: number, delayMs?: number } | false` —
@@ -638,8 +649,8 @@ a 404; if the retries are exhausted the response is an uncached 503. `false` or
 | --- | --- | --- | --- |
 | `enabled` | `boolean` | `true` | If `false`, no prewarming happens (can be overridden with `PREWARM=1`) |
 | `max` | `number` | `400` | At most how many paths are prewarmed per pass |
-| `concurrency` | `number` | prod 4, dev 2 | Number of parallel workers |
-| `rps` | `number` | `0` | At most how many prewarm requests per second; `0` is unlimited. This is the setting that protects the upstream quota. |
+| `concurrency` | `number` | prod 4, dev 1 | Number of parallel workers |
+| `rps` | `number` | prod `0`, dev 4 | At most how many prewarm requests per second; `0` is unlimited. This is the setting that protects the upstream quota. The default brake in dev keeps prewarming from holding page requests up. |
 | `delayMs` | `number` | prod 500, dev 3000 | Delay of the first pass after startup |
 | `retryDelayMs` | `number` | `2000` | How long to wait before the retry pass |
 | `intervalSeconds` | `number` | `0` | If greater than 0, the pass repeats periodically |
@@ -758,7 +769,7 @@ and no warning is printed.
 | `DEV_TOKEN` | `devGate`, `prewarm` | — | If set, every request without a token gets a 404. Prewarming carries the token as a cookie. [09](./09-dev-tools.md) |
 | `PREWARM` | `startPrewarm` | — | `0` turns prewarming off; `1` overrides `enabled: false` in the config and turns it on |
 | `PREWARM_MAX` | `prewarm` | `400` | At most how many paths are prewarmed |
-| `PREWARM_CONCURRENCY` | `prewarm` | prod 4, dev 2 | Number of parallel workers |
+| `PREWARM_CONCURRENCY` | `prewarm` | prod 4, dev 1 | Number of parallel workers |
 | `PREWARM_RPS` | `prewarm` | `0` | At most how many prewarm requests per second; `0` is unlimited |
 | `PREWARM_DELAY_MS` | `startPrewarm` | prod 500, dev 3000 | Delay of the first pass |
 | `PREWARM_RETRY_DELAY_MS` | `prewarm` | `2000` | The wait before the retry pass |

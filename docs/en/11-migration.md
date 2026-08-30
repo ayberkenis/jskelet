@@ -53,7 +53,8 @@ will feel familiar. The *reasons* behind the differences are in
 | `fetch(..., { next: { revalidate } })` | — | The cache is at page level |
 | `unstable_cache` | — | No cross-request data cache; there is a page cache |
 | React `cache()` | `cache()` | Same behavior: in-request memoization |
-| `revalidatePath()` | `clearHtmlCache()` | There is currently no per-key invalidation |
+| `revalidatePath()` | `invalidateHtmlCache("/news/:slug")` | A path, a pattern or a regexp; stales rather than deletes by default |
+| `revalidateTag()` | `clearDataCache("news:")` | No tags to declare: the dependency is observed during the render ([06](./06-caching.md)) |
 | `cookies()`, `headers()` | `ctx.req.headers`, `ctx.req.cookies`* | Direct access to the Express object |
 | `dynamic = "force-dynamic"` | Not passing `revalidate` | Which means the cache is off |
 
@@ -97,8 +98,6 @@ Account for these from the start in your migration plan:
   `viewTransition` smooths the transition
   ([07](./07-configuration.md)).
 - **Server Actions.** Form submissions are ordinary `app.post(...)` handlers.
-- **Per-path invalidation (`revalidatePath`).** For now there is clearing the
-  whole cache (`clearHtmlCache()`) or waiting for the TTL to expire.
 - **Automatic image optimization (at request time).** Optimization happens at
   build time and only covers local images under `public/`; remote images are
   emitted as-is.

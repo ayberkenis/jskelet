@@ -43,6 +43,7 @@ export {
   clearHtmlCache,
   getHtmlCacheEntries,
   getHtmlCacheSize,
+  invalidateHtmlCache,
   withHtmlCache,
 } from "./server/html-cache.js";
 export {

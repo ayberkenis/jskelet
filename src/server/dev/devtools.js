@@ -236,23 +236,18 @@ function pushStats() {
 }
 
 /**
- * Zamana bağlı alanlar (uptime, bellek) ve ısıtma ilerlemesi bir olay
- * üretmiyor; onlar için düşük frekanslı bir kalp atışı gerekiyor. Isıtma
- * sürerken sayaç akıcı görünsün diye sıklaşır.
+ * Zamana bağlı alanlar (uptime, bellek, ısıtma sayacı) bir olay üretmiyor;
+ * onlar için sabit bir kalp atışı var. Bilinçli olarak ısıtmadan bağımsız:
+ * kanalın temposu bir arka plan işine göre değişirse panel de o işin ritmine
+ * bağlanmış olur.
  *
  * Bağlı panel yokken hiçbir şey hesaplanmaz.
  */
 function startHeartbeat() {
-  let tick = 0;
-
   const timer = setInterval(() => {
     if (!socketCount()) return;
-
-    tick += 1;
-    if (!prewarmProgress.active && tick % 4 !== 0) return;
-
     broadcastSocket(statsPayload());
-  }, 1000);
+  }, 2000);
 
   timer.unref?.();
 }

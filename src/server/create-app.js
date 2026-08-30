@@ -167,15 +167,17 @@ export async function startServer(options = {}) {
     console.error("[uncaughtException]", error);
   });
 
-  return new Promise((resolve) => {
-    const server = app.listen(port, host, async () => {
-      // Dev panelinin canlı kanalı: el sıkışma `upgrade` olayında geçtiği
-      // için middleware zincirine değil, doğrudan sunucuya bağlanır.
-      if (process.env.NODE_ENV === "development") {
-        const { attachDevSocket } = await import("./dev/devtools.js");
-        attachDevSocket(server);
-      }
+  // Dev panelinin canlı kanalı: el sıkışma `upgrade` olayında geçtiği için
+  // middleware zincirine değil, doğrudan sunucuya bağlanır. Modül `listen`den
+  // önce yüklenir; dinleme başladıktan sonra beklenen bir `await` kalırsa ilk
+  // upgrade isteği dinleyici yokken gelip reddedilebiliyor.
+  const attachDevSocket =
+    process.env.NODE_ENV === "development"
+      ? (await import("./dev/devtools.js")).attachDevSocket
+      : null;
 
+  return new Promise((resolve) => {
+    const server = app.listen(port, host, () => {
       // Bu satırın biçimi sözleşme: `jskelet dev` sunucunun hazır olduğunu
       // buradan anlar ve özet satırını ona göre basar.
       console.log(
@@ -184,5 +186,7 @@ export async function startServer(options = {}) {
       startPrewarm({ port });
       resolve(server);
     });
+
+    attachDevSocket?.(server);
   });
 }

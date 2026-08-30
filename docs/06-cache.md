@@ -306,8 +306,9 @@ Yönetim yüzeyi:
 | `getDataCacheEntries()` | Döküm: `{ key, stale, expiresIn }`. Değerin kendisi dönmez. |
 
 `clearDataCache("haber:")`, "bu içerik güncellendi" webhook'unun karşılığıdır:
-tek bir bölümün verisini düşürüp HTML'in bir sonraki tazelemesinde yeni içeriği
-almasını sağlar.
+tek bir bölümün verisini düşürür ve **o veriyi okumuş HTML sayfalarını da**
+bayatlatır, yani güncelleme TTL beklenmeden görünür. Ayrıntısı aşağıda,
+"Otomatik bağımlılık" bölümünde.
 
 ## Degraded render: `reportUpstreamFailure`
 
@@ -437,9 +438,70 @@ düşer.
 | Fonksiyon | Ne yapar |
 | --- | --- |
 | `withHtmlCache(key, ttlSeconds, producer)` | Önbelleği doğrudan kullanmak için. `ttlSeconds` 0 ise producer her zaman çalışır. |
+| `invalidateHtmlCache(target, options?)` | Eşleşen sayfaları bayatlatır (ya da `{ hard: true }` ile düşürür), etkilenen sayı döner. |
 | `clearHtmlCache()` | Store'u tamamen boşaltır. |
 | `getHtmlCacheSize()` | Girdi sayısı. |
-| `getHtmlCacheEntries()` | Döküm: `{ key, bytes, status, stale, expiresIn, encodings }`. HTML gövdesi dönmez, yalnızca boyutu. |
+| `getHtmlCacheEntries()` | Döküm: `{ key, bytes, status, stale, expiresIn, encodings, deps }`. HTML gövdesi dönmez, yalnızca boyutu. |
+
+### Hedefli invalidation
+
+TTL'i beklemekle tüm önbelleği boşaltmak arasındaki boşluğu `invalidateHtmlCache()`
+doldurur:
+
+```js
+import { invalidateHtmlCache } from "jskelet";
+
+invalidateHtmlCache("/haber/abc");            // o yol ve altı
+invalidateHtmlCache("/haber/:slug");          // desen sözdizimi
+invalidateHtmlCache([/-yorumlar$/, "/"]);     // RegExp ve liste
+```
+
+Varsayılan davranış **bayatlatmaktır**, silmek değil: girdi süresi geçmiş
+sayılır ve normal stale-while-revalidate yoluna düşer. Bir webhook beş yüz
+sayfayı birden düşürdüğünde sert silme, tam da içeriğin güncellendiği anda beş
+yüz soğuk render başlatır ve upstream'i döver. Bayatlatmada ziyaretçi eski
+HTML'i beklemeden alır, tazeleme arkada ve anahtar başına tek seferde koşar.
+Eski HTML'in gerçekten geçersiz olduğu durumlar için `{ hard: true }`.
+
+Anahtar `yol?query` olduğundan eşleştirme **yol kısmına** yapılır: bir yolun
+bütün query varyantları (`?utm_source=…` dahil) tek çağrıyla düşer. Düz
+string'te önek segment sınırında kesilir — `/haber` kuralı `/haberler`i
+etkilemez.
+
+Uçuşta olan bir render de hedeflenir: purge'den önce başlamış bir tur, sonucu
+artık eski veriyi taşıdığı için önbelleğe **yazılmaz** ve bir sonraki istek yeni
+bir tur başlatır.
+
+### Otomatik bağımlılık: `clearDataCache` HTML'i de tazeler
+
+Hangi sayfanın hangi içerikten etkilendiğini bildirmek gerekmez. Render
+sırasında okunan her `withDataCache` anahtarı kaydedilir; `clearDataCache()` bir
+anahtarı düşürdüğünde onu **fiilen okumuş** bütün HTML girdileri bayatlar.
+
+```js
+// "bu haber güncellendi" webhook'u
+clearDataCache(`haber:${slug}`);
+```
+
+Bu tek satır haber detayını, o haberi listeleyen ana sayfayı ve etiket
+sayfasını birlikte tazeler — çünkü üçü de o anahtarı okumuştu. Elle tag'lemede
+en sık yapılan hata (detayı işaretleyip listeyi unutmak) burada yapısal olarak
+mümkün değil: bildirim değil, gözlem var.
+
+Ayrıntılar:
+
+- Bağımlılık **her tazelemede yeniden** toplanır; sayfanın okuduğu anahtarlar
+  zamanla değişebilir.
+- Render sürerken gelen bir purge de yakalanır: o turun çıktısı "doğduğu anda
+  bayat" olacağı için önbelleğe yazılmaz.
+- Sayfa başına bağımlılık sayısı `getHtmlCacheEntries()` dökümünde `deps`
+  alanında görünür. Bir invalidation beklediğiniz sayfayı tazelemiyorsa önce
+  buraya bakın: sayfa o veriyi `withDataCache` üzerinden okumuyor olabilir.
+- `withDataCache` kullanmayan bir uygulamada kaydedilecek bir şey yoktur;
+  `cache().trackDependencies: false` ile izleme tamamen kapatılabilir.
+- Bayatlatılan yollar ısıtma kuyruğunun **başına** alınır. `prewarm` kuruluysa
+  sayfa, ziyaretçi gelmesini beklemeden tazelenir ve tur özeti bunu ayırt eder:
+  `[prewarm] warmed 12/12 pages, 3 invalidated (0.4s)`.
 
 Bir yönetim ucu yazmak için:
 
@@ -514,10 +576,13 @@ Kurallar:
 1. Liste toplanır. `max`'tan (varsayılan 400) uzunsa bir dilim seçilir:
    `priority` eşleşenler **her turda** başa alınır, kalan yerler kuyruktan
    doldurulur.
-2. `concurrency` işçi paralel olarak istek atar (prod'da 4, dev'de 2). Dev'de
-   daha az paralellik: tarama, o an tarayıcıda açtığın sayfanın render'ıyla CPU
-   için yarışmasın.
+2. `concurrency` işçi paralel olarak istek atar (prod'da 4, dev'de 1). Dev'de
+   tek işçi: tarama, o an tarayıcıda açtığın sayfanın render'ıyla CPU için
+   yarışmasın.
 3. `rps` verilmişse tur bu hızın üstüne çıkmaz — paralellik ne olursa olsun.
+   Dev'de varsayılan olarak saniyede 4 istek uygulanır: render tek bir olay
+   döngüsünde çalıştığı için aralıksız bir tur, sayfa isteklerini ve dev
+   panelinin canlı kanalını arkasında bekletiyor.
 4. Başarısız yollar için, `retryDelayMs` bekledikten sonra **tek seri tekrar
    turu** yapılır (`concurrency: 1`). Bekleme bilinçli: rate limit pencereleri
    saniye mertebesinde, hemen tekrar denemek aynı 429'u almak demek.
@@ -607,8 +672,8 @@ tek seferlik deneyler config'i düzenlemeden yapılabilsin.
 | --- | --- | --- | --- |
 | Açık/kapalı | `PREWARM=0` kapatır, `PREWARM=1` config'i ezip açar | `enabled` | `true` |
 | Tur başına en fazla yol | `PREWARM_MAX` | `max` | `400` |
-| Paralellik | `PREWARM_CONCURRENCY` | `concurrency` | prod 4, dev 2 |
-| Saniyedeki istek | `PREWARM_RPS` | `rps` | `0` (sınırsız) |
+| Paralellik | `PREWARM_CONCURRENCY` | `concurrency` | prod 4, dev 1 |
+| Saniyedeki istek | `PREWARM_RPS` | `rps` | prod `0` (sınırsız), dev 4 |
 | Başlangıç gecikmesi (ms) | `PREWARM_DELAY_MS` | `delayMs` | prod 500, dev 3000 |
 | Tekrar turu gecikmesi (ms) | `PREWARM_RETRY_DELAY_MS` | `retryDelayMs` | `2000` |
 | Periyot (saniye) | `PREWARM_INTERVAL_SECONDS` | `intervalSeconds` | `0` (kapalı) |

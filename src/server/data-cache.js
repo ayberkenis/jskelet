@@ -19,6 +19,8 @@
  */
 import { getConfig } from "../config/index.js";
 import { DEFAULT_DATA_CACHE } from "../config/defaults.js";
+import { recordDependency } from "./cache-deps.js";
+import { invalidateHtmlByDependency } from "./html-cache.js";
 
 /**
  * @typedef {{ value: unknown, expiresAt: number, staleUntil: number }} DataEntry
@@ -144,6 +146,10 @@ function refresh(key, ttlSeconds, producer, options) {
 export async function withDataCache(key, ttlSeconds, producer, options = {}) {
   if (!ttlSeconds) return producer();
 
+  // Bu anahtarı okuyan render, `clearDataCache(key)` çağrıldığında etkilenen
+  // sayfalar arasında sayılsın. Render bağlamı yoksa çağrı no-op.
+  recordDependency(key);
+
   const hit = read(key);
 
   if (hit) {
@@ -202,24 +208,31 @@ export function dataCache(fn, options) {
  * Bir anahtarı ya da önek eşleşen tüm anahtarları düşürür. Webhook ile
  * "bu haber güncellendi" bilgisi geldiğinde kullanılır.
  *
+ * Düşen anahtarları **render sırasında okumuş** HTML girdileri de bayatlar:
+ * uygulamanın ayrıca `invalidateHtmlCache()` çağırması gerekmez ve aynı veriyi
+ * gösteren liste sayfalarını unutmak mümkün değildir (bkz. `cache-deps.js`).
+ *
  * @param {string} [prefix] Verilmezse tüm önbellek boşaltılır.
  * @returns {number} Silinen girdi sayısı.
  */
 export function clearDataCache(prefix) {
-  if (prefix === undefined) {
-    const size = store.size;
-    store.clear();
-    return size;
-  }
+  /** @type {string[]} */
+  const removed = [];
 
-  let removed = 0;
-  for (const key of store.keys()) {
-    if (key.startsWith(prefix)) {
-      store.delete(key);
-      removed += 1;
+  if (prefix === undefined) {
+    removed.push(...store.keys());
+    store.clear();
+  } else {
+    for (const key of store.keys()) {
+      if (key.startsWith(prefix)) {
+        store.delete(key);
+        removed.push(key);
+      }
     }
   }
-  return removed;
+
+  if (removed.length) invalidateHtmlByDependency(removed);
+  return removed.length;
 }
 
 /** @returns {number} */

@@ -52,7 +52,8 @@ alt kümesine benzetildi — `next.config` sözdizimi, Metadata API, `notFound()
 | `fetch(..., { next: { revalidate } })` | — | Önbellek sayfa düzeyinde |
 | `unstable_cache` | — | İstek üstü veri önbelleği yok; sayfa önbelleği var |
 | React `cache()` | `cache()` | Aynı davranış: istek içi memoizasyon |
-| `revalidatePath()` | `clearHtmlCache()` | Şu anda tek tek anahtar geçersizleme yok |
+| `revalidatePath()` | `invalidateHtmlCache("/haber/:slug")` | Yol, desen ya da RegExp; varsayılan olarak siler değil bayatlatır |
+| `revalidateTag()` | `clearDataCache("haber:")` | Tag bildirmeye gerek yok: bağımlılık render sırasında gözlenir ([06](./06-cache.md)) |
 | `cookies()`, `headers()` | `ctx.req.headers`, `ctx.req.cookies`* | Express nesnesine doğrudan erişim |
 | `dynamic = "force-dynamic"` | `revalidate` vermemek | Önbellek kapalı demek |
 
@@ -94,8 +95,6 @@ Bunları taşıma planında baştan hesaba katın:
   önce belgeyi hazırlar, `viewTransition` geçişi yumuşatır
   ([07](./07-yapilandirma.md)).
 - **Server Actions.** Form gönderimleri normal `app.post(...)` handler'larıdır.
-- **Tek tek yol geçersizleme (`revalidatePath`).** Şimdilik tüm önbelleği
-  temizlemek (`clearHtmlCache()`) ya da TTL'in dolmasını beklemek var.
 - **Otomatik görsel optimizasyonu (istek anında).** Optimizasyon build zamanında
   yapılır ve yalnızca `public/` altındaki yerel görselleri kapsar; uzak görseller
   olduğu gibi basılır.

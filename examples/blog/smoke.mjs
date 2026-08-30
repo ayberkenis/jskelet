@@ -45,6 +45,29 @@ for (const [pathname, expectedStatus, expectedBody] of CASES) {
 const second = await fetch(`${BASE}/blog`);
 console.log(`\ncache on second request: ${second.headers.get("x-jskelet-cache")}`);
 
+// Hedefli invalidation: webhook'tan sonra sayfa STALE dönmeli (silinmediği
+// için ziyaretçi yine anında HTML alır) ve arkada tazelenmeli.
+if (process.env.ADMIN_TOKEN) {
+  const hook = await fetch(`${BASE}/_admin/revalidate`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-admin-token": process.env.ADMIN_TOKEN,
+    },
+    body: JSON.stringify({ slug: "html-cache-ve-swr" }),
+  });
+
+  const { invalidated } = await hook.json();
+  const after = await fetch(`${BASE}/blog`);
+  const state = after.headers.get("x-jskelet-cache");
+  const ok = hook.status === 200 && state === "STALE";
+
+  if (!ok) failed += 1;
+  console.log(
+    `${ok ? "✓" : "✗"} ${"revalidate webhook".padEnd(38)} ${invalidated} entries invalidated, /blog is now ${state} (expected STALE)`,
+  );
+}
+
 console.log(failed ? `\n${failed} test(s) failed` : "\nall passed");
 
 // `process.exit()` değil: açık fetch handle'ları varken zorla çıkmak

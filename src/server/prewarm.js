@@ -20,6 +20,7 @@
  */
 import process from "node:process";
 import { getConfig, hook } from "../config/index.js";
+import { takeInvalidatedPaths } from "./html-cache.js";
 
 /**
  * Isıtmanın canlı durumu. Dev araçları bunu okuyup ilerlemeyi gösterir;
@@ -286,23 +287,34 @@ async function crawl(origin, paths, concurrency, report = undefined, pace = unde
 export async function prewarm({ origin, quiet = false, paths: only }) {
   const started = Date.now();
   const limit = setting("PREWARM_MAX", "max", 400);
-  // Dev'de daha az paralellik: tarama, o an tarayıcıda açtığın sayfanın
-  // render'ıyla CPU için yarışmasın.
-  const concurrency = setting(
-    "PREWARM_CONCURRENCY",
-    "concurrency",
-    process.env.NODE_ENV === "development" ? 2 : 4,
-  );
+  const isDev = process.env.NODE_ENV === "development";
 
-  const rps = num(process.env.PREWARM_RPS, num(getConfig().prewarm?.rps, 0));
+  // Dev'de tek işçi: tarama, o an tarayıcıda açtığın sayfanın render'ıyla CPU
+  // için yarışmasın.
+  const concurrency = setting("PREWARM_CONCURRENCY", "concurrency", isDev ? 1 : 4);
+
+  // Render tek bir olay döngüsünde çalışıyor: aralıksız bir tur, geliştirme
+  // sırasında sayfa isteklerini ve dev panelinin kanalını arkasında bekletiyor.
+  // Dev'de varsayılan bir hız freni bu yüzden var; üretimde ısıtma bir kez
+  // olup bittiği için fren yalnızca istenirse (`prewarm.rps`) devreye girer.
+  const rps = num(process.env.PREWARM_RPS, num(getConfig().prewarm?.rps, isDev ? 4 : 0));
   const pace = createPacer(rps);
 
   const all = only?.length ? only : await collectPaths();
   // Elle verilen liste budanmaz ve sıralanmaz: çağıran tam olarak neyi
   // istediğini biliyor (dev panelindeki "tekrar dene" bunu kullanır).
-  const paths = only?.length
+  const selected = only?.length
     ? all
     : selectPrewarmPaths(all, limit, getConfig().prewarm?.rotate !== false);
+
+  // Invalidate edilmiş sayfalar kuyruğun önüne geçer: "içerik güncellendi"
+  // bilgisi geldiğinde sayfa, ziyaretçi gelmesini beklemeden tazelenir. Bu
+  // yollar `max` bütçesinin dışında tutulur — sayıları zaten gerçekleşen
+  // invalidation kadar ve rotasyonun sırasını bozmaları istenmez.
+  const pending = only?.length ? [] : takeInvalidatedPaths();
+  const paths = pending.length
+    ? [...new Set([...pending, ...selected])]
+    : selected;
 
   Object.assign(prewarmProgress, {
     active: true,
@@ -363,13 +375,14 @@ export async function prewarm({ origin, quiet = false, paths: only }) {
   const elapsed = Date.now() - started;
 
   if (!quiet && paths.length) {
-    const skipped = all.length - paths.length;
+    const skipped = all.length - selected.length;
     // Rotasyon açıkken sınırın dışında kalan yollar kaybolmuyor, bir sonraki
     // tura kalıyor; log bunu ayırt etmeli, yoksa "400 yol atlandı" satırı
     // hatalı bir kurulum sanılıyor.
     const rotate = !only?.length && getConfig().prewarm?.rotate !== false;
     console.log(
       `[prewarm] warmed ${ok}/${paths.length} pages` +
+        `${pending.length ? `, ${pending.length} invalidated` : ""}` +
         `${failed ? `, ${failed} failed` : ""}` +
         `${recovered ? `, ${recovered} recovered on the retry pass` : ""}` +
         `${skipped > 0 ? `, ${skipped} ${rotate ? "deferred to the next pass" : "over the limit"}` : ""}` +

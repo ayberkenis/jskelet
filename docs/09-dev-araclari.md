@@ -138,8 +138,10 @@ tek bir WebSocket üzerinden gelir (`<devBasePath>/ws`). Panel eskiden
 istatistikleri iki saniyede bir çekiyordu; açık her sekme, panel kapalıyken bile
 sunucuya sürekli istek atıyordu. Artık sunucu değişiklik oldukça iter: bir istek
 ya da hata kaydedildiğinde (120 ms birleştirilerek), ısıtma sürerken saniyede
-bir, geri kalan zamanda yalnızca uptime/bellek tazelensin diye dört saniyede bir.
-Bağlı panel yoksa hiçbir şey hesaplanmaz.
+ve zamana bağlı alanlar (uptime, bellek, ısıtma sayacı) tazelensin diye iki
+saniyede bir. Kalp atışı bilinçli olarak ısıtmadan bağımsız: kanalın temposu bir
+arka plan işine göre değişirse panel de o işin ritmine bağlanmış olur. Bağlı
+panel yoksa hiçbir şey hesaplanmaz.
 
 El sıkışma HTTP `upgrade` olayında geçtiği ve o olay middleware zincirine hiç
 uğramadığı için kanal `listen` sonrası doğrudan sunucuya bağlanır
@@ -316,7 +318,8 @@ yayına açılmamış bir ortam yönlendirme kurallarını bile dışarıya sız
 | Bozuk route modülü | Uyarı + atla | Fırlat |
 | Devtools ve rapor | Mount edilir | Hiç yüklenmez |
 | `globalThis.fetch` | Sarılır (ölçüm) | Dokunulmaz |
-| Prewarm paralelliği | 2 | 4 |
+| Prewarm paralelliği | 1 | 4 |
+| Prewarm hız freni | saniyede 4 istek | Sınırsız |
 | Prewarm gecikmesi | 3000 ms | 500 ms |
 | Eksik ikon uyarısı | Verilir | Verilmez |
 | Precompress | Watch'ta çalışmaz | Çalışır |
