@@ -1,46 +1,53 @@
-<section class="border-b border-slate-200 dark:border-slate-800">
-  <div class="wrapper py-16 sm:py-20">
-    <%- sectionHead({
-      eyebrow: "Belgeler",
-      title: "On bir bölüm",
-      lead: "Belgeler kararların gerekçelerini taşıyor; bir davranışı değiştirmeden önce ilgili bölümü okumak çoğu 'iyileştirme' fikrinin zaten tartışıldığını gösteriyor.",
-    }) %>
+<section class="glow relative overflow-hidden border-b border-slate-200 dark:border-white/10">
+  <div class="grid-surface pointer-events-none absolute inset-0" aria-hidden="true"></div>
+  <div class="wrapper relative py-20 sm:py-28">
+    <%- sectionHead(t.docs.hero) %>
   </div>
 </section>
 
 <section class="wrapper py-14">
   <div class="grid gap-4 sm:grid-cols-2">
+    <%#
+      Belge bağlantıları depodaki `docs/` dizinine gidiyor: framework npm'de
+      olmadığı için tek kanonik adres GitHub. Belge dosyaları Türkçe, bu yüzden
+      dosya adları iki dilde de aynı.
+    -%>
     <% docs.forEach(function (item) { %>
     <%- link({
       href: `https://github.com/ayberkenis/jskelet/blob/master/docs/${item.file}.md`,
-      class: "group rounded-xl border border-slate-200 p-5 transition-colors hover:border-slate-400 dark:border-slate-800 dark:hover:border-slate-600",
-      html: `<span class="font-mono text-xs text-slate-400">${esc(item.file)}</span>
-        <span class="mt-1 block font-semibold group-hover:underline">${esc(item.title)}</span>
-        <span class="mt-1 block text-sm text-slate-600 dark:text-slate-300">${esc(item.body)}</span>`,
+      class: "group relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition duration-300 hover:-translate-y-1 hover:border-cyan-400 hover:shadow-xl hover:shadow-cyan-950/5 dark:border-white/10 dark:bg-white/[0.035] dark:hover:border-cyan-300/40",
+      html: `<span class="font-mono text-xs font-bold text-cyan-700 dark:text-cyan-300">${esc(item.file)}</span>
+        <span class="mt-3 block text-lg font-semibold tracking-tight">${esc(item.title)}</span>
+        <span class="mt-2 block text-sm/6 text-slate-600 dark:text-slate-300">${esc(item.body)}</span>
+        <span class="mt-5 block text-xs font-bold tracking-wide text-slate-600 uppercase group-hover:text-cyan-700 dark:text-slate-400 dark:group-hover:text-cyan-300">${esc(t.docs.openLabel)} →</span>`,
     }) %>
     <% }); %>
   </div>
 
   <div class="mt-10 grid gap-4 sm:grid-cols-2">
     <%- codeBlock({
-      label: "örnekleri çalıştır",
-      copyable: true,
+      label: t.docs.examples.label,
+      copy: { idle: t.ui.copy, done: t.ui.copied, failed: t.ui.copyFailed },
       code: "npm --prefix examples/marketing install\nnpm --prefix examples/marketing run dev",
     }) %>
 
-    <div class="rounded-xl border border-slate-200 p-5 text-sm/6 text-slate-600 dark:border-slate-800 dark:text-slate-300">
-      <p class="m-0">
-        Depoda üç örnek var:
-        <code class="font-mono text-xs">examples/minimal</code> en küçük çalışan
-        hâl, <code class="font-mono text-xs">examples/blog</code> framework'ün
-        her yüzeyini kullanan orta ölçekli bir site,
-        <code class="font-mono text-xs">examples/marketing</code> ise
-        okuduğunuz bu sayfa.
+    <div class="rounded-2xl border border-slate-200 bg-white p-6 dark:border-white/10 dark:bg-white/[0.035]">
+      <h2 class="m-0 text-base font-semibold"><%= t.docs.examples.title %></h2>
+      <p class="mt-2 mb-0 text-sm/6 text-slate-600 dark:text-slate-300">
+        <%= t.docs.examples.body %>
       </p>
-      <p class="mt-3 mb-0">
-        Sunucu ayaktayken <code class="font-mono text-xs">node smoke.mjs</code>
-        uçların beklendiği gibi yanıt verdiğini doğrular.
+      <p class="mt-3 mb-0 text-sm/6 text-slate-600 dark:text-slate-300">
+        <%= t.docs.examples.note %>
       </p>
     </div>
+  </div>
+
+  <div class="mt-10 flex flex-wrap gap-3">
+    <%- buttonLink({ href: paths.download, text: t.ui.download, icon: "DownloadSimple" }) %>
+    <%- buttonLink({
+      href: "https://github.com/ayberkenis/jskelet",
+      text: t.ui.githubShort,
+      variant: "ghost",
+    }) %>
   </div>
 </section>

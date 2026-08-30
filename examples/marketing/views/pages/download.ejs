@@ -1,0 +1,124 @@
+<%#
+  İndirme sayfası. Sürüm, lisans, Node gereksinimi ve bağımlılık listesinin
+  tamamı kurulu paketin `package.json`'ından okunuyor (`lib/release.js`);
+  sayfada elle yazılmış tek bir sürüm numarası yok.
+-%>
+<section class="glow relative overflow-hidden border-b border-slate-200 dark:border-white/10">
+  <div class="grid-surface pointer-events-none absolute inset-0" aria-hidden="true"></div>
+  <div class="wrapper relative py-20 sm:py-28">
+    <div class="grid gap-10 lg:grid-cols-[1.1fr_.9fr] lg:items-center">
+      <div>
+        <%- sectionHead(t.download.hero) %>
+
+        <div class="mt-9 flex flex-wrap gap-3">
+          <%- buttonLink({
+            href: "#install",
+            text: format(t.ui.downloadVersion, release.version),
+            icon: "DownloadSimple",
+          }) %>
+          <%- buttonLink({
+            href: "https://github.com/ayberkenis/jskelet",
+            text: t.ui.githubShort,
+            variant: "ghost",
+          }) %>
+        </div>
+
+        <% if (!release.measured) { %>
+        <p class="mt-6 mb-0 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-xs/5 text-amber-900 dark:border-amber-400/25 dark:bg-amber-400/10 dark:text-amber-100">
+          <%= t.download.hero.unmeasured %>
+        </p>
+        <% } %>
+      </div>
+
+      <img
+        src="https://cdn.ayberkenis.com.tr/jskelet/jskelet.png"
+        alt="<%= t.home.hero.logoAlt %>"
+        width="260"
+        height="260"
+        class="logo-orbit mx-auto size-48 object-contain sm:size-60"
+      >
+    </div>
+
+    <div class="mt-12">
+      <%- metaRow({
+        items: [
+          { label: t.download.hero.versionLabel, value: `v${release.version}`, icon: "Tag" },
+          { label: t.download.hero.licenseLabel, value: release.license, icon: "ShieldCheck" },
+          { label: t.download.hero.nodeLabel, value: format(t.ui.nodeRequirement, release.nodeLabel), icon: "HardDrives" },
+        ],
+      }) %>
+    </div>
+  </div>
+</section>
+
+<section id="install" class="wrapper py-16 sm:py-20">
+  <%- sectionHead(t.download.steps) %>
+
+  <div class="mt-10 grid gap-8 sm:grid-cols-2">
+    <% t.download.steps.items.forEach(function (step) { %>
+    <%- commandStep({
+      label: step.label,
+      command: commands[step.command],
+      note: step.note,
+      copy: { idle: t.ui.copy, done: t.ui.copied, failed: t.ui.copyFailed },
+    }) %>
+    <% }); %>
+
+    <%# Prod sunucusu ayrı bir adım değil, dördüncünün devamı; aynı blokta duruyor. %>
+    <%- commandStep({
+      label: t.download.steps.serveLabel,
+      command: commands.start,
+      note: t.download.steps.serveNote,
+      copy: { idle: t.ui.copy, done: t.ui.copied, failed: t.ui.copyFailed },
+    }) %>
+  </div>
+</section>
+
+<section class="border-y border-slate-200 bg-slate-50 py-16 dark:border-white/10 dark:bg-white/[0.02]">
+  <div class="wrapper">
+    <%- sectionHead(t.download.requirements) %>
+
+    <div class="mt-10 grid gap-5 md:grid-cols-3">
+      <% t.download.requirements.items.forEach(function (item) { %>
+      <%- featureCard({
+        icon: item.icon,
+        title: format(item.title, release.nodeLabel),
+        body: item.body,
+      }) %>
+      <% }); %>
+    </div>
+  </div>
+</section>
+
+<section class="wrapper py-16 sm:py-20">
+  <%- sectionHead(t.download.dependencies) %>
+
+  <div class="mt-10 grid gap-5 lg:grid-cols-2">
+    <%- dependencyTable({
+      title: t.download.dependencies.runtimeTitle,
+      items: release.dependencies,
+      nameColumn: t.download.dependencies.nameColumn,
+      versionColumn: t.download.dependencies.versionColumn,
+    }) %>
+    <%- dependencyTable({
+      title: t.download.dependencies.optionalTitle,
+      items: release.optional,
+      nameColumn: t.download.dependencies.nameColumn,
+      versionColumn: t.download.dependencies.versionColumn,
+    }) %>
+  </div>
+</section>
+
+<section class="border-t border-slate-200 bg-slate-50 py-16 dark:border-white/10 dark:bg-white/[0.02]">
+  <div class="wrapper flex flex-col items-start gap-6 sm:flex-row sm:items-center sm:justify-between">
+    <div class="max-w-xl">
+      <p class="m-0 text-xs font-bold tracking-[0.2em] text-cyan-700 uppercase dark:text-cyan-300"><%= t.download.next.eyebrow %></p>
+      <h2 class="mt-2 mb-0 text-2xl font-bold tracking-tight"><%= t.download.next.title %></h2>
+      <p class="mt-2 mb-0 text-sm/6 text-slate-600 dark:text-slate-300"><%= t.download.next.body %></p>
+    </div>
+    <div class="flex flex-wrap gap-3">
+      <%- buttonLink({ href: paths.docs, text: t.download.next.primary, icon: "ArrowRight" }) %>
+      <%- buttonLink({ href: paths.changelog, text: t.download.next.secondary, variant: "ghost" }) %>
+    </div>
+  </div>
+</section>

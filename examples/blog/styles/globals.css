@@ -39,7 +39,53 @@
   overflow: hidden;
 }
 
-.dark body {
+/**
+ * Arka plan `<html>`de, `<body>`de değil: view transition sırasında gövdenin
+ * arka planı anlık görüntünün içinde kalır ve altta tarayıcının beyaz canvas'ı
+ * görünür — koyu temada geçiş başına bir kare flaş demek.
+ */
+html.dark {
   background-color: var(--color-slate-950);
+}
+
+.dark body {
   color: var(--color-slate-100);
+}
+
+/**
+ * Sayfa geçişi. Varsayılan davranış tüm belgeyi tek parça olarak çapraz
+ * geçirmek, yani gezinme boyunca hiç değişmeyen header ve footer da titriyor.
+ * Bu ikisine bir ad vermek onları kendi grubuna alır; tarayıcı aynı adı iki
+ * belgede de gördüğü için "aynı öğe" sayar ve geçiş yalnızca içerik bölgesinde
+ * kalır.
+ */
+body > header {
+  view-transition-name: site-header;
+}
+
+body > footer {
+  view-transition-name: site-footer;
+}
+
+/**
+ * Sabit bölgeler hiç animasyon almaz: yeni sayfanınki tek karede yerini alır.
+ * Etkin menü bağlantısı gibi gerçek farklar da o karede değişir.
+ */
+::view-transition-old(site-header),
+::view-transition-old(site-footer) {
+  animation: none;
+  opacity: 0;
+}
+
+::view-transition-new(site-header),
+::view-transition-new(site-footer) {
+  animation: none;
+  opacity: 1;
+}
+
+/** Geriye kalan içerik kısa bir çapraz geçişle gelir; uzun süre gezinmeyi
+    yavaş hissettiriyor. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 180ms;
 }

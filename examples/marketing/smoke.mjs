@@ -8,20 +8,48 @@ const BASE = process.env.BASE ?? "http://localhost:3000";
 
 /** @type {Array<[string, number, RegExp?]>} */
 const CASES = [
-  ["/", 200, /Sunucuda tam HTML/],
+  // Varsayılan dil kökte.
+  ["/", 200, /The skeleton of the web/],
   ["/", 200, /data-island="theme-toggle"/],
-  ["/nasil-calisir", 200, /beş adım/],
-  ["/kiyaslama", 200, /data-island="latency"/],
-  ["/tasima", 200, /karşılık tablosu/],
-  ["/belgeler", 200, /11-tasima/],
+  ["/", 200, /hreflang="tr"/],
+  ["/", 200, /lang="en"/],
+  ["/how-it-works", 200, /five clear stops/],
+  ["/compare", 200, /data-island="latency"/],
+  ["/migrate", 200, /Next\.js/],
+  ["/docs", 200, /11-tasima/],
+  ["/changelog", 200, /Release history/],
+  ["/download", 200, /data-island="copy-command"/],
+
+  // Türkçe `/tr` altında, aynı İngilizce slug'larla.
+  // Kesme işareti şablonda `&#39;` olarak basılıyor; desen çıktıyı arıyor.
+  ["/tr", 200, /Web&#39;in iskeleti/],
+  ["/tr", 200, /lang="tr"/],
+  ["/tr/how-it-works", 200, /beş net durak/],
+  ["/tr/compare", 200, /data-island="latency"/],
+  ["/tr/migrate", 200, /Next\.js bilginizi/],
+  ["/tr/docs", 200, /11-tasima/],
+  ["/tr/changelog", 200, /Sürüm geçmişi/],
+  ["/tr/download", 200, /Kurulumun tamamı/],
+
   ["/_fragment/render-demo", 200, /<li/],
   ["/robots.txt", 200, /Sitemap:/],
   ["/sitemap.xml", 200, /<urlset/],
+  ["/sitemap.xml", 200, /hreflang="x-default"/],
   ["/api/healthcheck", 200, /ok/],
-  ["/docs", 200, /Belgeler/],
+
+  // Rewrite: dil öneki altındaki sitemap aynı uca yazılıyor.
+  ["/tr/sitemap.xml", 200, /<urlset/],
+
+  // Eski Türkçe adresler ve kampanya URL'leri kalıcı yönlendirmede.
+  ["/nasil-calisir", 308],
+  ["/kiyaslama", 308],
+  ["/tasima", 308],
+  ["/belgeler", 308],
   ["/features", 308],
   ["/benchmarks", 308],
-  ["/bilinmeyen-sayfa", 404, /Sayfa bulunamadı/],
+  ["/releases", 308],
+
+  ["/bilinmeyen-sayfa", 404, /Page not found/],
 ];
 
 let failed = 0;
@@ -49,7 +77,7 @@ if (fragmentCacheControl !== "no-store") {
   console.log(`✗ /_fragment/render-demo cache-control=${fragmentCacheControl}`);
 }
 
-const second = await fetch(`${BASE}/kiyaslama`);
+const second = await fetch(`${BASE}/compare`);
 console.log(`\ncache ikinci istek: ${second.headers.get("x-jskelet-cache")}`);
 
 console.log(failed ? `\n${failed} test başarısız` : "\nhepsi geçti");

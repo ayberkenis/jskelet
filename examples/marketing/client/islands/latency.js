@@ -12,19 +12,22 @@ import { qs } from "jskelet/client";
  * aradaki fark cache'in kendisi. Ölçüm ziyaretçinin makinesinde ve ağında
  * yapıldığı için mutlak sayılar herkeste farklı çıkar; anlamlı olan oran.
  *
+ * Ölçüm dışındaki her şey props olarak geliyor: hem ölçülecek uçlar hem de
+ * durum metinleri. Metnin sunucudan taşınması sitenin iki dilli olmasının
+ * doğal sonucu — client tarafı dil bilmiyor.
+ *
  * @param {HTMLElement} element
+ * @param {{ runs?: number, cachedUrl?: string, freshUrl?: string,
+ *   done?: string, failed?: string }} props
  * @returns {void}
  */
-export function mount(element) {
+export function mount(element, props) {
   const status = qs(element, "[data-latency-status]");
-  const runs = Number(element.dataset.runs ?? 6);
+  const runs = Number(props.runs ?? 6);
 
   const targets = [
-    { key: "cached", url: element.dataset.cachedUrl ?? "/" },
-    {
-      key: "fresh",
-      url: element.dataset.freshUrl ?? "/_fragment/render-demo",
-    },
+    { key: "cached", url: props.cachedUrl ?? "/" },
+    { key: "fresh", url: props.freshUrl ?? "/_fragment/render-demo" },
   ];
 
   void (async () => {
@@ -42,11 +45,11 @@ export function mount(element) {
         write(element, target.key, median(samples), samples);
       }
 
-      if (status) {
-        status.textContent = `${runs} istek, medyan. Bu tarayıcıda ve bu ağda ölçüldü.`;
+      if (status && props.done) {
+        status.textContent = props.done.replace("%s", String(runs));
       }
     } catch {
-      if (status) status.textContent = "Ölçüm yapılamadı.";
+      if (status && props.failed) status.textContent = props.failed;
     }
   })();
 }

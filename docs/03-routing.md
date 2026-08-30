@@ -254,6 +254,51 @@ Hook tanımlı değilse ya da 404 render'ı da hata verirse framework şablonsuz
 minimal bir HTML döner. Bu geri dönüş bilinçli olarak şablonsuz: 404 render'ı da
 patlarsa ziyaretçi boş yanıt görmesin.
 
+## Hata sayfaları (500 ve diğerleri)
+
+Bir controller ya da middleware beklenmeyen bir hata fırlattığında Express'in
+hata yöneticisi devreye girer, hatayı loglar ve framework'ün kendi hata sayfasını
+`Cache-Control: no-store` ile döner. Durum kodu hatanın `statusCode` (ya da
+`status`) alanından okunur; 400–599 aralığında değilse 500 kullanılır.
+
+Framework'ün sayfası bilinçli olarak yalın: durum kodu, tek satır başlık ve tek
+satır açıklama. Marka adı, gezinme ya da hata ayrıntısı taşımaz — sunucunun içi
+ziyaretçiye açılmaz. Dil `brand.lang`ten gelir (`tr` ve `en` hazır, diğerleri
+`en`e düşer).
+
+Kendi sayfanı vermek için `hooks.error()`:
+
+```js
+// jskelet.config.mjs
+export default {
+  hooks: {
+    error({ status }) {
+      return {
+        view: "pages/error",
+        data: { status },
+        metadata: { title: "Bir hata oluştu", robots: { index: false } },
+      };
+    },
+  },
+};
+```
+
+Hook bir sayfa tanımı yerine doğrudan HTML string de döndürebilir; layout'a
+bağlı olmayan bir hata sayfası istiyorsan bu yol daha güvenli, çünkü layout'un
+kendisi hata veriyorsa sayfa tanımı da render edilemez. Hook yoksa, `null`
+dönerse ya da render'ı patlarsa framework gömülü sayfaya düşer.
+
+404 için `hooks.notFound()` önceliklidir; yalnızca o tanımlı değilse
+`hooks.error()` `status: 404` ile çağrılır.
+
+Sayfayı programatik olarak da üretebilirsin:
+
+```js
+import { renderStatusPage } from "jskelet";
+
+const html = await renderStatusPage(503);
+```
+
 ## Layout'suz render: `renderView`
 
 `renderView(view, data)` tek bir şablonu layout olmadan render eder ve string

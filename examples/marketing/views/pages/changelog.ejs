@@ -1,0 +1,52 @@
+<%#
+  Sürüm notları. En üstteki kayıt kurulu sürümle karşılaştırılıyor: künye
+  `lib/release.js` üzerinden paketten okunduğu için "güncel" etiketi listeye
+  elle yazılmıyor, hesaplanıyor.
+-%>
+<section class="glow relative overflow-hidden border-b border-slate-200 dark:border-white/10">
+  <div class="grid-surface pointer-events-none absolute inset-0" aria-hidden="true"></div>
+  <div class="wrapper relative py-20 sm:py-28">
+    <%- sectionHead(t.changelog.hero) %>
+
+    <div class="mt-10 flex flex-wrap items-center gap-4">
+      <div class="inline-flex items-center gap-3 rounded-2xl border border-cyan-200 bg-white/70 px-5 py-4 shadow-sm backdrop-blur dark:border-cyan-400/25 dark:bg-white/[0.06]">
+        <span class="inline-flex size-10 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-600 to-indigo-600 text-white">
+          <%- icon({ name: "RocketLaunch", size: 20 }) %>
+        </span>
+        <span class="grid">
+          <span class="text-[11px] font-bold tracking-[0.16em] text-slate-600 uppercase dark:text-slate-400"><%= t.changelog.currentLabel %></span>
+          <span class="font-mono text-xl font-bold">v<%= release.version %></span>
+        </span>
+      </div>
+
+      <p class="m-0 max-w-sm text-xs/5 text-slate-600 dark:text-slate-400">
+        <%= t.changelog.currentNote %>
+      </p>
+    </div>
+  </div>
+</section>
+
+<section class="wrapper py-14">
+  <div class="grid gap-6">
+    <% entries.forEach(function (entry) { %>
+    <%- changelogEntry({
+      entry,
+      labels: t.changelog,
+      current: entry.version === release.version,
+    }) %>
+    <% }); %>
+  </div>
+</section>
+
+<section class="border-t border-slate-200 bg-slate-50 py-16 dark:border-white/10 dark:bg-white/[0.02]">
+  <div class="wrapper flex flex-col items-start gap-6 sm:flex-row sm:items-center sm:justify-between">
+    <div>
+      <h2 class="m-0 text-2xl font-bold tracking-tight"><%= t.changelog.cta.title %></h2>
+      <p class="mt-2 mb-0 text-sm/6 text-slate-600 dark:text-slate-300"><%= t.changelog.cta.body %></p>
+    </div>
+    <div class="flex flex-wrap gap-3">
+      <%- buttonLink({ href: paths.download, text: t.changelog.cta.primary, icon: "DownloadSimple" }) %>
+      <%- buttonLink({ href: paths.docs, text: t.changelog.cta.secondary, variant: "ghost" }) %>
+    </div>
+  </div>
+</section>

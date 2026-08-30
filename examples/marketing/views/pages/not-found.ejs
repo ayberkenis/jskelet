@@ -1,13 +1,27 @@
-<section class="wrapper py-24 text-center">
-  <p class="m-0 font-mono text-sm text-slate-400">404</p>
-  <h1 class="mt-3 text-3xl font-bold tracking-tight">Sayfa bulunamadı</h1>
-  <p class="mx-auto mt-3 max-w-md text-slate-600 dark:text-slate-300">
-    Bu yol route tablosunda yok. 404 yanıtları bilinçli olarak önbelleğe
-    alınmaz; bir sayfa eklendiğinde eski hata sayfası ortalıkta kalmasın.
-  </p>
+<%#
+  404. `hooks.notFound()` yol bilgisi almadığı için dil seçilemiyor: sayfa
+  varsayılan dilde basılıyor. 404 yanıtları bilinçli olarak önbelleğe alınmaz,
+  bir sayfa eklendiğinde eski hata sayfası ortalıkta kalmasın.
+-%>
+<section class="glow relative isolate flex min-h-[70vh] items-center overflow-hidden text-center">
+  <div class="grid-surface pointer-events-none absolute inset-0 -z-10" aria-hidden="true"></div>
+  <div class="wrapper py-24">
+    <img
+      src="https://cdn.ayberkenis.com.tr/jskelet/jskelet.png"
+      alt=""
+      width="120"
+      height="120"
+      class="mx-auto size-28 object-contain opacity-25 grayscale"
+    >
+    <p class="mt-6 mb-0 font-mono text-sm font-bold tracking-[0.3em] text-cyan-700 dark:text-cyan-300"><%= t.notFound.code %></p>
+    <h1 class="mt-3 text-4xl font-bold tracking-tight"><%= t.notFound.heading %></h1>
+    <p class="mx-auto mt-3 max-w-md text-slate-600 dark:text-slate-300">
+      <%= t.notFound.body %>
+    </p>
 
-  <div class="mt-8 flex flex-wrap justify-center gap-3">
-    <%- buttonLink({ href: "/", text: "Ana sayfa" }) %>
-    <%- buttonLink({ href: "/belgeler", text: "Belgeler", variant: "ghost" }) %>
+    <div class="mt-8 flex flex-wrap justify-center gap-3">
+      <%- buttonLink({ href: paths.home, text: t.notFound.primary }) %>
+      <%- buttonLink({ href: paths.docs, text: t.notFound.secondary, variant: "ghost" }) %>
+    </div>
   </div>
 </section>

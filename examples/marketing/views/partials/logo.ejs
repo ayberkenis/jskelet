@@ -1,10 +1,9 @@
-<%#
-  Logo satır içi SVG: ayrı bir dosya olsaydı header'da bir istek daha ve
-  muhtemelen bir kare boşluk olurdu. 400 bayt civarı işaretleme, gzip'te
-  neredeyse bedava.
--%>
-<svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true" class="text-sky-500">
-  <rect x="2.5" y="2.5" width="19" height="19" rx="5" fill="none" stroke="currentColor" stroke-width="1.6" />
-  <path d="M7 8h10M7 12h6M7 16h8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
-</svg>
-<span>JSkelet</span>
+<%# Sabit ölçüler CDN yanıtı gelene kadar alanı korur ve header'da CLS'i önler. -%>
+<img
+  src="https://cdn.ayberkenis.com.tr/jskelet/jskelet.png"
+  alt=""
+  width="36"
+  height="36"
+  class="size-9 object-contain drop-shadow-sm"
+>
+<span class="tracking-[-0.03em]">JSkelet</span>

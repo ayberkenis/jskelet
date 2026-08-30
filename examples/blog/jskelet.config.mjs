@@ -108,7 +108,8 @@ export default {
     layoutContext({ pathname }) {
       return {
         pathname,
-        bodyClass: "min-h-screen bg-white text-slate-900",
+        // Arka plan burada değil `<html>`de; gerekçesi layout'un başında.
+        bodyClass: "min-h-screen text-slate-900",
         nav: [
           { href: "/", label: "Ana sayfa" },
           { href: "/blog", label: "Blog" },

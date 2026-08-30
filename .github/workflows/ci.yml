@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Lint and test (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ["22", "24"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+
+  example:
+    name: Build and smoke-test the blog example
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - run: npm ci
+      - run: npm --prefix examples/blog install
+      - run: npm --prefix examples/blog run build
+
+      # The example intentionally exercises every surface of the framework, so
+      # its smoke test is the cheapest end-to-end regression check we have.
+      - name: Start the server and run the smoke test
+        working-directory: examples/blog
+        run: |
+          npm run start &
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:3000/ >/dev/null && break
+            sleep 1
+          done
+          node smoke.mjs

@@ -12,7 +12,7 @@
   sırasında gövdenin arka planı anlık görüntünün içinde kalır ve altta kalan
   canvas görünür. Koyu temada bu, geçiş başına bir kare beyaz flaş demek.
 -%>
-<html lang="<%= lang %>" class="h-full scroll-smooth bg-white antialiased dark:bg-slate-950">
+<html lang="<%= lang %>" class="h-full scroll-smooth bg-white antialiased dark:bg-ink-950">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -43,11 +43,11 @@
       }
     </script>
   </head>
-  <body class="<%= bodyClass %> flex min-h-full flex-col font-sans">
+  <body class="<%= bodyClass %> flex min-h-full flex-col font-sans text-slate-950 dark:text-slate-100">
     <a
       href="#content"
       class="sr-only focus:not-sr-only focus:absolute focus:top-3 focus:left-3 focus:z-50 focus:rounded focus:bg-slate-900 focus:px-3 focus:py-2 focus:text-white"
-    >İçeriğe geç</a>
+    ><%= t.ui.skipToContent %></a>
 
     <%- await include('partials/header') %>
 

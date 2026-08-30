@@ -3,7 +3,9 @@
   local olarak hazır (nav, structuredData, bodyClass, pathname).
 -%>
 <!DOCTYPE html>
-<html lang="<%= lang %>" class="h-full antialiased">
+<%# Arka plan `<body>`de değil burada: view transition sırasında gövdenin arka
+    planı anlık görüntünün içinde kalır ve altta canvas görünür. -%>
+<html lang="<%= lang %>" class="h-full bg-white antialiased">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">

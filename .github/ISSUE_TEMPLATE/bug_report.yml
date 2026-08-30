@@ -1,0 +1,89 @@
+name: Bug report
+description: Something in JSkelet behaves differently than documented
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Please do not use this form for security issues —
+        follow [SECURITY.md](../blob/main/SECURITY.md) instead.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you expected, and what you got instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: >
+        Steps to reproduce, ideally the smallest application that shows the
+        problem. A link to a repository based on `examples/minimal` is ideal.
+      placeholder: |
+        1. npx jskelet init
+        2. add this route ...
+        3. run npx jskelet dev
+        4. open /
+    validations:
+      required: true
+
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Where does it happen
+      multiple: true
+      options:
+        - jskelet dev
+        - jskelet build
+        - jskelet start
+        - in the browser (island / client runtime)
+    validations:
+      required: true
+
+  - type: textarea
+    id: config
+    attributes:
+      label: Relevant part of jskelet.config.mjs
+      render: js
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or stack trace
+      render: text
+
+  - type: input
+    id: version
+    attributes:
+      label: JSkelet version
+      placeholder: 0.1.0
+    validations:
+      required: true
+
+  - type: input
+    id: node
+    attributes:
+      label: Node.js version
+      description: Output of `node -v` (must be 22 or newer).
+      placeholder: v22.14.0
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: Windows 11 / Ubuntu 24.04 / macOS 15
+
+  - type: textarea
+    id: peers
+    attributes:
+      label: Optional peer dependencies installed
+      description: >
+        Which of `postcss`, `@tailwindcss/postcss`, `tailwindcss`,
+        `lightningcss`, `sharp`, `@phosphor-icons/core` are present. Missing
+        packages cause the matching build step to be skipped by design.

@@ -1,26 +1,29 @@
-<section class="border-b border-slate-200 dark:border-slate-800">
-  <div class="wrapper py-16 sm:py-20">
-    <%- sectionHead({
-      eyebrow: "Taşıma",
-      title: "Next.js'ten gelenler için karşılık tablosu",
-      lead: "Yapılandırma sözdizimi bilerek aynı bırakıldı: redirects, rewrites, headers ve cache alanları next.config'in fiilen kullanılan alt kümesiyle birebir.",
-    }) %>
+<section class="glow relative overflow-hidden border-b border-slate-200 dark:border-white/10">
+  <div class="grid-surface pointer-events-none absolute inset-0" aria-hidden="true"></div>
+  <div class="wrapper relative py-20 sm:py-28">
+    <%- sectionHead(t.migrate.hero) %>
+
+    <div class="mt-9 flex flex-wrap gap-2 text-xs font-semibold">
+      <% t.migrate.hero.chips.forEach(function (chip) { %>
+      <span class="rounded-full border border-slate-200 bg-white/70 px-3 py-1.5 dark:border-white/10 dark:bg-white/5"><%= chip %></span>
+      <% }); %>
+    </div>
   </div>
 </section>
 
 <section class="wrapper py-14">
-  <div class="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
+  <div class="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-white/[0.025]">
     <table class="w-full min-w-[40rem] text-sm">
-      <thead class="bg-slate-50 dark:bg-slate-900/60">
+      <thead class="bg-slate-50 dark:bg-white/5">
         <tr>
-          <th scope="col" class="px-4 py-3 text-left text-xs font-semibold tracking-wide uppercase">Next.js</th>
-          <th scope="col" class="px-4 py-3 text-left text-xs font-semibold tracking-wide uppercase">JSkelet</th>
+          <th scope="col" class="px-4 py-3 text-left text-xs font-semibold tracking-wide uppercase"><%= t.migrate.table.from %></th>
+          <th scope="col" class="px-4 py-3 text-left text-xs font-semibold tracking-wide uppercase"><%= t.migrate.table.to %></th>
         </tr>
       </thead>
       <tbody>
         <% migration.forEach(function (row) { %>
-        <tr class="border-t border-slate-200 dark:border-slate-800">
-          <td class="px-4 py-3 font-mono text-xs text-slate-500 dark:text-slate-400"><%= row.from %></td>
+        <tr class="border-t border-slate-200 dark:border-white/10">
+          <td class="px-4 py-3 font-mono text-xs text-slate-600 dark:text-slate-400"><%= row.from %></td>
           <td class="px-4 py-3"><%= row.to %></td>
         </tr>
         <% }); %>
@@ -28,40 +31,34 @@
     </table>
   </div>
 
-  <p class="mt-4 text-xs text-slate-500 dark:text-slate-400">
-    Tam plan ve gerekçeler depodaki
-    <code class="font-mono">docs/11-tasima.md</code> içinde.
+  <p class="mt-4 text-xs text-slate-600 dark:text-slate-400">
+    <%= t.migrate.table.note %>
   </p>
 </section>
 
-<section class="border-t border-slate-200 bg-slate-50 py-16 dark:border-slate-800 dark:bg-slate-900/30">
+<section class="border-t border-slate-200 bg-slate-50 py-16 dark:border-white/10 dark:bg-white/[0.02]">
   <div class="wrapper grid gap-10 lg:grid-cols-2 lg:items-start">
     <div>
-      <%- sectionHead({
-        eyebrow: "Sıra",
-        title: "Önerilen taşıma sırası",
-        lead: "Sayfa sayfa taşınabilir: ters proxy ile iki uygulama bir süre yan yana yaşayabilir.",
-      }) %>
+      <%- sectionHead(t.migrate.order) %>
 
       <ol class="mt-6 grid list-none gap-3 p-0 text-sm/6 text-slate-600 dark:text-slate-300">
-        <li class="flex gap-3"><span class="font-mono text-sky-500">01</span> En çok trafik alan, en az etkileşimli sayfayla başla — genelde bir liste ya da detay sayfası.</li>
-        <li class="flex gap-3"><span class="font-mono text-sky-500">02</span> Layout'u ve metadata varsayılanlarını hook'lara taşı.</li>
-        <li class="flex gap-3"><span class="font-mono text-sky-500">03</span> Client component'ları island'a indir: çoğu, bir düğme ve bir fetch'e dönüşür.</li>
-        <li class="flex gap-3"><span class="font-mono text-sky-500">04</span> Kişiye özel bölümleri fragment uçlarına ayır ve <code class="font-mono text-xs">no-store</code> işaretle.</li>
-        <li class="flex gap-3"><span class="font-mono text-sky-500">05</span> TTL'leri ölç: <code class="font-mono text-xs">X-JSkelet-Cache</code> ve dev overlay'deki cache dökümü yeterli.</li>
-        <li class="flex gap-3"><span class="font-mono text-rose-400">06</span> Dashboard'ı taşıma. O sayfalar için doğru araç bu değil.</li>
+        <% t.migrate.order.steps.forEach(function (step, index) { %>
+        <li class="flex gap-3">
+          <span class="font-mono font-semibold <%= step.tone === "bad" ? "text-rose-700 dark:text-rose-300" : "text-cyan-700 dark:text-cyan-300" %>"><%= String(index + 1).padStart(2, "0") %></span>
+          <span><%= step.text %></span>
+        </li>
+        <% }); %>
       </ol>
     </div>
 
     <div class="grid gap-4">
       <%- codeBlock({
-        label: "jskelet.config.mjs",
-        code: `export default {\n  async redirects() {\n    return [\n      { source: "/yazi/:slug", destination: "/blog/:slug", permanent: true },\n    ];\n  },\n\n  async cache() {\n    return {\n      html: { "/": 3600, "/blog/:slug": 300 },\n      prewarm: { enabled: true, max: 200, concurrency: 4 },\n    };\n  },\n\n  hooks: {\n    metadata() {\n      return { titleTemplate: "%s | Site", siteUrl: SITE_URL };\n    },\n  },\n};`,
+        label: t.migrate.order.configLabel,
+        code: `export default {\n  async redirects() {\n    return [\n      { source: "/post/:slug", destination: "/blog/:slug", permanent: true },\n    ];\n  },\n\n  async cache() {\n    return {\n      html: { "/": 3600, "/blog/:slug": 300 },\n      prewarm: { enabled: true, max: 200, concurrency: 4 },\n    };\n  },\n\n  hooks: {\n    metadata() {\n      return { titleTemplate: "%s | Site", siteUrl: SITE_URL };\n    },\n  },\n};`,
       }) %>
 
-      <p class="m-0 text-xs text-slate-500 dark:text-slate-400">
-        Bozuk bir config siteyi düşürmez: hata veren bir hook ya da
-        <code class="font-mono">headers()</code> uyarı basar ve varsayılana döner.
+      <p class="m-0 text-xs/5 text-slate-600 dark:text-slate-400">
+        <%= t.migrate.order.configNote %>
       </p>
     </div>
   </div>
@@ -69,18 +66,23 @@
 
 <section class="wrapper py-16">
   <div class="max-w-3xl">
-    <%- sectionHead({ eyebrow: "SSS", title: "Taşırken en çok sorulanlar" }) %>
+    <%- sectionHead(t.migrate.faq) %>
 
-    <div class="mt-8 divide-y divide-slate-200 dark:divide-slate-800">
+    <div class="mt-8 divide-y divide-slate-200 dark:divide-white/10">
       <% faq.forEach(function (item) { %>
       <details class="group py-4">
         <summary class="flex cursor-pointer items-center justify-between gap-4 text-sm font-semibold marker:content-['']">
           <%= item.q %>
-          <span class="text-slate-400 transition-transform group-open:rotate-45" aria-hidden="true">+</span>
+          <span class="text-slate-500 transition-transform group-open:rotate-45 dark:text-slate-400" aria-hidden="true">+</span>
         </summary>
         <p class="mt-3 mb-0 text-sm/6 text-slate-600 dark:text-slate-300"><%= item.a %></p>
       </details>
       <% }); %>
+    </div>
+
+    <div class="mt-10 flex flex-wrap gap-3">
+      <%- buttonLink({ href: paths.download, text: t.ui.download, icon: "DownloadSimple" }) %>
+      <%- buttonLink({ href: paths.docs, text: t.islandContract.ctaSecondary, variant: "ghost" }) %>
     </div>
   </div>
 </section>

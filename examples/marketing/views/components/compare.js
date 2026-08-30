@@ -48,7 +48,7 @@ export function compareTable({ columns, rows }) {
     )
     .join("");
 
-  return `<div class="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
+  return `<div class="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-xl shadow-slate-950/5 dark:border-white/10 dark:bg-white/[0.025]">
     <table class="w-full min-w-[52rem] border-collapse">
       <thead class="bg-slate-50 dark:bg-slate-900/60">
         <tr><th scope="col" class="compare-sticky bg-slate-50 px-4 py-3 text-left text-xs font-semibold tracking-wide uppercase dark:bg-slate-900/60">Ölçüt</th>${head}</tr>
@@ -69,8 +69,8 @@ export function fitList({ title, items, tone }) {
       ? "border-emerald-200 dark:border-emerald-500/30"
       : "border-rose-200 dark:border-rose-500/30";
 
-  return `<div class="${cn("rounded-xl border bg-white p-6 dark:bg-slate-900/40", color)}">
-    <h3 class="m-0 text-base font-semibold">${esc(title)}</h3>
+  return `<div class="${cn("rounded-2xl border bg-white p-7 shadow-sm dark:bg-white/[0.035]", color)}">
+    <h3 class="m-0 text-lg font-semibold tracking-tight">${esc(title)}</h3>
     <ul class="mt-3 grid list-none gap-2 p-0 text-sm text-slate-700 dark:text-slate-200">
       ${items
         .map(

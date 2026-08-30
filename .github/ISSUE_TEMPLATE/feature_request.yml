@@ -1,0 +1,51 @@
+name: Feature request
+description: Propose a change to what JSkelet does
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Some absences are deliberate — file-system routing, streaming/RSC,
+        targeted cache invalidation and global state management are listed in
+        the README under "What it deliberately does not do", with the reasoning
+        in [docs/02-mimari.md](../blob/main/docs/02-mimari.md). Arguing against
+        one of those decisions is fine; please engage with the existing reasoning.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What are you trying to build, and where does JSkelet get in the way?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: >
+        What surface would change — a config field, a `route()` option, a hook, a
+        client API? Sketch the API as you would want to write it.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What you tried instead
+      description: >
+        Workarounds you attempted with today's surface, such as fragments, hooks
+        or custom middleware, and why they were not enough.
+
+  - type: checkboxes
+    id: constraints
+    attributes:
+      label: Architectural constraints
+      description: >
+        A change is easier to accept when it fits these rules, which are
+        explained in CONTRIBUTING.md.
+      options:
+        - label: It introduces no application-specific knowledge into `src/`.
+        - label: It still works when optional peer dependencies are missing.
+        - label: It still works when no build output exists.
+        - label: It keeps cached HTML identical for every visitor.

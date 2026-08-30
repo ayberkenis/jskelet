@@ -24,11 +24,15 @@
     Arial, sans-serif;
   --font-mono:
     ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  --color-brand-300: #8bf3ff;
+  --color-brand-400: #59dce9;
+  --color-brand-500: #22b8c7;
+  --color-ink-950: #070a16;
 }
 
 /** Her bölümde tekrarlayan ölçü; tek sınıfta toplamak daha okunur. */
 .wrapper {
-  max-width: 72rem;
+  max-width: 76rem;
   margin-inline: auto;
   padding-inline: 1.25rem;
 }
@@ -40,15 +44,62 @@
 .glow {
   background-image:
     radial-gradient(
-      60rem 30rem at 50% -10%,
-      color-mix(in oklab, var(--color-sky-400) 22%, transparent),
-      transparent 70%
+      52rem 32rem at 8% 5%,
+      color-mix(in oklab, var(--color-cyan-400) 20%, transparent),
+      transparent 72%
     ),
     radial-gradient(
-      40rem 24rem at 85% 10%,
-      color-mix(in oklab, var(--color-violet-400) 16%, transparent),
-      transparent 70%
+      48rem 34rem at 92% 8%,
+      color-mix(in oklab, var(--color-indigo-500) 24%, transparent),
+      transparent 72%
     );
+}
+
+/** İnce çizgiler teknik hissi verir; raster arka plan olmadığı için ücretsizdir. */
+.grid-surface {
+  background-image:
+    linear-gradient(to right, rgb(148 163 184 / 0.08) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(148 163 184 / 0.08) 1px, transparent 1px);
+  background-size: 36px 36px;
+  mask-image: linear-gradient(to bottom, black 30%, transparent 92%);
+}
+
+/** Hero görselindeki hareket dekoratiftir ve düşük hareket tercihinde kapanır. */
+.logo-orbit {
+  animation: logo-float 6s ease-in-out infinite;
+  filter: drop-shadow(0 28px 50px rgb(34 211 238 / 0.18));
+}
+
+.status-pulse {
+  box-shadow: 0 0 0 0 rgb(52 211 153 / 0.5);
+  animation: status-pulse 2.4s ease-out infinite;
+}
+
+.marquee-track {
+  animation: marquee 28s linear infinite;
+}
+
+@keyframes logo-float {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-2deg);
+  }
+  50% {
+    transform: translateY(-12px) rotate(2deg);
+  }
+}
+
+@keyframes status-pulse {
+  70%,
+  100% {
+    box-shadow: 0 0 0 9px transparent;
+  }
+}
+
+@keyframes marquee {
+  to {
+    transform: translateX(-50%);
+  }
 }
 
 /**
@@ -67,7 +118,52 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .bar-fill {
+  .bar-fill,
+  .logo-orbit,
+  .status-pulse,
+  .marquee-track {
+    animation: none;
     transition: none;
   }
 }
+
+/**
+ * Sayfa geçişi. Varsayılan davranış tüm belgeyi tek parça olarak çapraz
+ * geçirmek, yani gezinme boyunca hiç değişmeyen header ve footer da titriyor.
+ * Bu ikisine bir ad vermek onları kendi grubuna alır; tarayıcı aynı adı iki
+ * belgede de gördüğü için "aynı öğe" sayar ve geçiş yalnızca içerik bölgesinde
+ * kalır. Header sticky olduğu için kazanç burada özellikle görünür.
+ */
+body > header {
+  view-transition-name: site-header;
+}
+
+body > footer {
+  view-transition-name: site-footer;
+}
+
+/**
+ * Sabit bölgeler hiç animasyon almaz: yeni sayfanınki tek karede yerini alır.
+ * Etkin menü bağlantısı gibi gerçek farklar da o karede değişir.
+ */
+::view-transition-old(site-header),
+::view-transition-old(site-footer) {
+  animation: none;
+  opacity: 0;
+}
+
+::view-transition-new(site-header),
+::view-transition-new(site-footer) {
+  animation: none;
+  opacity: 1;
+}
+
+/** Geriye kalan içerik kısa bir çapraz geçişle gelir; uzun süre gezinmeyi
+    yavaş hissettiriyor. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 180ms;
+}
+
+/* Hareket azaltma tercihinde geçiş framework tarafından zaten kapatılıyor
+   (`@view-transition { navigation: none }`), burada tekrarlamaya gerek yok. */

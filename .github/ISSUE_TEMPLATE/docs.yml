@@ -1,0 +1,32 @@
+name: Documentation issue
+description: Something in the docs is wrong, missing, or hard to follow
+labels: ["documentation"]
+body:
+  - type: input
+    id: where
+    attributes:
+      label: Which document
+      placeholder: docs/06-cache.md, section "prewarm"
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What is wrong
+      description: >
+        Quote the passage if you can. If a snippet does not work, say what
+        happened when you ran it.
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: kind
+    attributes:
+      label: Kind
+      options:
+        - label: Incorrect — it does not match how the code behaves
+        - label: Outdated — it describes an older API
+        - label: Missing — something is not documented at all
+        - label: Unclear — correct but hard to follow
+        - label: Translation — I would like to translate this document into English

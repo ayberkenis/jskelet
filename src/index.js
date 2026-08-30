@@ -6,6 +6,7 @@
  * ithal etmek de mümkün; buradaki liste "kararlı" sayılan yüzeydir.
  */
 export { route, renderPage, renderView, renderNotFound } from "./server/render.js";
+export { renderStatusPage, statusFromError } from "./server/status-page.js";
 export { createApp, startServer } from "./server/create-app.js";
 export {
   notFound,

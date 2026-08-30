@@ -1,14 +1,35 @@
 # JSkelet
 
-SEO ve hız odaklı siteler için, framework'süz hissettiren bir framework.
+**A framework that feels like no framework** — for sites where SEO and speed are
+the product.
 
-Express 5 sunucuda EJS ile **tam HTML** üretir, etkileşimi vanilla JS
-**island**'larla ekler, CSS'i Tailwind v4 ile **tek bir stylesheet**e derler ve
-ISR yerine süreç belleğinde yaşayan, stale-while-revalidate'li bir **HTML TTL
-cache** kullanır. React yok, TypeScript yok; düz JavaScript ve JSDoc.
+JSkelet renders **complete HTML** on an Express 5 server with EJS, adds
+interactivity through vanilla JS **islands**, compiles CSS into a **single
+Tailwind v4 stylesheet**, and instead of ISR keeps an in-process **HTML TTL
+cache** with stale-while-revalidate. No React, no TypeScript — plain JavaScript
+with JSDoc.
+
+[![Node.js 22+](https://img.shields.io/badge/node-%3E%3D22-brightgreen)](https://nodejs.org)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](./LICENSE)
+
+- [Quick start](#quick-start)
+- [What it looks like](#what-it-looks-like)
+- [How it works](#how-it-works)
+- [What you get](#what-you-get)
+- [What it deliberately does not do](#what-it-deliberately-does-not-do)
+- [Project layout](#project-layout)
+- [Configuration](#configuration)
+- [CLI](#cli)
+- [Public API](#public-api)
+- [Deployment](#deployment)
+- [Documentation](#documentation)
+- [Examples](#examples)
+- [Contributing](#contributing)
+
+## Quick start
 
 ```bash
-mkdir sitem && cd sitem
+mkdir my-site && cd my-site
 npm init -y && npm pkg set type=module
 npm install jskelet
 npm install -D postcss @tailwindcss/postcss tailwindcss lightningcss
@@ -16,23 +37,35 @@ npx jskelet init
 npx jskelet dev
 ```
 
-`http://localhost:3000` sunucuda render edilmiş, önbelleğe alınmış ve island'ı
-görünürlükte hidre olan bir sayfa verir.
+`http://localhost:3000` serves a page that was rendered on the server, stored in
+the HTML cache, and whose island hydrates when it scrolls into view.
 
-## Neye benziyor
+Requirements:
+
+- **Node.js 22 or newer.**
+- Everything else is an **optional peer dependency**: `postcss`,
+  `@tailwindcss/postcss`, `tailwindcss` and `lightningcss` for styles,
+  `@phosphor-icons/core` for the icon sprite, `sharp` for image optimization. If
+  a package is missing, the matching build step is skipped with a warning and
+  the site keeps working.
+
+## What it looks like
+
+A route module receives the app and returns page descriptions. Nothing is
+inferred from the file system — URLs are written out.
 
 ```js
 // routes/10-pages.mjs
-import { getPosts } from "../lib/posts.js";
+import { getPost, getPosts } from "../lib/posts.js";
 
 export default function register(app, { route, notFound }) {
   app.get("/", route(
     async () => ({
       view: "pages/home",
-      metadata: { title: "Ana sayfa", canonical: "/" },
+      metadata: { title: "Home", canonical: "/" },
       data: { posts: getPosts() },
     }),
-    { revalidate: 60 }, // HTML 60 saniye önbellekte
+    { revalidate: 60 }, // keep this HTML for 60 seconds
   ));
 
   app.get("/blog/:slug", route(async ({ params }) => {
@@ -43,95 +76,230 @@ export default function register(app, { route, notFound }) {
 }
 ```
 
+Templates are EJS. Every named export under `views/components/**` becomes a
+template local automatically, so components need no imports — they are plain
+functions returning HTML strings.
+
 ```html
 <!-- views/pages/home.ejs -->
 <section class="wrapper">
-  <h1 class="text-3xl font-bold">Son yazılar</h1>
+  <h1 class="text-3xl font-bold">Latest posts</h1>
   <% posts.forEach(function (post) { %>
   <%- postCard({ post }) %>
   <% }); %>
 
-  <!-- görünür olduğunda inilir ve bağlanır -->
+  <!-- downloaded and wired up once visible -->
   <div data-island="newsletter"></div>
 </section>
 ```
 
-## Ne veriyor
+Islands are modules with a default export that receives their root element.
 
-- **Sunucuda tam HTML.** İlk boyama JS beklemez; içerik tarayıcıda kurulmadığı
-  için SEO'da eksiksiz görünür.
-- **Island'lar.** Etkileşim `data-island` taşıyan elementlere bağlanır. Modüller
-  varsayılan olarak görünürlükte, dinamik import ile inilir; `data-island-eager`
-  ve `data-island-idle` ile strateji seçilir.
-- **HTML TTL cache.** Route başına `revalidate`, TTL dolduğunda eski HTML anında
-  döner ve tazeleme arkada yürür. Açılışta prewarm önbelleği doldurur.
-- **Hızlı gezinme.** `navigation` bölümü Speculation Rules ile bağlantıları
-  önden getirir ya da prerender eder ve view transition'ı açar — hiç client
-  runtime'ı eklemeden.
-- **Tanıdık yapılandırma.** `redirects()`, `rewrites()`, `headers()` ve `cache()`
-  — `next.config` sözdiziminin fiilen kullanılan alt kümesiyle aynı.
-- **Build hattı.** Fontlar, kullanılan ikonlardan üretilen SVG sprite, Tailwind
-  v4 CSS, esbuild bundle'ları, webp varyantları, hash'li çıktı ve brotli/gzip
-  ön sıkıştırma.
-- **Dev deneyimi.** Tek komut, tek terminal: watch build + sunucu, CSS hot-swap,
-  otomatik restart ve Alt+D ile açılan devtools overlay (istekler, hatalar,
-  upstream çağrıları, cache dökümü, Web Vitals).
-- **Hook'lar.** Metadata, layout bağlamı, 404 ve prewarm yolları uygulamadan
-  gelir; framework hiçbir domain varsayımı taşımaz.
+```js
+// client/islands/newsletter.js
+export default function newsletter(el) {
+  const form = el.querySelector("form");
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    await fetch("/api/subscribe", { method: "POST", body: new FormData(form) });
+  });
+}
+```
 
-## Ne vermiyor
+## How it works
 
-Bilinçli eksikler:
+A request goes through a fixed middleware order that is documented in the
+numbered comment at the top of `src/server/create-app.js`; changing that order
+causes silent breakage.
 
-- Dosya sistemine dayalı routing yok — yollar açıkça yazılır.
-- Streaming/RSC yok; sayfa tek parça basılır. Yavaş bölümler ayrı fragment
-  uçlarından çekilir.
-- Nokta atışı önbellek geçersizleme yok; TTL ve tüm önbelleği boşaltma var.
-- Global state yönetimi yok; island'lar arası paylaşım için küçük bir store var.
+1. **Config** (`jskelet.config.mjs`) is loaded once and exposed through
+   `getConfig()`. `redirects()`, `rewrites()`, `headers()` and `cache()` follow
+   the subset of `next.config` syntax people actually use. A broken config, a
+   throwing `headers()` or a failing hook logs a warning and falls back to
+   defaults — it never takes the site down.
+2. **Static assets** are served from `public/` with hashed filenames and
+   long-lived cache headers, and precompressed `.br` / `.gz` variants are picked
+   automatically.
+3. **`route()`** wraps your controller. It builds a cache key, checks the HTML
+   TTL cache, and on a miss renders the page. When a cached entry is stale it is
+   returned immediately while revalidation runs in the background.
+4. **Render** composes metadata, layout context and your view into one HTML
+   document. Hooks (`metadata`, `layoutContext`, `notFound`, `prewarmPaths`)
+   are where application knowledge lives — the framework itself carries none.
+5. **Hydration** happens in the browser: the island registry finds
+   `data-island` elements and dynamically imports the matching chunk when it
+   becomes visible (or eagerly / on idle, if asked).
 
-Oturum arkasında çalışan, sayfa HTML'i cache'lenemeyen uygulama ağırlıklı
-arayüzler için (dashboard, editör, yönetim paneli) bu framework yanlış seçim.
-Gerekçesi ve karşılaştırma: [docs/11-tasima.md](./docs/11-tasima.md).
+Because cached HTML is shared by every visitor, nothing personalized may appear
+in a page rendered through `route()`. Per-user markup belongs in separate
+fragment endpoints marked `no-store`, and decisions like theme are made on the
+client.
 
-## Gereksinimler
+## What you get
 
-- **Node.js 22+**
-- Tailwind kullanacaksanız `postcss`, `@tailwindcss/postcss`, `tailwindcss`,
-  `lightningcss`; ikonlar için `@phosphor-icons/core`; görsel optimizasyonu için
-  `sharp`. Hepsi **opsiyonel peer bağımlılık**: kurulu değilse ilgili build
-  adımı atlanır ve site çalışmaya devam eder.
+- **Full HTML from the server.** First paint does not wait for JavaScript, and
+  crawlers see the complete document because content is never assembled in the
+  browser.
+- **Islands.** Interactivity attaches to elements carrying `data-island`.
+  Modules are dynamically imported on visibility by default;
+  `data-island-eager` and `data-island-idle` pick a different strategy. A small
+  store handles sharing state between islands.
+- **HTML TTL cache.** Per-route `revalidate`, stale-while-revalidate on expiry,
+  and prewarm that fills the cache at boot so the first visitor is not the one
+  who pays for rendering.
+- **Fast navigation.** The `navigation` config section emits Speculation Rules
+  to prefetch or prerender links and enables view transitions — without adding
+  any client runtime.
+- **Familiar configuration.** `redirects()`, `rewrites()`, `headers()`,
+  `cache()`, plus `brand`, `images`, `security` and `hooks` sections.
+- **A real build pipeline.** Fonts, an SVG sprite generated from the icons you
+  actually use, Tailwind v4 CSS, esbuild bundles with code splitting, webp
+  variants, hashed output and brotli/gzip precompression.
+- **Developer experience.** One command, one terminal: watch build plus server,
+  CSS hot-swap, automatic restart, and a devtools overlay on Alt+D showing
+  requests, errors, upstream calls, a cache dump and Web Vitals.
+- **Graceful degradation.** Without build output `asset()` returns the unhashed
+  path and `hasAsset()` returns false, so forgetting `jskelet build` yields an
+  unstyled but working page instead of a crash.
+
+## What it deliberately does not do
+
+- **No file-system routing.** Paths are written explicitly in route modules.
+- **No streaming or RSC.** A page is flushed as one document; slow sections are
+  fetched from separate fragment endpoints.
+- **No targeted cache invalidation.** There is TTL and there is "clear
+  everything".
+- **No global state management** beyond the small island store.
+
+If you are building an app-shaped interface behind a login — a dashboard, an
+editor, an admin panel — page HTML cannot be cached and this framework is the
+wrong tool. The reasoning and a feature-by-feature comparison with Next.js live
+in [docs/11-tasima.md](./docs/11-tasima.md).
+
+## Project layout
+
+`jskelet init` scaffolds this shape, and every directory is configurable through
+the `paths` section of the config:
+
+```
+my-site/
+├── jskelet.config.mjs   # config, hooks, headers, redirects
+├── routes/              # loaded in filename order (10-, 20-, …)
+├── views/
+│   ├── pages/           # EJS pages
+│   ├── partials/        # header, footer, …
+│   └── components/      # named exports become template locals
+├── client/
+│   ├── entries/main.js  # registers islands, calls start()
+│   └── islands/         # one module per island
+├── styles/globals.css   # Tailwind entry with @source directives
+├── lib/                 # your data access
+└── public/              # build output plus static files
+```
+
+Two things bite newcomers:
+
+- **Tailwind class scanning follows `@source` directives** in
+  `styles/globals.css`, because automatic detection is turned off with
+  `source(none)`. A new directory that uses classes needs an `@source` line, or
+  its classes silently vanish from the stylesheet.
+- **`include` in EJS is async.** `await include('partials/x')` only works in a
+  template's own body; inside a `forEach` callback it is a compile error, so use
+  a `for` loop there.
+
+## Configuration
+
+`jskelet.config.mjs` exports a single object. Every section is optional.
+
+```js
+export default {
+  brand: { name: "My Site", lang: "en" },
+  icons: { scan: ["views", "client"] },
+
+  // Speculation Rules plus @view-transition, with no client runtime.
+  navigation: { prefetch: "moderate", prerender: "conservative", viewTransition: true },
+
+  async redirects() {
+    return [{ source: "/old", destination: "/new", permanent: true }];
+  },
+
+  async headers() {
+    return [{ source: "/:path*", headers: [{ key: "X-Frame-Options", value: "DENY" }] }];
+  },
+
+  async cache() {
+    return {
+      html: { "/": 3600, "/pricing": 3600 },
+      prewarm: { enabled: true, max: 50, concurrency: 4 },
+    };
+  },
+
+  hooks: {
+    metadata: () => ({ titleTemplate: "%s · My Site", siteUrl: "https://example.com" }),
+    layoutContext: ({ pathname }) => ({ pathname, year: new Date().getFullYear() }),
+    prewarmPaths: async () => ["/", "/pricing"],
+  },
+};
+```
+
+The complete reference — every field, default and failure mode — is
+[docs/07-yapilandirma.md](./docs/07-yapilandirma.md).
 
 ## CLI
 
-| Komut | İşi |
+| Command | What it does |
 | --- | --- |
-| `jskelet dev` | Watch build + sunucu, canlı yenileme, devtools |
-| `jskelet build` | Prod build (fontlar → sprite → CSS → JS → görseller → manifest → precompress) |
-| `jskelet start` | Prod sunucu; build eksikse üretir |
-| `jskelet init` | Bulunduğun dizine minimal iskelet kurar |
+| `jskelet dev` | Watch build plus server, live reload, devtools overlay |
+| `jskelet build` | Production build: fonts → sprite → CSS → JS → images → manifest → precompress |
+| `jskelet start` | Production server; builds first if output is missing |
+| `jskelet init` | Scaffolds a minimal skeleton into the current directory |
 
-## Belgeler
+## Public API
 
-Tam referans [docs/](./docs/README.md) altında:
+Only the specifiers in the `exports` map are supported:
 
-| Belge | Konu |
+| Specifier | Contents |
 | --- | --- |
-| [01-baslangic](./docs/01-baslangic.md) | Kurulum, ilk route, ilk island, dizin yapısı, CLI |
-| [02-mimari](./docs/02-mimari.md) | Kararlar ve gerekçeleri, middleware sırası |
-| [03-routing](./docs/03-routing.md) | Route modülleri, controller sözleşmesi, yükleme sırası |
-| [04-render-ve-sablonlar](./docs/04-render-ve-sablonlar.md) | Layout, bileşenler, yardımcılar, metadata |
-| [05-islands](./docs/05-islands.md) | Island sözleşmesi, hidrasyon, store, DOM yardımcıları |
-| [06-cache](./docs/06-cache.md) | TTL, stale-while-revalidate, anahtar, prewarm |
-| [07-yapilandirma](./docs/07-yapilandirma.md) | `jskelet.config.mjs` tam referansı |
-| [08-build](./docs/08-build.md) | Build hattı, manifest, Tailwind `@source`, sprite |
-| [09-dev-araclari](./docs/09-dev-araclari.md) | Dev akışı, overlay, rapor sayfası, dev gate |
-| [10-dagitim](./docs/10-dagitim.md) | Prod, Docker, ters proxy, sağlık kontrolü |
-| [11-tasima](./docs/11-tasima.md) | Next.js'ten taşıma: karşılık tablosu ve plan |
+| `jskelet` | `route`, `createApp`, `startServer`, `notFound`, `redirect`, `cache`, `asset`, `getConfig`, HTML cache and prewarm helpers |
+| `jskelet/client` | `register`, `registerAll`, `hydrate`, `start`, `createStore`, DOM helpers |
+| `jskelet/html` | `attrs`, `cn`, `cx`, `esc`, `jsonScript` |
+| `jskelet/tags` | `icon`, `image`, `link`, `preloadImage` |
 
-Yapay zekâ ajanlarıyla çalışıyorsanız [AGENTS.md](./AGENTS.md) projedeki
-kuralları özetler.
+Anything reachable by a deeper path is internal and may change without notice.
 
-## Örnekler
+## Deployment
+
+The server is a plain Express 5 app, so anything that can run a Node process
+works: a `Dockerfile` (see `examples/marketing/Dockerfile`), a systemd unit, or
+a PaaS. Run `jskelet build` at image build time, put a reverse proxy in front
+for TLS, and expose a health endpoint (the default dev gate bypass list already
+includes `/api/healthcheck`, so a route there is reachable in every mode).
+Details, including cache sizing
+behind multiple instances, are in [docs/10-dagitim.md](./docs/10-dagitim.md).
+
+## Documentation
+
+The full reference lives under [docs/](./docs/README.md). It is currently
+written in Turkish; translations are a welcome contribution.
+
+| Document | Topic |
+| --- | --- |
+| [01-baslangic](./docs/01-baslangic.md) | Installation, first route, first island, directory layout, CLI |
+| [02-mimari](./docs/02-mimari.md) | Decisions and their reasoning, middleware order |
+| [03-routing](./docs/03-routing.md) | Route modules, controller contract, load order |
+| [04-render-ve-sablonlar](./docs/04-render-ve-sablonlar.md) | Layout, components, helpers, metadata |
+| [05-islands](./docs/05-islands.md) | Island contract, hydration, store, DOM helpers |
+| [06-cache](./docs/06-cache.md) | TTL, stale-while-revalidate, keys, prewarm |
+| [07-yapilandirma](./docs/07-yapilandirma.md) | Complete `jskelet.config.mjs` reference |
+| [08-build](./docs/08-build.md) | Build pipeline, manifest, Tailwind `@source`, sprite |
+| [09-dev-araclari](./docs/09-dev-araclari.md) | Dev workflow, overlay, report page, dev gate |
+| [10-dagitim](./docs/10-dagitim.md) | Production, Docker, reverse proxy, health checks |
+| [11-tasima](./docs/11-tasima.md) | Migrating from Next.js: mapping table and plan |
+
+If you work with AI agents, [AGENTS.md](./AGENTS.md) summarizes the rules that
+apply to this repository.
+
+## Examples
 
 ```bash
 npm --prefix examples/minimal   install && npm --prefix examples/minimal   run dev
@@ -139,18 +307,36 @@ npm --prefix examples/blog      install && npm --prefix examples/blog      run d
 npm --prefix examples/marketing install && npm --prefix examples/marketing run dev
 ```
 
-- **`examples/minimal`** — iki route, bir bileşen, bir island. En küçük çalışan hâl.
-- **`examples/blog`** — dinamik route'lar, etiket sayfaları, tüm config
-  bölümleri, fragment ile gelen sekmeler, form, prewarm, RSS/sitemap ve dört
-  island.
-- **`examples/marketing`** — framework'ün tanıtım sitesi: kıyaslama tablosu,
-  uzun TTL, tüm sayfaları ısıtan prewarm. Sayfadaki bayt sayıları sitenin kendi
-  build çıktısından ölçülüyor, gecikme sayıları da tarayıcıda; uydurma benchmark
-  yok.
+- **`examples/minimal`** — two routes, one component, one island. The smallest
+  thing that runs.
+- **`examples/blog`** — dynamic routes, tag pages, every config section,
+  fragment-loaded tabs, a form, prewarm, RSS and sitemap, four islands. It
+  intentionally touches every surface of the framework.
+- **`examples/marketing`** — the framework's own marketing site: comparison
+  table, changelog and download pages, long TTLs, prewarm covering every page.
+  The byte counts on the page are measured from that site's own build output, the
+  version details are read from the installed package, and the latency numbers
+  are measured in the browser; there are no invented benchmarks. It is also
+  bilingual — English at the root, Turkish under `/tr` — which shows how to build
+  a multi-language site on a framework that ships no i18n of its own.
 
-Sunucu ayaktayken `node smoke.mjs` uçların beklendiği gibi yanıt verdiğini
-doğrular.
+With a server running, `node smoke.mjs` inside an example verifies that its
+endpoints respond as expected.
 
-## Lisans
+## Contributing
 
-MIT
+Bug reports, documentation fixes and pull requests are welcome. Start with
+[CONTRIBUTING.md](./CONTRIBUTING.md) for the workflow and local checks, and note
+that participation is covered by our
+[Code of Conduct](./CODE_OF_CONDUCT.md). Security issues should follow
+[SECURITY.md](./SECURITY.md) instead of the public issue tracker.
+
+```bash
+npm install
+npm run lint
+npm test
+```
+
+## License
+
+[MIT](./LICENSE) © JSkelet contributors

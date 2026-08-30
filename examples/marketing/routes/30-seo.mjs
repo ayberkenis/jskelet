@@ -4,7 +4,7 @@
  * HTML döndürmedikleri için `route()` kullanılmaz — `route()` layout içinde EJS
  * render eder. Düz Express handler'ı yeterli, cache başlığı elle yazılır.
  */
-import { pagePaths } from "../lib/content.js";
+import { DEFAULT_LOCALE, LOCALES, PAGES, localePath } from "../lib/i18n.js";
 
 const SITE_URL = process.env.SITE_URL ?? "http://localhost:3000";
 
@@ -25,17 +25,31 @@ export default function register(app) {
   });
 
   app.get("/sitemap.xml", (req, res) => {
-    // Sitemap ve prewarm aynı listeden beslenir; ayrıştıklarında ısıtılan sayfa
-    // ile indekslenen sayfa farklı oluyor ve bu fark gözden kaçıyor.
-    const urls = pagePaths()
-      .map((pathname) => `<url><loc>${SITE_URL}${pathname}</loc></url>`)
+    // Sitemap, prewarm ve route kaydı aynı yol tablosundan besleniyor;
+    // ayrıştıklarında ısıtılan sayfa ile indekslenen sayfa farklı oluyor ve bu
+    // fark gözden kaçıyor.
+    const urls = Object.values(PAGES)
+      .map((basePath) => {
+        // Her dil kendi `<url>` girdisini alır ama alternatif listesi ortak:
+        // arama motoru bir sayfanın diğer dildeki karşılığını buradan öğrenir.
+        const alternates = [
+          ...LOCALES.map((locale) => alternate(locale, basePath)),
+          alternate("x-default", basePath, DEFAULT_LOCALE),
+        ].join("");
+
+        return LOCALES.map(
+          (locale) =>
+            `<url><loc>${SITE_URL}${localePath(locale, basePath)}</loc>${alternates}</url>`,
+        ).join("");
+      })
       .join("");
 
     res.type("application/xml");
     res.setHeader("Cache-Control", cacheFor(3600));
     res.send(
       `<?xml version="1.0" encoding="UTF-8"?>` +
-        `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls}</urlset>`,
+        `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"` +
+        ` xmlns:xhtml="http://www.w3.org/1999/xhtml">${urls}</urlset>`,
     );
   });
 
@@ -43,4 +57,19 @@ export default function register(app) {
     res.setHeader("Cache-Control", "no-store");
     res.json({ ok: true, uptime: process.uptime() });
   });
+}
+
+/**
+ * @param {string} hreflang
+ * @param {string} basePath
+ * @param {import("../lib/i18n.js").Locale} [locale] Yol için kullanılacak dil
+ * @returns {string}
+ */
+function alternate(hreflang, basePath, locale) {
+  const href = localePath(
+    locale ?? /** @type {import("../lib/i18n.js").Locale} */ (hreflang),
+    basePath,
+  );
+
+  return `<xhtml:link rel="alternate" hreflang="${hreflang}" href="${SITE_URL}${href}"/>`;
 }

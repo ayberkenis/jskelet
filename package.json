@@ -1,9 +1,18 @@
 {
   "name": "jskelet",
-  "version": "0.1.0",
-  "description": "SEO ve hız odaklı, framework'süz hissettiren framework: Express + EJS sunucu render, vanilla JS island'lar, HTML TTL cache.",
+  "version": "0.1.1",
+  "description": "A framework that feels like no framework: Express 5 + EJS server rendering, vanilla JS islands, Tailwind v4 and an in-process HTML TTL cache.",
   "type": "module",
   "license": "MIT",
+  "author": "Ayberk Enis",
+  "homepage": "https://github.com/ayberkenis/jskelet#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ayberkenis/jskelet.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ayberkenis/jskelet/issues"
+  },
   "keywords": [
     "ssr",
     "islands",
@@ -33,7 +42,9 @@
     "src",
     "docs",
     "README.md",
-    "AGENTS.md"
+    "AGENTS.md",
+    "CHANGELOG.md",
+    "LICENSE"
   ],
   "engines": {
     "node": ">=22"
@@ -59,12 +70,24 @@
     "tailwindcss": "^4.3.3"
   },
   "peerDependenciesMeta": {
-    "@phosphor-icons/core": { "optional": true },
-    "@tailwindcss/postcss": { "optional": true },
-    "lightningcss": { "optional": true },
-    "postcss": { "optional": true },
-    "sharp": { "optional": true },
-    "tailwindcss": { "optional": true }
+    "@phosphor-icons/core": {
+      "optional": true
+    },
+    "@tailwindcss/postcss": {
+      "optional": true
+    },
+    "lightningcss": {
+      "optional": true
+    },
+    "postcss": {
+      "optional": true
+    },
+    "sharp": {
+      "optional": true
+    },
+    "tailwindcss": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@eslint/js": "^9",

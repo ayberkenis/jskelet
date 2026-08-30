@@ -29,6 +29,7 @@ import { getConfig, loadConfig } from "../config/index.js";
 import { IMMUTABLE_CACHE } from "../config/defaults.js";
 import { registerRoutes } from "./router.js";
 import { renderNotFound } from "./render.js";
+import { renderStatusPage, statusFromError } from "./status-page.js";
 import { startPrewarm } from "./prewarm.js";
 import { isNotFoundError, isRedirectError } from "../http/control-flow.js";
 
@@ -116,17 +117,20 @@ export async function createApp(options = {}) {
       return;
     }
 
-    console.error(`[500] ${req.method} ${req.originalUrl}`, error);
-    res.status(500).type("html").send(FALLBACK_ERROR);
+    const status = statusFromError(error);
+    console.error(`[${status}] ${req.method} ${req.originalUrl}`, error);
+
+    // Hata sayfası hiçbir katmanda saklanmamalı: geçici bir upstream arızası
+    // CDN'de dakikalarca yaşayan bir 500 sayfasına dönüşmesin.
+    res.setHeader("Cache-Control", "no-store");
+    res
+      .status(status)
+      .type("html")
+      .send(await renderStatusPage(status, { error }));
   });
 
   return app;
 }
-
-const FALLBACK_ERROR =
-  '<!DOCTYPE html><html><head><meta charset="utf-8">' +
-  "<title>500</title></head><body><h1>500</h1>" +
-  "<p>Bir şeyler ters gitti. Lütfen daha sonra tekrar deneyin.</p></body></html>";
 
 /**
  * Uygulamayı kurup dinlemeye başlar. CLI `jskelet start` bunu çağırır;

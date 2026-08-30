@@ -28,6 +28,7 @@ import { asset, hasAsset } from "./assets.js";
 import * as html from "../views/helpers/html.js";
 import * as tags from "../views/helpers/tags.js";
 import { loadComponents } from "../views/components/loader.js";
+import { renderStatusPage } from "./status-page.js";
 
 const isDev = process.env.NODE_ENV === "development";
 
@@ -345,26 +346,11 @@ function hasUpstreamFailures(pathname) {
 }
 
 /**
- * 404 sayfası. Uygulama `hooks.notFound()` ile kendi sayfasını verebilir;
- * vermezse framework tarayıcıda okunabilir minimal bir HTML döner. Bu geri
- * dönüş bilinçli olarak şablonsuz: 404 render'ı da patlarsa ziyaretçi boş
- * yanıt görmesin.
+ * 404 sayfası. `renderStatusPage(404)` için kısayol; route dosyalarında en sık
+ * ihtiyaç duyulan durum bu olduğu için ayrı bir ad taşımaya devam ediyor.
  *
  * @returns {Promise<string>}
  */
 export async function renderNotFound() {
-  const page = await hook("notFound", null);
-  if (!page) return FALLBACK_NOT_FOUND;
-
-  try {
-    return await renderPage({ pathname: "/404", ...page });
-  } catch (error) {
-    console.error("[render] 404 sayfası render edilemedi", error);
-    return FALLBACK_NOT_FOUND;
-  }
+  return renderStatusPage(404);
 }
-
-const FALLBACK_NOT_FOUND =
-  '<!DOCTYPE html><html><head><meta charset="utf-8">' +
-  "<title>404</title></head><body><h1>404</h1>" +
-  "<p>Sayfa bulunamadı.</p></body></html>";

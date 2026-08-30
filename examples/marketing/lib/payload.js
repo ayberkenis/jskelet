@@ -13,16 +13,16 @@ import { getConfig } from "jskelet";
  * ortamlar arasında karşılaştırılabilir kalıyor.
  */
 
-/** @typedef {{ name: string, label: string, bytes: number, gzip: number }} PayloadEntry */
+/** @typedef {{ name: string, bytes: number, gzip: number }} PayloadEntry */
 
 /** @type {{ entries: PayloadEntry[], total: PayloadEntry | null } | null} */
 let memo = null;
 
-const LABELS = {
-  "app.css": "Stylesheet (Tailwind v4 çıktısı)",
-  "main.js": "Client entry (island yükleyicisi)",
-  "sprite.svg": "İkon sprite",
-};
+/**
+ * Ölçülecek varlıklar. Görünen adlar burada değil içerik sözlüklerinde:
+ * ölçüm dilden bağımsız, etiket değil.
+ */
+const MEASURED = ["app.css", "main.js", "sprite.svg"];
 
 /**
  * Build çıktısının ölçülen boyutları. Manifest yoksa boş liste döner; sayfa
@@ -41,13 +41,13 @@ export function getPayload() {
   /** @type {PayloadEntry[]} */
   const entries = [];
 
-  for (const [name, label] of Object.entries(LABELS)) {
+  for (const name of MEASURED) {
     const url = manifest[name];
     if (!url) continue;
 
     const file = path.join(dirs.public, url.replace(/^\//, ""));
     const measured = measure(file);
-    if (measured) entries.push({ name, label, ...measured });
+    if (measured) entries.push({ name, ...measured });
   }
 
   // Island'lar dinamik import ile indiği için manifest'te ayrı bir adı yok:
@@ -56,17 +56,12 @@ export function getPayload() {
   // tek satırda toplanıyor.
   const chunks = measureIslandChunks(dirs.public, manifest["main.js"]);
   if (chunks) {
-    entries.push({
-      name: "islands",
-      label: "Tüm island'lar (talep üzerine, ayrı chunk'lar)",
-      ...chunks,
-    });
+    entries.push({ name: "islands", ...chunks });
   }
 
   const total = entries.length
     ? {
         name: "total",
-        label: "Toplam — her island yüklenirse",
         bytes: entries.reduce((sum, entry) => sum + entry.bytes, 0),
         gzip: entries.reduce((sum, entry) => sum + entry.gzip, 0),
       }

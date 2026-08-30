@@ -20,12 +20,12 @@ export function bytes(value) {
  */
 export function statCard({ value, label, note, tone = "plain" }) {
   return `<div class="${cn(
-    "rounded-xl border p-5",
+    "rounded-2xl border p-6 shadow-sm",
     tone === "sky"
-      ? "border-sky-200 bg-sky-50/60 dark:border-sky-500/30 dark:bg-sky-500/5"
-      : "border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900/40",
+      ? "border-cyan-200 bg-gradient-to-br from-cyan-50 to-white dark:border-cyan-500/30 dark:from-cyan-500/10 dark:to-white/[0.03]"
+      : "border-slate-200 bg-white dark:border-white/10 dark:bg-white/[0.035]",
   )}">
-    <p class="m-0 font-mono text-2xl font-semibold tabular-nums sm:text-3xl">${esc(value)}</p>
+    <p class="m-0 font-mono text-3xl font-bold tracking-tight tabular-nums">${esc(value)}</p>
     <p class="mt-1 m-0 text-sm font-medium">${esc(label)}</p>
     ${note ? `<p class="mt-2 m-0 text-xs text-slate-500 dark:text-slate-400">${esc(note)}</p>` : ""}
   </div>`;
@@ -35,44 +35,49 @@ export function statCard({ value, label, note, tone = "plain" }) {
  * Build çıktısının ölçülen boyutları. Manifest yoksa tablo yerine bir not
  * basılır — `jskelet build` çalıştırılmadan da sayfanın açılması gerekiyor.
  *
- * @param {{ entries: import('../../lib/payload.js').PayloadEntry[],
- *   total: import('../../lib/payload.js').PayloadEntry | null }} props
+ * Satır adları ölçümle birlikte gelmiyor, sözlükten geliyor: ölçüm dilden
+ * bağımsız, etiket değil.
+ *
+ * @param {{ payload: { entries: import('../../lib/payload.js').PayloadEntry[],
+ *   total: import('../../lib/payload.js').PayloadEntry | null },
+ *   labels: Record<string, string> }} props
  * @returns {string}
  */
-export function payloadTable({ entries, total }) {
+export function payloadTable({ payload, labels }) {
+  const { entries, total } = payload;
+
   if (!entries.length) {
-    return `<p class="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
-      Build çıktısı bulunamadı, dolayısıyla ölçülecek dosya da yok.
-      <code class="font-mono">jskelet build</code> çalıştırıldığında bu tablo
-      sitenin gerçek varlık boyutlarıyla dolar. Sayfanın kendisi build olmadan
-      da çalışmaya devam ediyor: manifest yoksa layout stylesheet etiketini hiç
-      basmıyor.
-    </p>`;
+    return `<p class="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm/6 text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100">${esc(labels.missing)}</p>`;
   }
 
   const rows = entries
     .map(
-      (entry) => `<tr class="border-t border-slate-200 dark:border-slate-800">
-        <td class="py-2.5 pr-4">${esc(entry.label)}</td>
-        <td class="py-2.5 pr-4 font-mono text-right tabular-nums text-slate-500 dark:text-slate-400">${esc(formatBytes(entry.bytes))}</td>
+      (entry) => `<tr class="border-t border-slate-200 dark:border-white/10">
+        <td class="py-2.5 pr-4">${esc(labels[entry.name] ?? entry.name)}</td>
+        <td class="py-2.5 pr-4 font-mono text-right tabular-nums text-slate-600 dark:text-slate-400">${esc(formatBytes(entry.bytes))}</td>
         <td class="py-2.5 font-mono text-right tabular-nums font-semibold">${esc(formatBytes(entry.gzip))}</td>
       </tr>`,
     )
     .join("");
 
   const footer = total
-    ? `<tr class="border-t-2 border-slate-300 dark:border-slate-700">
-        <td class="py-2.5 pr-4 font-semibold">${esc(total.label)}</td>
-        <td class="py-2.5 pr-4 font-mono text-right tabular-nums text-slate-500 dark:text-slate-400">${esc(formatBytes(total.bytes))}</td>
+    ? `<tr class="border-t-2 border-slate-300 dark:border-white/20">
+        <td class="py-2.5 pr-4 font-semibold">${esc(labels.total)}</td>
+        <td class="py-2.5 pr-4 font-mono text-right tabular-nums text-slate-600 dark:text-slate-400">${esc(formatBytes(total.bytes))}</td>
         <td class="py-2.5 font-mono text-right tabular-nums font-semibold">${esc(formatBytes(total.gzip))}</td>
       </tr>`
     : "";
 
-  return `<div class="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
+  return `<div class="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-white/[0.025]">
     <table class="w-full text-sm">
-      <caption class="border-b border-slate-200 px-4 py-3 text-left text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
-        Bu sayfanın kendi build çıktısı, istek anında diskten okunup ölçüldü. Sağdaki sütun gzip sonrası. Island chunk'ları yalnızca ilgili element görünürlüğe girerse iner; ilk yükte hepsi indirilmez.
-      </caption>
+      <caption class="border-b border-slate-200 px-4 py-3 text-left text-xs/5 text-slate-600 dark:border-white/10 dark:text-slate-400">${esc(labels.caption)}</caption>
+      <thead class="text-xs tracking-wide text-slate-500 uppercase dark:text-slate-400">
+        <tr class="border-b border-slate-200 dark:border-white/10">
+          <th scope="col" class="py-2.5 pr-4 pl-4 text-left font-semibold"></th>
+          <th scope="col" class="py-2.5 pr-4 text-right font-semibold">${esc(labels.bytesColumn)}</th>
+          <th scope="col" class="py-2.5 pr-4 text-right font-semibold">${esc(labels.gzipColumn)}</th>
+        </tr>
+      </thead>
       <tbody class="[&_td:first-child]:pl-4 [&_td:last-child]:pr-4">${rows}${footer}</tbody>
     </table>
   </div>`;

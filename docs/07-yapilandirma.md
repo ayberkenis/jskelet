@@ -109,6 +109,7 @@ export default {
     metadata() { /* … */ },
     layoutContext() { /* … */ },
     notFound() { /* … */ },
+    error() { /* … */ },
     prewarmPaths() { /* … */ },
   },
 };
@@ -292,6 +293,28 @@ geçişte bir kare beyaz flaştır ve koyu temada gözden kaçmaz. Renk `<html>`
 
 Hareket azaltma tercihi framework tarafından karşılanır: `prefers-reduced-motion:
 reduce` altında geçiş kapatılır, ayrıca bir şey yazmanız gerekmez.
+
+**Geçişi içerikle sınırlayın.** Varsayılan davranış tüm belgeyi tek parça olarak
+çapraz geçirir, yani gezinme boyunca hiç değişmeyen header ve footer da titrer.
+Bu bölgelere bir `view-transition-name` vermek onları kendi grubuna alır;
+tarayıcı aynı adı iki belgede de gördüğü için "aynı öğe" sayar. Adlandırılan
+öğenin animasyonunu kapatınca geçiş yalnızca içerikte kalır:
+
+```css
+body > header { view-transition-name: site-header; }
+body > footer { view-transition-name: site-footer; }
+
+::view-transition-old(site-header),
+::view-transition-old(site-footer) { animation: none; opacity: 0; }
+::view-transition-new(site-header),
+::view-transition-new(site-footer) { animation: none; opacity: 1; }
+
+/* Kalan içerik; varsayılan 250ms gezinmeyi yavaş hissettiriyor. */
+::view-transition-old(root),
+::view-transition-new(root) { animation-duration: 180ms; }
+```
+
+Çalışan hâli `examples/marketing/styles/globals.css` içinde.
 
 **CSP kullanıyorsanız** kurallar satır içi bir `<script type="speculationrules">`
 olarak basılır; `script-src` politikanızın buna izin vermesi gerekir.
@@ -522,7 +545,8 @@ varsayılanına döner ve uyarır — sayfa düşmez.
 | --- | --- | --- | --- |
 | `metadata` | `(page) => object` | Her sayfanın metadata varsayılanı; controller `metadata`sı üzerine biner | [04](./04-render-ve-sablonlar.md) |
 | `layoutContext` | `({ pathname, metadata }) => object` | Layout local'leri; `lang`, `structuredData`, `extraHead`, `bodyClass` özel yorumlanır | [04](./04-render-ve-sablonlar.md) |
-| `notFound` | `() => object \| null` | 404 sayfa tanımı; `null` ise minimal HTML | [03](./03-routing.md) |
+| `notFound` | `() => object \| null` | 404 sayfa tanımı; `null` ise framework'ün hata sayfası | [03](./03-routing.md) |
+| `error` | `({ status, error }) => object \| string \| null` | 404 dışındaki hata sayfaları (ve `notFound` yoksa 404); sayfa tanımı ya da doğrudan HTML | [03](./03-routing.md) |
 | `prewarmPaths` | `() => string[]` | Isıtılacak yollar; tanımlı değilse ısıtma hiç kurulmaz | [06](./06-cache.md) |
 
 ```js
@@ -539,6 +563,14 @@ hooks: {
     return {
       view: "pages/not-found",
       metadata: { title: "Sayfa bulunamadı", robots: { index: false } },
+    };
+  },
+
+  error({ status }) {
+    return {
+      view: "pages/error",
+      data: { status },
+      metadata: { title: "Bir hata oluştu", robots: { index: false } },
     };
   },
 
