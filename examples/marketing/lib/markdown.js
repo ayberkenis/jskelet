@@ -156,6 +156,20 @@ export function slugify(value) {
 }
 
 /**
+ * Tek satırlık markdown: kod, kalın/italik ve bağlantılar. Blok yapısı olmayan
+ * yerler için — sürüm notlarındaki madde metinleri gibi.
+ *
+ * @param {string} text
+ * @param {{ resolveLink?: RenderOptions["resolveLink"] }} [options]
+ * @returns {string}
+ */
+export function renderInline(text, options = {}) {
+  return inline(String(text), {
+    resolveLink: options.resolveLink ?? ((href) => href),
+  });
+}
+
+/**
  * Markdown işaretlerini atıp düz metin bırakır: `<title>` ve meta açıklaması
  * HTML kabul etmiyor.
  *

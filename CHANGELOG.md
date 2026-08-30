@@ -8,6 +8,14 @@ one is listed under a **Breaking** heading.
 
 ## [Unreleased]
 
+### Changed
+
+- The changelog page of the marketing example is generated from the installed
+  package's `CHANGELOG.md` instead of a hand-written list, and shows the version
+  published on npm next to the installed one.
+
+## [0.1.2] - 2026-08-30
+
 ### Added
 
 - `route(fn, { private: true })` for pages that depend on the visitor. The HTML
@@ -42,8 +50,6 @@ one is listed under a **Breaking** heading.
   a private page, a paginated table fragment, a CSRF-protected mutation and an
   island with cleanup, covered by its own `smoke.mjs`.
 - An npm version badge in the `README`, linking to the package page.
-- English `README`, plus `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`,
-  a `LICENSE` file, issue and pull request templates, and a CI workflow.
 - An English edition of the documentation under `docs/en/`, mirroring every
   chapter of the Turkish `docs/`.
 - The dev overlay now compares the installed version against the `latest` tag on
@@ -76,7 +82,28 @@ one is listed under a **Breaking** heading.
   either; a stored "you need to sign in" redirect used to follow the visitor
   even after signing in.
 
-## [0.1.0]
+## [0.1.1] - 2026-08-30
+
+### Added
+
+- English `README`, plus `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`,
+  a `LICENSE` file, issue and pull request templates, and a CI workflow.
+- An English-first `examples/marketing` with a Turkish translation, serving the
+  package documentation under `/docs` and reading its version, dependencies and
+  bundle sizes from the installed package.
+
+### Changed
+
+- The install instructions point at the npm package instead of the git
+  repository.
+
+### Fixed
+
+- No more white flash between pages: the page background moved onto the root
+  element, so it applies before the body paints. Reduced-motion preferences now
+  switch off the decorative animations as well, not just page transitions.
+
+## [0.1.0] - 2026-08-30
 
 Initial release.
 
@@ -99,5 +126,7 @@ Initial release.
 - Documentation under `docs/` and three examples: `minimal`, `blog`,
   `marketing`.
 
-[Unreleased]: https://github.com/ayberkenis/jskelet/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/ayberkenis/jskelet/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/ayberkenis/jskelet/compare/v0.1.1...v0.1.2
+[0.1.1]: https://github.com/ayberkenis/jskelet/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/ayberkenis/jskelet/releases/tag/v0.1.0

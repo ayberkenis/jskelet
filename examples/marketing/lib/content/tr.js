@@ -621,18 +621,24 @@ export default {
       title: "Ne değişti, ne zaman.",
       lead: "Her sürümde eklenen özellikler, değişen davranışlar ve düzeltilen hatalar. En üstteki sürüm bugün kurduğunuz sürüm.",
     },
-    currentLabel: "Güncel sürüm",
+    currentLabel: "Kurulu sürüm",
     currentNote: "Kurulum komutunun şu anda çözdüğü sürüm bu.",
+    npmLabel: "npm'deki son sürüm",
+    npmNewer: "npm'de v%s yayında; bu site henüz eski paketle çalışıyor.",
     dateLabel: "Yayın",
+    empty:
+      "Kurulu paketten sürüm notları okunamadı; bu yüzden burada listelenecek bir kayıt yok.",
     types: {
       added: "Eklendi",
       changed: "Değişti",
       fixed: "Düzeltildi",
       removed: "Kaldırıldı",
+      breaking: "Kırıcı",
     },
     statuses: {
       current: "güncel",
       previous: "önceki",
+      unreleased: "yayınlanmadı",
     },
     cta: {
       title: "Bu sürümü kurun",
@@ -640,156 +646,6 @@ export default {
       primary: "İndirme sayfası",
       secondary: "Belgeler",
     },
-    entries: [
-      {
-        version: "0.1.1",
-        date: "2026-08-30",
-        status: "current",
-        summary:
-          "Gezinme yapılandırılabilir hâle geldi ve dışa açık yüzey sabitlendi.",
-        groups: [
-          {
-            type: "added",
-            items: [
-              "Spekülasyon kurallarını ve sayfa geçişlerini site bazında açan navigation bölümü; temkinli ve orta seviyeleriyle.",
-              "Açık bir export haritası: sunucu, client, HTML ve etiket yardımcılarının her biri adlandırılmış bir giriş noktasına sahip.",
-              "Sürüm künyesini kurulu paketten okuyan indirme ve sürüm notları sayfalarıyla iki dilli pazarlama örneği.",
-            ],
-          },
-          {
-            type: "changed",
-            items: [
-              "Belgeler navigation bölümünü ve depo alt dizininden dağıtımı da kapsıyor.",
-            ],
-          },
-          {
-            type: "fixed",
-            items: [
-              "Sayfalar arası beyaz flaş kalktı: sayfa arka planı kök elemente taşındı ve gövde boyanmadan önce uygulanıyor.",
-              "Hareket azaltma tercihi artık yalnızca sayfa geçişlerini değil, dekoratif animasyonları da kapatıyor.",
-            ],
-          },
-        ],
-      },
-      {
-        version: "0.1.0",
-        date: "2026-08-24",
-        status: "previous",
-        summary:
-          "İlk herkese açık alpha. Yüzeyin tamamı yerinde: routing, render, island'lar, HTML cache, build hattı ve dev araçları.",
-        groups: [
-          {
-            type: "added",
-            items: [
-              "Yüklenemeyen görselleri ölçülerini koruyarak bir yer tutucuyla değiştiren güvenli görsel yardımcısı.",
-              "Prod dağıtımı için sağlık kontrolü ve Docker tarifleri.",
-            ],
-          },
-          {
-            type: "changed",
-            items: [
-              "Belgeler artık her kararın yalnızca kullanımını değil, gerekçesini de anlatıyor.",
-              "Middleware sırası uygulama fabrikasının başında sözleşme olarak belgelendi.",
-            ],
-          },
-          {
-            type: "fixed",
-            items: [
-              "Windows'ta dev sunucusu artık komşu dosyalar için yeniden başlamıyor; izleme olayları değişiklik zamanına göre eleniyor.",
-            ],
-          },
-        ],
-      },
-      {
-        version: "0.0.6",
-        date: "2026-07-12",
-        status: "previous",
-        summary:
-          "Cache büyüdü: stale-while-revalidate ve ısıtma birlikte geldi.",
-        groups: [
-          {
-            type: "added",
-            items: [
-              "Stale-while-revalidate: süresi dolan sayfa anında gönderilir ve arkada tazelenir.",
-              "Açılışta yapılandırılabilir bir yol listesini render eden ısıtma; eşzamanlılık ve aralık ayarlarıyla.",
-              "HIT, STALE ve MISS durumlarını ayrı bir araç olmadan ölçmeyi sağlayan cache durum başlığı.",
-            ],
-          },
-          {
-            type: "changed",
-            items: [
-              "Cache TTL'leri artık config'te merkezî olarak tanımlanabiliyor ve route'un kendi değerini eziyor.",
-            ],
-          },
-        ],
-      },
-      {
-        version: "0.0.5",
-        date: "2026-06-08",
-        status: "previous",
-        summary: "Hidrasyon varsayılan olmaktan çıkıp bilinçli bir seçim oldu.",
-        groups: [
-          {
-            type: "added",
-            items: [
-              "Üç hidrasyon stratejisi: varsayılan olarak görünürlük, global davranışlar için hemen, ağır ekler için boş zamanda.",
-              "İlk render'dan sonra DOM'a eklenen island'ları da bağlayan bir mutation observer.",
-              "Island'lar arasında küçük durum parçalarını paylaşmak için createStore().",
-            ],
-          },
-          {
-            type: "fixed",
-            items: [
-              "Gizli elementler de artık hidre oluyor: düzen kutuları olmadığı için gözlemci onları hiç bildirmiyordu.",
-            ],
-          },
-        ],
-      },
-      {
-        version: "0.0.4",
-        date: "2026-05-04",
-        status: "previous",
-        summary: "Build hattı, kurulu olmayan her şeyi atlamayı öğrendi.",
-        groups: [
-          {
-            type: "added",
-            items: [
-              "Hash'li varlık manifest'i ve manifest yokken hash'siz yollara dönen yardımcılar.",
-              "Tailwind, ikon sprite'ı, self-host fontlar ve görsel varyantları için opsiyonel build adımları.",
-              "Kod bölme: entry'ler ortak parçaları iki kez indirmek yerine paylaşıyor.",
-            ],
-          },
-          {
-            type: "changed",
-            items: [
-              "Opsiyonel peer bağımlılıklar artık framework'ün değil, uygulamanın kendi modüllerinden çözülüyor.",
-            ],
-          },
-        ],
-      },
-      {
-        version: "0.0.3",
-        date: "2026-03-22",
-        status: "previous",
-        summary: "Yapılandırma ve geliştirme deneyimi çalışma zamanını yakaladı.",
-        groups: [
-          {
-            type: "added",
-            items: [
-              "Tanıdık bir yol deseni sözdizimiyle redirect, rewrite ve başlık kuralları.",
-              "Route'ları, island'ları ve cache girdilerini incelemek için dev overlay'i ve rapor sayfası.",
-              "Yayına açılmamış bir siteyi token arkasında saklayan dev gate.",
-            ],
-          },
-          {
-            type: "changed",
-            items: [
-              "Bozuk bir config artık sunucuyu durdurmuyor: hata veren bölüm uyarıyla yok sayılıyor.",
-            ],
-          },
-        ],
-      },
-    ],
   },
 
   download: {

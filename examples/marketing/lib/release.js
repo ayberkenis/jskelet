@@ -75,6 +75,87 @@ export function getRelease() {
   return memo;
 }
 
+/** npm'deki `latest` etiketi; altı saatte birden fazla sorulmuyor. */
+const REGISTRY_TTL = 6 * 60 * 60 * 1000;
+
+/** @type {{ version: string | null, at: number } | null} */
+let published = null;
+
+/**
+ * npm'de yayınlanmış son sürüm. Kurulu sürümle karşılaştırılıyor: sitenin
+ * gösterdiği paketin gerçekten yayındaki paket olduğunu görmenin tek yolu.
+ *
+ * Kayıt defterine ulaşılamazsa `null` döner ve sayfa o satırı hiç basmaz —
+ * ağı olmayan bir kurulumda sürüm sayfası yine açılmalı. Sonuç render sırasında
+ * bir kez alınıp altı saat saklanıyor; HTML cache zaten sayfayı tuttuğu için
+ * pratikte istek başına ağ trafiği yok.
+ *
+ * @returns {Promise<{ version: string, newer: boolean } | null>}
+ */
+export async function getPublishedRelease() {
+  if (!published || Date.now() - published.at > REGISTRY_TTL) {
+    published = { version: await fetchLatest(), at: Date.now() };
+  }
+
+  if (!published.version) return null;
+
+  return {
+    version: published.version,
+    newer: isNewer(published.version, getRelease().version),
+  };
+}
+
+/**
+ * @returns {Promise<string | null>}
+ */
+async function fetchLatest() {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 3000);
+
+  try {
+    const response = await fetch(`https://registry.npmjs.org/${SPEC}/latest`, {
+      signal: controller.signal,
+      headers: { accept: "application/vnd.npm.install-v1+json, application/json" },
+    });
+
+    if (!response.ok) return null;
+
+    const body = await response.json();
+    return typeof body?.version === "string" ? body.version : null;
+  } catch {
+    // Ağ yok, kayıt defteri kapalı ya da zaman aşımı.
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Yalnızca major/minor/patch karşılaştırılır; ön sürüm etiketleri `latest`
+ * altında yayınlanmadığı için pratikte gelmiyor.
+ *
+ * @param {string} a
+ * @param {string} b
+ * @returns {boolean} a, b'den yeni mi
+ */
+function isNewer(a, b) {
+  const parse = (value) =>
+    String(value)
+      .split("-")[0]
+      .split(".")
+      .map((part) => Number.parseInt(part, 10) || 0);
+
+  const left = parse(a);
+  const right = parse(b);
+
+  for (let index = 0; index < 3; index += 1) {
+    const diff = (left[index] ?? 0) - (right[index] ?? 0);
+    if (diff) return diff > 0;
+  }
+
+  return false;
+}
+
 /**
  * @param {Record<string, string> | undefined} record
  * @returns {Dependency[]}

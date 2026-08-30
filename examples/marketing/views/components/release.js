@@ -29,19 +29,32 @@ const TYPES = {
     class:
       "border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-400/25 dark:bg-rose-400/10 dark:text-rose-200",
   },
+  breaking: {
+    icon: "Warning",
+    class:
+      "border-orange-300 bg-orange-50 text-orange-900 dark:border-orange-400/30 dark:bg-orange-400/10 dark:text-orange-100",
+  },
 };
 
 /**
  * Tek bir sürüm kaydı. Sol kolon künye, sağ kolon değişiklikler; mobilde
  * alt alta iner.
  *
- * @param {{ entry: { version: string, date: string, status: string,
- *   summary: string, groups: Array<{ type: string, items: string[] }> },
+ * Madde metinleri CHANGELOG.md'den geldiği için satır içi markdown taşıyor;
+ * `render` verildiğinde HTML'e çevirme işi ona bırakılır, verilmezse metin
+ * kaçırılarak basılır.
+ *
+ * @param {{ entry: { version: string, date?: string, unreleased?: boolean,
+ *   summary?: string, groups: Array<{ type: string, items: string[] }> },
  *   labels: { dateLabel: string, types: Record<string, string>,
- *   statuses: Record<string, string> }, current?: boolean }} props
+ *   statuses: Record<string, string> }, current?: boolean,
+ *   render?: (item: string) => string }} props
  * @returns {string}
  */
-export function changelogEntry({ entry, labels, current = false }) {
+export function changelogEntry({ entry, labels, current = false, render }) {
+  const status = entry.unreleased ? "unreleased" : current ? "current" : "previous";
+  const highlight = current && !entry.unreleased;
+
   const groups = entry.groups
     .map((group) => {
       const type = TYPES[group.type] ?? TYPES.changed;
@@ -51,7 +64,7 @@ export function changelogEntry({ entry, labels, current = false }) {
           (item) =>
             `<li class="flex gap-2.5">
               <span aria-hidden="true" class="mt-2 size-1.5 shrink-0 rounded-full bg-slate-300 dark:bg-slate-600"></span>
-              <span>${esc(item)}</span>
+              <span>${render ? render(item) : esc(item)}</span>
             </li>`,
         )
         .join("");
@@ -67,7 +80,7 @@ export function changelogEntry({ entry, labels, current = false }) {
 
   return `<article id="v${esc(entry.version)}" class="${cn(
     "grid gap-6 rounded-3xl border p-6 sm:p-8 lg:grid-cols-[13rem_1fr]",
-    current
+    highlight
       ? "border-cyan-300 bg-gradient-to-br from-cyan-50 to-white shadow-xl shadow-cyan-950/5 dark:border-cyan-400/30 dark:from-cyan-400/10 dark:to-white/[0.03]"
       : "border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-white/[0.03]",
   )}">
@@ -75,28 +88,45 @@ export function changelogEntry({ entry, labels, current = false }) {
       <div class="flex items-center gap-2.5">
         <span class="${cn(
           "inline-flex size-9 items-center justify-center rounded-xl",
-          current
+          highlight
             ? "bg-gradient-to-br from-cyan-600 to-indigo-600 text-white"
             : "bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-slate-300",
-        )}">${icon({ name: current ? "RocketLaunch" : "Tag", size: 18 })}</span>
-        <p class="m-0 font-mono text-2xl font-bold tracking-tight">v${esc(entry.version)}</p>
+        )}">${icon({
+          name: highlight ? "RocketLaunch" : entry.unreleased ? "GitBranch" : "Tag",
+          size: 18,
+        })}</span>
+        <p class="m-0 font-mono text-2xl font-bold tracking-tight">${
+          entry.unreleased
+            ? esc(labels.statuses.unreleased ?? "unreleased")
+            : `v${esc(entry.version)}`
+        }</p>
       </div>
 
       <span class="${cn(
         "inline-flex w-fit items-center rounded-full border px-2.5 py-1 text-[11px] font-bold tracking-wide uppercase",
-        current
+        highlight
           ? "border-cyan-300 bg-white/70 text-cyan-800 dark:border-cyan-400/30 dark:bg-white/10 dark:text-cyan-200"
           : "border-slate-200 bg-slate-50 text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-slate-300",
-      )}">${esc(labels.statuses[entry.status] ?? entry.status)}</span>
+      )}">${esc(labels.statuses[status] ?? status)}</span>
 
-      <p class="m-0 text-xs text-slate-600 dark:text-slate-400">
-        <span class="block font-bold tracking-[0.16em] uppercase">${esc(labels.dateLabel)}</span>
-        <time datetime="${esc(entry.date)}" class="font-mono">${esc(entry.date)}</time>
-      </p>
+      ${
+        entry.date
+          ? `<p class="m-0 text-xs text-slate-600 dark:text-slate-400">
+              <span class="block font-bold tracking-[0.16em] uppercase">${esc(labels.dateLabel)}</span>
+              <time datetime="${esc(entry.date)}" class="font-mono">${esc(entry.date)}</time>
+            </p>`
+          : ""
+      }
     </div>
 
     <div class="grid gap-6">
-      <p class="m-0 text-base/7 font-medium text-slate-800 dark:text-slate-200">${esc(entry.summary)}</p>
+      ${
+        entry.summary
+          ? `<p class="m-0 text-base/7 font-medium text-slate-800 dark:text-slate-200">${
+              render ? render(entry.summary) : esc(entry.summary)
+            }</p>`
+          : ""
+      }
       <div class="grid gap-5 sm:grid-cols-2">${groups}</div>
     </div>
   </article>`;

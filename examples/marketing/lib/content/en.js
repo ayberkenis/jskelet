@@ -632,18 +632,25 @@ export default {
       title: "What changed, and when.",
       lead: "Every release with the features added, the behaviour changed and the bugs fixed. The version at the top is the one you install today.",
     },
-    currentLabel: "Current release",
+    currentLabel: "Installed release",
     currentNote: "This is the version the install command resolves to right now.",
+    npmLabel: "Latest on npm",
+    npmNewer:
+      "npm already serves v%s; this site is still running the older package.",
     dateLabel: "Released",
+    empty:
+      "The changelog file could not be read from the installed package, so there is nothing to list here.",
     types: {
       added: "Added",
       changed: "Changed",
       fixed: "Fixed",
       removed: "Removed",
+      breaking: "Breaking",
     },
     statuses: {
       current: "current",
       previous: "previous",
+      unreleased: "unreleased",
     },
     cta: {
       title: "Install this release",
@@ -651,165 +658,6 @@ export default {
       primary: "Download page",
       secondary: "Documentation",
     },
-    /**
-     * Örnek verisi: depoda henüz bir CHANGELOG.md yok, bu liste sürüm
-     * sayfasının nasıl kurulduğunu göstermek için burada duruyor. Gerçek bir
-     * projede aynı dizi CHANGELOG.md'den ya da GitHub Releases'ten beslenir;
-     * sayfanın geri kalanı hiç değişmez.
-     */
-    entries: [
-      {
-        version: "0.1.1",
-        date: "2026-08-30",
-        status: "current",
-        summary:
-          "Navigation became configurable and the export surface was pinned down.",
-        groups: [
-          {
-            type: "added",
-            items: [
-              "A navigation section that turns speculation rules and view transitions on per site, with conservative and moderate levels.",
-              "An explicit export map: the server, client, HTML and tag helpers each have a named entry point.",
-              "A bilingual marketing example with download and changelog pages that read their version from the installed package.",
-            ],
-          },
-          {
-            type: "changed",
-            items: [
-              "Documentation covers the navigation section and deploying from a repository subdirectory.",
-            ],
-          },
-          {
-            type: "fixed",
-            items: [
-              "No more white flash between pages: the page background moved onto the root element, so it applies before the body paints.",
-              "Reduced-motion preferences now switch off the decorative animations as well, not just page transitions.",
-            ],
-          },
-        ],
-      },
-      {
-        version: "0.1.0",
-        date: "2026-08-24",
-        status: "previous",
-        summary:
-          "The first public alpha. The full surface is in place: routing, rendering, islands, the HTML cache, the build pipeline and the dev tooling.",
-        groups: [
-          {
-            type: "added",
-            items: [
-              "A safe-image helper that swaps failed images for a placeholder while preserving their dimensions.",
-              "Health check and Docker recipes for production deployment.",
-            ],
-          },
-          {
-            type: "changed",
-            items: [
-              "Documentation now explains the reasoning behind each decision, not only its usage.",
-              "The middleware order is documented as a contract at the top of the app factory.",
-            ],
-          },
-          {
-            type: "fixed",
-            items: [
-              "On Windows the dev server no longer restarts on neighbouring files, because watch events are filtered by modification time.",
-            ],
-          },
-        ],
-      },
-      {
-        version: "0.0.6",
-        date: "2026-07-12",
-        status: "previous",
-        summary:
-          "The cache grew up: stale-while-revalidate and prewarming landed together.",
-        groups: [
-          {
-            type: "added",
-            items: [
-              "Stale-while-revalidate: an expired page ships immediately and refreshes in the background.",
-              "Prewarming that renders a configurable list of paths at boot, with concurrency and interval settings.",
-              "A cache status response header so hits, stale hits and misses can be measured without extra tooling.",
-            ],
-          },
-          {
-            type: "changed",
-            items: [
-              "Cache TTLs can now be declared centrally in the config and override a route's own value.",
-            ],
-          },
-        ],
-      },
-      {
-        version: "0.0.5",
-        date: "2026-06-08",
-        status: "previous",
-        summary:
-          "Hydration became a deliberate choice instead of a default.",
-        groups: [
-          {
-            type: "added",
-            items: [
-              "Three hydration strategies: visibility-based by default, eager for global behaviour, idle for heavy extras.",
-              "A mutation observer that hydrates islands added to the DOM after the initial render.",
-              "createStore() for sharing small pieces of state between islands.",
-            ],
-          },
-          {
-            type: "fixed",
-            items: [
-              "Hidden elements now hydrate too: they have no layout box, so the observer would never report them.",
-            ],
-          },
-        ],
-      },
-      {
-        version: "0.0.4",
-        date: "2026-05-04",
-        status: "previous",
-        summary:
-          "The build pipeline learned to skip whatever is not installed.",
-        groups: [
-          {
-            type: "added",
-            items: [
-              "A hashed asset manifest, with helpers that fall back to unhashed paths when it is missing.",
-              "Optional build steps for Tailwind, the icon sprite, self-hosted fonts and image variants.",
-              "Code splitting, so entries share common chunks instead of downloading them twice.",
-            ],
-          },
-          {
-            type: "changed",
-            items: [
-              "Optional peer dependencies are resolved from the application's own modules rather than the framework's.",
-            ],
-          },
-        ],
-      },
-      {
-        version: "0.0.3",
-        date: "2026-03-22",
-        status: "previous",
-        summary:
-          "Configuration and the dev experience caught up with the runtime.",
-        groups: [
-          {
-            type: "added",
-            items: [
-              "Redirects, rewrites and header rules with a familiar path pattern syntax.",
-              "A development overlay and a report page for inspecting routes, islands and cache entries.",
-              "A dev gate that hides an unreleased site behind a token.",
-            ],
-          },
-          {
-            type: "changed",
-            items: [
-              "A broken config no longer stops the server: the failing section is ignored with a warning.",
-            ],
-          },
-        ],
-      },
-    ],
   },
 
   download: {

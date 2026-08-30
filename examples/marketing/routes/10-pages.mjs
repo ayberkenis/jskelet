@@ -9,6 +9,7 @@
  * geliyor ve buradaki değeri ezer. İkisini birlikte yazmanın faydası: config'i
  * olmayan bir kurulumda da makul bir davranış kalıyor.
  */
+import { getChangelog, renderChange } from "../lib/changelog.js";
 import { getContent } from "../lib/content.js";
 import {
   DOCS,
@@ -20,7 +21,7 @@ import {
 } from "../lib/docs.js";
 import { LOCALES, PAGES, alternatePaths, localePath } from "../lib/i18n.js";
 import { getPayload } from "../lib/payload.js";
-import { COMMANDS, getRelease } from "../lib/release.js";
+import { COMMANDS, getPublishedRelease, getRelease } from "../lib/release.js";
 
 const HOUR = 3600;
 const SITE_URL = process.env.SITE_URL ?? "http://localhost:3000";
@@ -66,7 +67,7 @@ export default function register(app, { route, notFound }) {
               // bağlantıyı işaretlemesi için yolu veriyle taşımak gerekiyor.
               pathname,
               paths,
-              ...pageData(key, t, locale),
+              ...(await pageData(key, t, locale)),
             },
           }),
           { revalidate: HOUR },
@@ -174,7 +175,7 @@ function localizedPaths(locale) {
  * @param {import("../lib/i18n.js").Locale} locale
  * @returns {object}
  */
-function pageData(key, t, locale) {
+async function pageData(key, t, locale) {
   switch (key) {
     case "home":
       return {
@@ -220,7 +221,12 @@ function pageData(key, t, locale) {
     }
 
     case "changelog":
-      return { entries: t.changelog.entries, release: getRelease() };
+      return {
+        entries: getChangelog(),
+        release: getRelease(),
+        published: await getPublishedRelease(),
+        renderChange,
+      };
 
     case "download":
       return { release: getRelease(), commands: COMMANDS };

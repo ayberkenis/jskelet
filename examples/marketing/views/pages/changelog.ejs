@@ -1,7 +1,8 @@
 <%#
-  Sürüm notları. En üstteki kayıt kurulu sürümle karşılaştırılıyor: künye
-  `lib/release.js` üzerinden paketten okunduğu için "güncel" etiketi listeye
-  elle yazılmıyor, hesaplanıyor.
+  Sürüm notları. Liste kurulu paketin CHANGELOG.md dosyasından ayrıştırılıyor
+  (`lib/changelog.js`), künye `lib/release.js` üzerinden paketten okunuyor;
+  "güncel" etiketi listeye elle yazılmıyor, hesaplanıyor. npm'deki `latest`
+  etiketi de gösteriliyor — kayıt defterine ulaşılamazsa o satır hiç basılmaz.
 -%>
 <section class="glow relative overflow-hidden border-b border-slate-200 dark:border-white/10">
   <div class="grid-surface pointer-events-none absolute inset-0" aria-hidden="true"></div>
@@ -19,8 +20,24 @@
         </span>
       </div>
 
+      <% if (published) { %>
+      <div class="inline-flex items-center gap-3 rounded-2xl border border-slate-200 bg-white/70 px-5 py-4 shadow-sm backdrop-blur dark:border-white/10 dark:bg-white/[0.04]">
+        <span class="inline-flex size-10 items-center justify-center rounded-xl bg-slate-100 text-slate-700 dark:bg-white/10 dark:text-slate-200">
+          <%- icon({ name: "Package", size: 20 }) %>
+        </span>
+        <span class="grid">
+          <span class="text-[11px] font-bold tracking-[0.16em] text-slate-600 uppercase dark:text-slate-400"><%= t.changelog.npmLabel %></span>
+          <span class="font-mono text-xl font-bold">v<%= published.version %></span>
+        </span>
+      </div>
+      <% } %>
+
       <p class="m-0 max-w-sm text-xs/5 text-slate-600 dark:text-slate-400">
+        <% if (published && published.newer) { %>
+        <%= t.changelog.npmNewer.replace("%s", published.version) %>
+        <% } else { %>
         <%= t.changelog.currentNote %>
+        <% } %>
       </p>
     </div>
   </div>
@@ -28,13 +45,19 @@
 
 <section class="wrapper py-14">
   <div class="grid gap-6">
-    <% entries.forEach(function (entry) { %>
+    <% if (!entries.length) { %>
+    <p class="m-0 rounded-3xl border border-slate-200 bg-white p-6 text-sm/6 text-slate-600 dark:border-white/10 dark:bg-white/[0.03] dark:text-slate-400">
+      <%= t.changelog.empty %>
+    </p>
+    <% } %>
+    <% for (const entry of entries) { %>
     <%- changelogEntry({
       entry,
       labels: t.changelog,
       current: entry.version === release.version,
+      render: renderChange,
     }) %>
-    <% }); %>
+    <% } %>
   </div>
 </section>
 
