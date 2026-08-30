@@ -4,6 +4,7 @@
  * HTML döndürmedikleri için `route()` kullanılmaz — `route()` layout içinde EJS
  * render eder. Düz Express handler'ı yeterli, cache başlığı elle yazılır.
  */
+import { DOCS } from "../lib/docs.js";
 import { DEFAULT_LOCALE, LOCALES, PAGES, localePath } from "../lib/i18n.js";
 
 const SITE_URL = process.env.SITE_URL ?? "http://localhost:3000";
@@ -28,7 +29,14 @@ export default function register(app) {
     // Sitemap, prewarm ve route kaydı aynı yol tablosundan besleniyor;
     // ayrıştıklarında ısıtılan sayfa ile indekslenen sayfa farklı oluyor ve bu
     // fark gözden kaçıyor.
-    const urls = Object.values(PAGES)
+    const basePaths = [
+      ...Object.values(PAGES),
+      // Belge sayfaları da dil önekli ve alternatifli: bölümlerin tamamı
+      // indekslenebilir olmalı, dizin sayfası tek başına yeterli değil.
+      ...DOCS.map((doc) => `${PAGES.docs}/${doc.slug}`),
+    ];
+
+    const urls = basePaths
       .map((basePath) => {
         // Her dil kendi `<url>` girdisini alır ama alternatif listesi ortak:
         // arama motoru bir sayfanın diğer dildeki karşılığını buradan öğrenir.

@@ -161,6 +161,11 @@ Gösterdikleri:
 - **Prewarm:** ısıtma turunun ilerlemesi; panelden elle tetiklenebilir, tek tek
   yollar tekrar denenebilir.
 - **Süreç:** pid, Node sürümü, uptime, RSS ve heap kullanımı.
+- **Sürüm:** kurulu JSkelet sürümü ve npm'deki `latest` ile karşılaştırması.
+  Yeni bir sürüm varsa **Server** sekmesinde `update` rozeti ve yükseltme
+  komutunu kopyalayan bir satır çıkar. Yoklama açılıştan 1,5 saniye sonra bir
+  kez yapılır, sonucu 6 saat boyunca `os.tmpdir()` içinde saklanır ve ağ yoksa
+  sessizce atlanır. `JSKELET_VERSION_CHECK=0` ile tamamen kapatılır.
 
 Isıtma istekleri (`user-agent: jskelet-prewarm`) hem terminalden hem istek
 listesinden filtrelenir: yüzlerce istek görünümü doldurmasın. İlerleme baloncuğun

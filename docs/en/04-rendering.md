@@ -53,7 +53,7 @@ normal flow because the dev server restarts the process.
 
 1. `jskelet.config.mjs` → if `layout` is given, it is used. The path is
    resolved relative to the **parent directory of the views directory**: if
-   `views` is the default, `layout: "views/ozel.ejs"` → `<root>/views/ozel.ejs`.
+   `views` is the default, `layout: "views/custom.ejs"` → `<root>/views/custom.ejs`.
 2. If it is not given and `views/layout.ejs` exists, that is used.
 3. If that does not exist either, the framework's own minimal layout is used
    (`node_modules/jskelet/src/templates/layout.ejs`, also reachable through the
@@ -198,8 +198,8 @@ Rules:
   template locals; the components' own files come later and silently overwrite
   it.
 - If the same name is defined in two different component files a warning is
-  printed and **the second one wins**: `[components] 'card' iki kez tanımlı:
-  a.js ve b.js — ikincisi kazanıyor.`
+  printed and **the second one wins**: `[components] 'card' is defined twice:
+  a.js and b.js — the second one wins.`
 - If the `views/components` directory does not exist the component registry
   stays empty; a project that uses no components works fine too.
 
@@ -272,8 +272,8 @@ all return HTML strings and are emitted from EJS with `<%- %>`.
 
 ```js
 link({
-  href: "/hakkinda",
-  text: "Hakkında",
+  href: "/about",
+  text: "About",
   class: "font-semibold",
   // optional: html, title, ariaLabel, target, rel, attrs
 });
@@ -407,7 +407,7 @@ return {
   metadata: {
     title: article.title,
     description: article.summary,
-    canonical: `/haber/${article.slug}`,
+    canonical: `/news/${article.slug}`,
     openGraph: {
       type: "article",
       image: article.cover,
@@ -444,8 +444,8 @@ hooks: {
   metadata() {
     return {
       titleTemplate: "%s | JSkelet",
-      description: "JSkelet ile kurulmuş bir site.",
-      siteUrl: "https://ornek.com",
+      description: "A site built with JSkelet.",
+      siteUrl: "https://example.com",
     };
   },
 }

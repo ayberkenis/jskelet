@@ -164,6 +164,11 @@ What it shows:
 - **Prewarm:** the progress of the warming round; it can be triggered manually
   from the panel, and individual paths can be retried.
 - **Process:** pid, Node version, uptime, RSS and heap usage.
+- **Version:** the installed JSkelet version compared against the `latest` tag
+  on npm. When a newer release exists, the **Server** tab grows an `update` chip
+  and a line that copies the upgrade command. The lookup runs once, 1.5 seconds
+  after boot, is cached for six hours in `os.tmpdir()` and is skipped silently
+  when the registry is unreachable. Set `JSKELET_VERSION_CHECK=0` to disable it.
 
 Warming requests (`user-agent: jskelet-prewarm`) are filtered out of both the
 terminal and the request list: hundreds of requests should not flood the view.

@@ -87,6 +87,40 @@ export const DEFAULT_NAVIGATION = {
 export const DEFAULT_NAVIGATION_EXCLUDE = ["/api/*", "/_fragment/*"];
 
 /**
+ * Güvenlik ayarları.
+ *
+ * `trustProxy` varsayılan olarak açık, çünkü JSkelet uygulamaları neredeyse
+ * her zaman bir ters proxy arkasında koşuyor ve doğru protokol/IP buna bağlı.
+ * Ama doğrudan internete açık bir sunucuda bu, istemcinin `X-Forwarded-For`
+ * uydurabilmesi demek — rate limit ve audit log girdiğinde kapatılmalı.
+ *
+ * `csrf.enabled` açık: framework gövdeyi kendisi ayrıştırdığı için bu yüzey
+ * onun sorumluluğu. Kontrol yalnızca **çapraz site olduğu belli** istekleri
+ * reddeder (`Origin` uyuşmuyor ya da `Sec-Fetch-Site: cross-site`); başlık
+ * hiç yoksa geçer, böylece webhook ve sunucudan sunucuya çağrılar bozulmaz.
+ *
+ * `csrf.token` kapalı: çift gönderim token'ı `Origin` göndermeyen eski
+ * tarayıcılar için ikinci katman ve formlara `csrfField()` eklenmesini
+ * gerektiriyor, yani açılması bilinçli bir karar olmalı.
+ */
+export const DEFAULT_SECURITY = {
+  trustProxy: true,
+  /** @type {string | null} */
+  cookieSecret: null,
+  csrf: {
+    enabled: true,
+    token: false,
+    /** Ek olarak kabul edilen origin'ler (ör. ayrı bir admin alan adı). */
+    allowedOrigins: /** @type {string[]} */ ([]),
+    /** Kontrolden muaf yollar — webhook uçları buraya yazılır. */
+    exclude: /** @type {string[]} */ ([]),
+    cookieName: "csrf_token",
+    fieldName: "_csrf",
+    headerName: "x-csrf-token",
+  },
+};
+
+/**
  * Markalama. Header adı ve dev overlay yolu tek yerden değişsin diye
  * config'ten okunur — fork eden proje kendi adını verebilir.
  */

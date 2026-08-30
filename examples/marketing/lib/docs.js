@@ -30,6 +30,7 @@ import { renderMarkdown } from "./markdown.js";
  * @typedef {object} DocPage
  * @property {string} slug
  * @property {string} group
+ * @property {string} index Sıra numarası: `01`, `02`…
  * @property {string} title Belgenin `#` başlığı
  * @property {string} intro İlk paragraf; meta açıklaması olarak kullanılır
  * @property {string} html Gövde
@@ -107,6 +108,14 @@ export const DOCS = [
     group: "reference",
     files: { en: "en/11-migration.md", tr: "11-tasima.md" },
   },
+  {
+    slug: "dashboards",
+    group: "reference",
+    files: {
+      en: "en/12-dashboards-and-sessions.md",
+      tr: "12-panel-ve-oturum.md",
+    },
+  },
 ];
 
 /**
@@ -172,18 +181,43 @@ export function docNavigation(locale, labels, groups) {
 }
 
 /**
+ * Belge dizinindeki kartlar. Sözlükteki kısa açıklamalar `DOCS` sırasıyla
+ * eşleştiriliyor; sıralamayı iki yerde tutmak, bir gün ayrışacak bir tekrar.
+ *
+ * @param {Locale} locale
+ * @param {Array<{ slug: string, title: string, body: string }>} items
+ * @returns {Array<{ slug: string, title: string, body: string, index: string,
+ *   href: string }>}
+ */
+export function docSummaries(locale, items) {
+  return DOCS.map((doc, position) => {
+    const item = items.find((candidate) => candidate.slug === doc.slug);
+
+    return {
+      slug: doc.slug,
+      title: item?.title ?? doc.slug,
+      body: item?.body ?? "",
+      index: docIndex(position),
+      href: docPath(locale, doc.slug),
+    };
+  });
+}
+
+/**
  * Bir belgenin render edilmiş hâli. Süreç belleğinde saklanıyor: HTML cache
  * zaten sayfanın tamamını tutuyor, ama cache boşaltıldığında ya da bir fragment
  * ucu aynı belgeyi istediğinde dosyayı ikinci kez ayrıştırmanın anlamı yok.
  *
  * @param {Locale} locale
  * @param {string} slug
- * @param {{ copy?: { idle: string, done: string, failed: string } }} [options]
+ * @param {{ copy?: { idle: string, done: string, failed: string },
+ *   labels?: Record<string, string> }} [options]
  * @returns {DocPage | null}
  */
 export function getDoc(locale, slug, options = {}) {
-  const entry = DOCS.find((doc) => doc.slug === slug);
-  if (!entry) return null;
+  const position = DOCS.findIndex((doc) => doc.slug === slug);
+  if (position === -1) return null;
+  const entry = DOCS[position];
 
   const key = `${locale}:${slug}`;
   const hit = cache.get(key);
@@ -202,13 +236,15 @@ export function getDoc(locale, slug, options = {}) {
 
   const rendered = renderMarkdown(source.text, {
     copy: options.copy,
-    resolveLink: (href) => resolveDocLink(href, locale),
+    resolveLink: (href, label) =>
+      resolveDocLink(href, label, locale, options.labels ?? {}),
   });
 
   /** @type {DocPage} */
   const page = {
     slug: entry.slug,
     group: entry.group,
+    index: docIndex(position),
     title: rendered.title || slug,
     intro: rendered.intro,
     html: rendered.html,
@@ -256,27 +292,53 @@ export function docSiblings(locale, slug, labels) {
 }
 
 /**
- * Markdown bağlantısını site URL'ine çevirir. Belge dosyası tanınmıyorsa
- * (`../README.md`, harici adres) olduğu gibi bırakılır.
+ * Sıra numarası. Belgeler numaralı dosya adlarıyla yazıldı ve okuyucu "kaçıncı
+ * bölümdeyim" bilgisini kaybetmemeli; numarayı dosya adından ayıklamak yerine
+ * konumdan üretmek, iki dilin dosya adları farklı olduğu için daha güvenli.
  *
- * @param {string} href
- * @param {Locale} locale
+ * @param {number} position
  * @returns {string}
  */
-function resolveDocLink(href, locale) {
+function docIndex(position) {
+  return String(position + 1).padStart(2, "0");
+}
+
+/** Görünen metni dosya adı olan bağlantılar; okunur bir başlıkla değişiyor. */
+const FILENAME_LABEL = /^(?:\d{2}-[a-z0-9-]+|README)\.md$/;
+
+/**
+ * Markdown bağlantısını site URL'ine çevirir. Belge dosyası tanınmıyorsa
+ * (harici adres, depodaki başka bir dosya) olduğu gibi bırakılır.
+ *
+ * Bağlantı metni de değişebiliyor: belgeler birbirine sık sık dosya adıyla
+ * atıfta bulunuyor ("bkz. 06-cache.md") ve bir web sayfasında dosya adı okumak
+ * anlamsız. Yalnızca metnin **tamamı** bir dosya adıysa değiştiriliyor; cümle
+ * içine yerleşmiş bir bağlantı metni yazarın seçimi.
+ *
+ * @param {string} href
+ * @param {string} label
+ * @param {Locale} locale
+ * @param {Record<string, string>} labels Slug → kısa başlık
+ * @returns {string | { href: string, label?: string }}
+ */
+function resolveDocLink(href, label, locale, labels) {
   if (/^[a-z]+:/i.test(href) || href.startsWith("#")) return href;
 
   const [target, hash] = href.split("#");
   const file = path.posix.basename(target);
+  const suffix = hash ? `#${hash}` : "";
 
   if (file === "README.md") {
-    return localePath(locale, PAGES.docs) + (hash ? `#${hash}` : "");
+    return { href: localePath(locale, PAGES.docs) + suffix };
   }
 
   const slug = FILE_TO_SLUG.get(file);
   if (!slug) return href;
 
-  return docPath(locale, slug) + (hash ? `#${hash}` : "");
+  return {
+    href: docPath(locale, slug) + suffix,
+    label: FILENAME_LABEL.test(label.trim()) ? labels[slug] : undefined,
+  };
 }
 
 /**

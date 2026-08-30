@@ -91,13 +91,13 @@ switch (command) {
   }
 
   default: {
-    const known = command ? `bilinmeyen komut: ${command}\n\n` : "";
+    const known = command ? `unknown command: ${command}\n\n` : "";
     process.stderr.write(
-      `${known}kullanım: jskelet <dev|build|start|init>\n\n` +
-        "  dev     build watch + sunucu (canlı yenileme, dev overlay)\n" +
-        "  build   prod build\n" +
-        "  start   prod sunucu\n" +
-        "  init    bulunduğun dizine minimal iskelet kurar\n",
+      `${known}usage: jskelet <dev|build|start|init>\n\n` +
+        "  dev     build watch + server (live reload, dev overlay)\n" +
+        "  build   production build\n" +
+        "  start   production server\n" +
+        "  init    scaffold a minimal skeleton in the current directory\n",
     );
     process.exit(command ? 1 : 0);
   }

@@ -108,7 +108,7 @@ Account for these from the start in your migration plan:
 **Next.js (App Router):**
 
 ```jsx
-// app/haber/[slug]/page.jsx
+// app/news/[slug]/page.jsx
 import { notFound } from "next/navigation";
 import Image from "next/image";
 import { getArticle } from "@/lib/api";
@@ -120,7 +120,7 @@ export async function generateMetadata({ params }) {
   return {
     title: article?.title,
     description: article?.summary,
-    alternates: { canonical: `/haber/${params.slug}` },
+    alternates: { canonical: `/news/${params.slug}` },
   };
 }
 
@@ -141,12 +141,12 @@ export default async function Page({ params }) {
 **JSkelet:**
 
 ```js
-// routes/50-haber.mjs
+// routes/50-news.mjs
 import { getArticle } from "@/lib/api.js";
 
 export default function register(app, { route, notFound }) {
   app.get(
-    "/haber/:slug",
+    "/news/:slug",
     route(
       async ({ params }) => {
         const article = await getArticle(params.slug);
@@ -158,7 +158,7 @@ export default function register(app, { route, notFound }) {
           metadata: {
             title: article.title,
             description: article.summary,
-            canonical: `/haber/${params.slug}`,
+            canonical: `/news/${params.slug}`,
             openGraph: { type: "article", image: article.cover },
           },
         };
@@ -267,8 +267,8 @@ the order in mind:
 ```
 routes/
 ├── 00-health.mjs        health check
-├── 10-pages.mjs         static paths: /, /hakkinda
-├── 50-haber.mjs         /haber/:slug
+├── 10-pages.mjs         static paths: /, /about
+├── 50-news.mjs          /news/:slug
 └── 99-catch-all.mjs     /:slug  (if any, last of all)
 ```
 

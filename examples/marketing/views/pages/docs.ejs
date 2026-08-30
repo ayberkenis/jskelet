@@ -1,53 +1,88 @@
-<section class="glow relative overflow-hidden border-b border-slate-200 dark:border-white/10">
-  <div class="grid-surface pointer-events-none absolute inset-0" aria-hidden="true"></div>
-  <div class="wrapper relative py-20 sm:py-28">
+<%#
+  Belge dizini. Belge sayfalarıyla aynı kabuğu kullanıyor: okuyucu dizinden bir
+  bölüme geçtiğinde sol gezinme yerinde kalıyor, sayfa yeniden kurulmuyor gibi
+  hissettiriyor. Kartlar artık GitHub'a değil sitenin kendi sayfalarına gidiyor.
+-%>
+<div class="mx-auto grid max-w-[95rem] gap-x-10 px-5 lg:grid-cols-[15rem_minmax(0,1fr)]">
+  <details class="mt-6 rounded-2xl border border-slate-200 bg-white lg:hidden dark:border-white/10 dark:bg-white/[0.035]">
+    <summary class="flex cursor-pointer items-center gap-2 px-4 py-3 text-sm font-semibold marker:content-['']">
+      <%- icon({ name: "SidebarSimple", size: 16 }) %>
+      <%= t.docs.shell.browse %>
+    </summary>
+    <div class="border-t border-slate-200 p-3 dark:border-white/10">
+      <%# Aynı adı taşıyan iki `<nav>` ekran okuyucuda ayırt edilemez. %>
+      <%- docsSidebar({
+        groups: docsNav,
+        pathname,
+        labels: { ...t.docs.shell, nav: t.docs.shell.browse },
+        release,
+        indexHref: paths.docs,
+        indexLabel: t.docs.shell.overview,
+      }) %>
+    </div>
+  </details>
+
+  <aside class="hidden lg:block">
+    <div class="sticky top-[4.5rem] max-h-[calc(100vh-5.5rem)] overflow-y-auto py-10 pr-2">
+      <%- docsSidebar({
+        groups: docsNav,
+        pathname,
+        labels: t.docs.shell,
+        release,
+        indexHref: paths.docs,
+        indexLabel: t.docs.shell.overview,
+      }) %>
+    </div>
+  </aside>
+
+  <div class="min-w-0 py-10 lg:py-14">
     <%- sectionHead(t.docs.hero) %>
-  </div>
-</section>
 
-<section class="wrapper py-14">
-  <div class="grid gap-4 sm:grid-cols-2">
-    <%#
-      Belge bağlantıları depodaki `docs/` dizinine gidiyor: framework npm'de
-      olmadığı için tek kanonik adres GitHub. Belge dosyaları Türkçe, bu yüzden
-      dosya adları iki dilde de aynı.
-    -%>
-    <% docs.forEach(function (item) { %>
-    <%- link({
-      href: `https://github.com/ayberkenis/jskelet/blob/master/docs/${item.file}.md`,
-      class: "group relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition duration-300 hover:-translate-y-1 hover:border-cyan-400 hover:shadow-xl hover:shadow-cyan-950/5 dark:border-white/10 dark:bg-white/[0.035] dark:hover:border-cyan-300/40",
-      html: `<span class="font-mono text-xs font-bold text-cyan-700 dark:text-cyan-300">${esc(item.file)}</span>
-        <span class="mt-3 block text-lg font-semibold tracking-tight">${esc(item.title)}</span>
-        <span class="mt-2 block text-sm/6 text-slate-600 dark:text-slate-300">${esc(item.body)}</span>
-        <span class="mt-5 block text-xs font-bold tracking-wide text-slate-600 uppercase group-hover:text-cyan-700 dark:text-slate-400 dark:group-hover:text-cyan-300">${esc(t.docs.openLabel)} →</span>`,
-    }) %>
+    <div class="mt-8 flex flex-wrap gap-3">
+      <%- buttonLink({
+        href: docsNav[0].items[0].href,
+        text: t.docs.shell.start,
+        icon: "ArrowRight",
+      }) %>
+      <%- buttonLink({ href: paths.download, text: t.ui.download, variant: "ghost" }) %>
+    </div>
+
+    <%# Gruplar dizinde de korunuyor: sidebar ile aynı zihinsel harita. %>
+    <% docsNav.forEach(function (group) { %>
+    <section class="mt-12">
+      <h2 class="m-0 text-xs font-bold tracking-[0.16em] text-slate-500 uppercase dark:text-slate-400">
+        <%= group.title %>
+      </h2>
+      <div class="mt-4 grid gap-4 sm:grid-cols-2">
+        <% group.items.forEach(function (item) { %>
+        <%- docsCard({
+          href: item.href,
+          index: summaries[item.slug].index,
+          title: item.label,
+          body: summaries[item.slug].body,
+          hint: t.docs.openLabel,
+        }) %>
+        <% }); %>
+      </div>
+    </section>
     <% }); %>
-  </div>
 
-  <div class="mt-10 grid gap-4 sm:grid-cols-2">
-    <%- codeBlock({
-      label: t.docs.examples.label,
-      copy: { idle: t.ui.copy, done: t.ui.copied, failed: t.ui.copyFailed },
-      code: "npm --prefix examples/marketing install\nnpm --prefix examples/marketing run dev",
-    }) %>
+    <div class="mt-14 grid gap-4 sm:grid-cols-2">
+      <%- codeBlock({
+        label: t.docs.examples.label,
+        copy: { idle: t.ui.copy, done: t.ui.copied, failed: t.ui.copyFailed },
+        code: "npm --prefix examples/marketing install\nnpm --prefix examples/marketing run dev",
+      }) %>
 
-    <div class="rounded-2xl border border-slate-200 bg-white p-6 dark:border-white/10 dark:bg-white/[0.035]">
-      <h2 class="m-0 text-base font-semibold"><%= t.docs.examples.title %></h2>
-      <p class="mt-2 mb-0 text-sm/6 text-slate-600 dark:text-slate-300">
-        <%= t.docs.examples.body %>
-      </p>
-      <p class="mt-3 mb-0 text-sm/6 text-slate-600 dark:text-slate-300">
-        <%= t.docs.examples.note %>
-      </p>
+      <div class="rounded-2xl border border-slate-200 bg-white p-6 dark:border-white/10 dark:bg-white/[0.035]">
+        <h2 class="m-0 text-base font-semibold"><%= t.docs.examples.title %></h2>
+        <p class="mt-2 mb-0 text-sm/6 text-slate-600 dark:text-slate-300">
+          <%= t.docs.examples.body %>
+        </p>
+        <p class="mt-3 mb-0 text-sm/6 text-slate-600 dark:text-slate-300">
+          <%= t.docs.examples.note %>
+        </p>
+      </div>
     </div>
   </div>
-
-  <div class="mt-10 flex flex-wrap gap-3">
-    <%- buttonLink({ href: paths.download, text: t.ui.download, icon: "DownloadSimple" }) %>
-    <%- buttonLink({
-      href: "https://github.com/ayberkenis/jskelet",
-      text: t.ui.githubShort,
-      variant: "ghost",
-    }) %>
-  </div>
-</section>
+</div>

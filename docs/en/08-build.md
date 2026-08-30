@@ -75,7 +75,7 @@ If the build has not run, the application still comes up: `hasAsset()` is false
 and the layout never emits the stylesheet and script tags. When `jskelet build`
 is forgotten you get an unstyled but working page instead of an error. If the
 manifest is missing entirely, a warning is printed once:
-`[assets] manifest yok — 'jskelet build' çalıştırın.`
+``[assets] no manifest — run `jskelet build`.``
 
 The manifest is re-read **on every request in dev** (watch builds change the
 hashes) and once in prod.
@@ -254,8 +254,8 @@ name (`icon: "XLogo"`) are also searched, and in development `icon()` reads the
 symbols in the sprite and prints a one-off warning for a missing one:
 
 ```
-[icon] sprite'ta yok: x-logo-regular — adı sabit yazın ya da
-build/tasks/icons.mjs taramasına ekleyin.
+[icon] missing from sprite: x-logo-regular — write the name as a literal or add
+it to the build/tasks/icons.mjs scan.
 ```
 
 If you see this warning, either write the name as a constant, or add the relevant
@@ -370,7 +370,7 @@ directly does not end up facing an unstyled page.
 - **Some Tailwind classes do not work.** They were written in a directory whose
   `@source` directive is missing.
 - **An icon looks empty.** That symbol is not in the sprite; in dev, look for the
-  `[icon] sprite'ta yok` warning.
+  `[icon] missing from sprite` warning.
 - **The islands never open.** `main.js` is not in the manifest (the entry
   directory is empty or the build was skipped) or there is a build error.
 - **The page suddenly went unstyled in dev.** The manifest and the file on disk

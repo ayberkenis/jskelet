@@ -11,7 +11,16 @@
  *
  *   start();
  */
-export { register, registerAll, hydrate, observeDocument, start } from "./registry.js";
+export {
+  register,
+  registerAll,
+  hydrate,
+  unmount,
+  observeDocument,
+  start,
+} from "./registry.js";
+export { swap, startSwapLinks } from "./swap.js";
+export { enhanceForm, startForms } from "./form.js";
 export { createStore } from "./store.js";
 export {
   debounce,

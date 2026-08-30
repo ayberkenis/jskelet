@@ -37,15 +37,15 @@ for (const [pathname, expectedStatus, expectedBody] of CASES) {
   if (!statusOk || !bodyOk) failed += 1;
 
   console.log(
-    `${statusOk && bodyOk ? "✓" : "✗"} ${pathname.padEnd(38)} ${response.status} (beklenen ${expectedStatus}) cache=${cache}${bodyOk ? "" : " · gövde eşleşmedi"}`,
+    `${statusOk && bodyOk ? "✓" : "✗"} ${pathname.padEnd(38)} ${response.status} (expected ${expectedStatus}) cache=${cache}${bodyOk ? "" : " · body did not match"}`,
   );
 }
 
 // İkinci geçiş: aynı yollar artık önbellekten gelmeli.
 const second = await fetch(`${BASE}/blog`);
-console.log(`\ncache ikinci istek: ${second.headers.get("x-jskelet-cache")}`);
+console.log(`\ncache on second request: ${second.headers.get("x-jskelet-cache")}`);
 
-console.log(failed ? `\n${failed} test başarısız` : "\nhepsi geçti");
+console.log(failed ? `\n${failed} test(s) failed` : "\nall passed");
 
 // `process.exit()` değil: açık fetch handle'ları varken zorla çıkmak
 // Windows'ta libuv assertion'ına düşüyor.

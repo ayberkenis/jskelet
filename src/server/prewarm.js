@@ -64,7 +64,7 @@ async function collectPaths() {
   const paths = await hook("prewarmPaths", []);
 
   if (!Array.isArray(paths)) {
-    console.warn("[prewarm] hooks.prewarmPaths() dizi döndürmeli, yok sayıldı");
+    console.warn("[prewarm] hooks.prewarmPaths() must return an array, ignoring it");
     return [];
   }
 
@@ -237,10 +237,10 @@ export async function prewarm({ origin, quiet = false, paths: only }) {
   if (!quiet && paths.length) {
     const skipped = all.length - paths.length;
     console.log(
-      `[prewarm] ${ok}/${paths.length} sayfa ısıtıldı` +
-        `${failed ? `, ${failed} hata` : ""}` +
-        `${recovered ? `, ${recovered} sayfa tekrar turunda kurtarıldı` : ""}` +
-        `${skipped > 0 ? `, ${skipped} sayfa limit dışı` : ""}` +
+      `[prewarm] warmed ${ok}/${paths.length} pages` +
+        `${failed ? `, ${failed} failed` : ""}` +
+        `${recovered ? `, ${recovered} recovered on the retry pass` : ""}` +
+        `${skipped > 0 ? `, ${skipped} over the limit` : ""}` +
         ` (${(elapsed / 1000).toFixed(1)}s)`,
     );
   }
@@ -266,7 +266,7 @@ export function startPrewarm({ port }) {
   const origin = `http://127.0.0.1:${port}`;
   const run = () =>
     prewarm({ origin }).catch((error) => {
-      console.error("[prewarm] başarısız", error);
+      console.error("[prewarm] failed", error);
     });
 
   // Isıtma ilk isteklerle yarışmasın diye gecikmeyle başlar. Dev'de gecikme

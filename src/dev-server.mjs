@@ -350,7 +350,7 @@ function watchSources() {
       });
     } catch {
       log.warn(
-        `${path.relative(ROOT, target)} izlenemedi; bu dizinde otomatik restart olmayacak.`,
+        `could not watch ${path.relative(ROOT, target)}; no auto restart for this directory.`,
       );
     }
   }

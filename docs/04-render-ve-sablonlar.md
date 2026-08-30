@@ -194,8 +194,8 @@ Kurallar:
   önce yüklenir. Tek amacı `lib/` yeniden ihraçlarını şablon local'i yapmak;
   bileşenlerin kendi dosyaları sonradan gelip sessizce üzerine yazar.
 - Aynı ad iki farklı bileşen dosyasında tanımlıysa uyarı basılır ve **ikincisi
-  kazanır**: `[components] 'card' iki kez tanımlı: a.js ve b.js — ikincisi
-  kazanıyor.`
+  kazanır**: `[components] 'card' is defined twice: a.js and b.js — the second
+  one wins.`
 - `views/components` dizini yoksa bileşen kaydı boş kalır; bileşen kullanmayan
   bir proje de çalışır.
 

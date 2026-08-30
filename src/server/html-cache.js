@@ -83,8 +83,10 @@ function write(key, value, ttlSeconds) {
 /**
  * @param {string} key
  * @param {number} ttlSeconds
- * @param {() => Promise<{ html: string, status: number, degraded?: boolean }>} producer
- * @returns {Promise<{ html: string, status: number, degraded?: boolean }>}
+ * @param {() => Promise<{ html: string, status: number, degraded?: boolean,
+ *   storable?: boolean }>} producer
+ * @returns {Promise<{ html: string, status: number, degraded?: boolean,
+ *   storable?: boolean }>}
  */
 function refresh(key, ttlSeconds, producer) {
   const pending = inflight.get(key);
@@ -94,7 +96,11 @@ function refresh(key, ttlSeconds, producer) {
     .then((value) => {
       // `degraded`: upstream düştüğü için eksik veriyle üretilmiş HTML.
       // Saklanırsa eksik içerik tüm TTL boyunca servis edilir.
-      if (value.status === 200 && !value.degraded) {
+      //
+      // `storable: false`: çıktı kullanıcıya bağlı (cookie/Authorization
+      // okundu). Anahtar yalnızca yol + query olduğu için saklamak, bir
+      // kullanıcının HTML'ini bir başkasına servis etmek olur.
+      if (value.status === 200 && !value.degraded && value.storable !== false) {
         write(key, value, ttlSeconds);
       }
       return value;
@@ -127,7 +133,7 @@ export async function withHtmlCache(key, ttlSeconds, producer) {
     // isteği etkilemez (eski HTML stale penceresi boyunca geçerli kalır).
     if (hit.stale) {
       void refresh(key, ttlSeconds, producer).catch((error) => {
-        console.error(`[html-cache] arka plan tazelemesi başarısız: ${key}`, error);
+        console.error(`[html-cache] background refresh failed: ${key}`, error);
       });
     }
     return { ...hit, cached: true };

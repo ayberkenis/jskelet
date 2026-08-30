@@ -23,6 +23,29 @@ Sıra önemli: **istek içi cache en içte** olmalı ki aynı render'daki iki ç
 tek upstream isteğine düşsün; **upstream takibi HTML cache'in içinde** olmalı ki
 eksik veriyle üretilen çıktı önbelleğe yazılmasın.
 
+## Public ve kişiye özel ayrımı
+
+Bu belgedeki her şey **herkese aynı gidebilen** HTML için geçerli. Cache
+anahtarında kimlik yok (yalnızca yol + query), yani önbellekteki bir sayfa onu
+ilk isteyen kişinin değil, o yolun cevabıdır.
+
+Kullanıcıya bağlı bir sayfa bu yüzden ayrı bir yoldan geçer:
+
+```js
+app.get("/panel", route(async ({ req }) => { … }, { private: true }));
+```
+
+`private: true` üç şeyi birden yapar: önbellek devre dışı kalır, config'in
+`cache.html` deseni bu kararı **ezemez** ve yanıt `private, no-store`,
+`Vary: Cookie` ile, ETag'siz gider. Ayrıntılar ve oturum/CSRF tarafı
+[12-panel-ve-oturum.md](./12-panel-ve-oturum.md)'de.
+
+Bayrağı unutursanız framework sessiz kalmaz: controller `Cookie`,
+`Authorization` ya da `req.session`/`req.user` okuduğu anda render işaretlenir
+ve önbelleğe **yazılmaz**. Dev'de istek bir hatayla düşer, üretimde `no-store`
+ile servis edilip loglanır. Koruma bir mazeret değil son savunma — doğru yer
+`private: true`.
+
 ## `revalidate` — TTL nereden gelir
 
 Bir route'un TTL'i iki kaynaktan gelebilir ve **config kazanır**:
@@ -30,6 +53,9 @@ Bir route'un TTL'i iki kaynaktan gelebilir ve **config kazanır**:
 1. `route(controller, { revalidate: 60 })` — route'un kendi süresi.
 2. `jskelet.config.mjs` → `cache().html` içindeki eşleşen desen. Varsa
    route'unkini ezer.
+
+Tek istisna `private: true`: desen eşleşse bile yok sayılır. Kilit tek yönlü,
+çünkü ters yönde bir hata sessiz veri sızıntısı anlamına geliyor.
 
 ```js
 // jskelet.config.mjs
@@ -53,8 +79,14 @@ mümkün kılar; route dosyalarını dolaşmak gerekmez.
 yapılmaz. Hiç `cache().html` kuralı yoksa doğrudan route'un değeri kullanılır.
 
 `revalidate` verilmemişse ya da 0 ise sayfa **hiç önbelleklenmez**: her istek
-render edilir ve yanıta `Cache-Control` yazılmaz (yalnızca
-`X-JSkelet-Cache: MISS`).
+render edilir ve yanıt `Cache-Control: private, no-store` ile, ETag'siz gider.
+`X-JSkelet-Cache` başlığı da yazılmaz — önbellek yolu hiç çalışmadı, `MISS`
+demek yanıltıcı olurdu.
+
+Dinamik bir sayfaya `no-store` yazılması bilinçli. Hiç direktif taşımayan bir
+yanıtı HTTP "sezgisel olarak önbelleklenebilir" sayıyor; araya giren bir proxy
+ya da tarayıcının geri tuşu, tek bir ziyaretçi için üretilmiş HTML'i
+saklayabiliyordu.
 
 Önbellek ayrıca yalnızca `GET` istekleri için devreye girer.
 
@@ -92,7 +124,7 @@ Okuma davranışı:
 
 Stale penceresinde tazelemenin hatası isteği etkilemez: eski HTML pencere
 boyunca geçerli kalır ve hata yalnızca loglanır
-(`[html-cache] arka plan tazelemesi başarısız: …`).
+(`[html-cache] background refresh failed: …`).
 
 Aynı anahtar için eşzamanlı tazelemeler tek bir çalışmada birleştirilir
 (`inflight` haritası): yüz eşzamanlı istek tek render'a düşer.
@@ -220,8 +252,8 @@ export async function apiGet(path) {
 
 | Durum | Sayılır | Sonuç |
 | --- | --- | --- |
-| `0` (ağ hatası), `408`, `425`, `429`, `>= 500` | **Geçici** | Sayfa önbelleğe yazılmaz, uyarı: `[render] <yol> eksik veriyle üretildi, önbelleğe alınmıyor (…)` |
-| Diğerleri (`400`, `403`, `404`, …) | **Kalıcı** | Yalnızca uyarı: `[render] <yol> eksik veriyle üretildi, upstream kalıcı hata veriyor (…)`. Önbellek engellenmez. |
+| `0` (ağ hatası), `408`, `425`, `429`, `>= 500` | **Geçici** | Sayfa önbelleğe yazılmaz, uyarı: `[render] <path> was produced with missing data, not caching it (…)` |
+| Diğerleri (`400`, `403`, `404`, …) | **Kalıcı** | Yalnızca uyarı: `[render] <path> was produced with missing data, upstream is failing permanently (…)`. Önbellek engellenmez. |
 
 Kalıcı hataların önbelleği engellememesi bilinçli: deterministik cevaplar tekrar
 denemekle düzelmez. Onlar yüzünden önbelleği kapatmak sayfayı her ziyarette
@@ -319,7 +351,7 @@ Kurallar:
    anda çekerken API'yi zorluyor. Tekrar turu bu sayfaların önbelleğe girmesini
    sağlıyor; aksi hâlde ziyaretçi soğuk render'ı öder.
 4. Özet loglanır:
-   `[prewarm] 128/130 sayfa ısıtıldı, 2 hata, 5 sayfa tekrar turunda kurtarıldı (12.4s)`
+   `[prewarm] warmed 128/130 pages, 2 failed, 5 recovered on the retry pass (12.4s)`
 
 İstekler `user-agent: jskelet-prewarm` (`brand.prewarmUserAgent`) ve
 `accept-encoding: br, gzip` başlıklarıyla gider; ikincisi sıkıştırılmış gövdenin
@@ -392,7 +424,7 @@ turunun gerçekten `MISS` → önbellek doldurup doldurmadığını buradan gör
   `cache().html` içindeki desen 0 saniye veriyor. Veya sayfa `status: 200`
   dışında bir kod dönüyor.
 - **Sayfa `MISS` dönüyor ama upstream sağlam.** Geçici bir upstream hatası
-  bildirilmiş olabilir; logda `eksik veriyle üretildi, önbelleğe alınmıyor`
+  bildirilmiş olabilir; logda `was produced with missing data, not caching it`
   satırını arayın.
 - **Sürekli eski veri.** `revalidate` çok yüksek; unutmayın ki gerçek gecikme en
   fazla `revalidate` + bir tazeleme turudur.

@@ -25,7 +25,7 @@ düz değer** olabilir; fonksiyon olmaları hâlinde `async` olabilirler ve `thi
 config nesnesine bağlıdır. Bir bölüm hata verirse yalnızca o bölüm yok sayılır.
 
 Config başarıyla yüklendiğinde bir özet basılır:
-`[config] jskelet.config.mjs yüklendi — 3 header, 2 redirect, 1 cache kuralı`
+`[config] jskelet.config.mjs loaded — 3 headers, 2 redirects, 1 cache rule`
 
 ## Tam örnek
 
@@ -61,6 +61,20 @@ export default {
 
   devGateBypass: ["/api/healthcheck", "/robots.txt"],
   preconnect: ["https://cdn.ornek.com"],
+
+  security: {
+    trustProxy: true,
+    cookieSecret: process.env.JSKELET_SECRET,
+    csrf: {
+      enabled: true,
+      token: false,
+      allowedOrigins: [],
+      exclude: ["/webhook/:path*"],
+      cookieName: "csrf_token",
+      fieldName: "_csrf",
+      headerName: "x-csrf-token",
+    },
+  },
 
   navigation: {
     prefetch: "moderate",
@@ -238,6 +252,37 @@ bir yapılandırmadır.
 ```js
 preconnect: ["https://cdn.ornek.com", "https://api.ornek.com"]
 ```
+
+## `security`
+
+**Tip:** `object` — **Varsayılan:**
+`{ trustProxy: true, cookieSecret: null, csrf: { enabled: true, token: false, … } }`
+
+Kişiye özel sayfaların tamamı ve gerekçeleri
+[12-panel-ve-oturum.md](./12-panel-ve-oturum.md)'de; burada alanların referansı
+var.
+
+| Alan | Tip | Varsayılan | Anlamı |
+| --- | --- | --- | --- |
+| `trustProxy` | `boolean` | `true` | Express'in `trust proxy` ayarı. Ters proxy arkasında doğru protokol ve istemci IP'si için gerekli. |
+| `cookieSecret` | `string \| null` | `null` | İmzalı cookie sırrı. Verilmezse `JSKELET_SECRET` okunur. |
+| `csrf.enabled` | `boolean` | `true` | Origin/`Sec-Fetch-Site` kontrolü. |
+| `csrf.token` | `boolean` | `false` | Çift gönderim token'ı katmanı. |
+| `csrf.allowedOrigins` | `string[]` | `[]` | Kendi host'umuzun yanında kabul edilen origin'ler. |
+| `csrf.exclude` | `string[]` | `[]` | Kontrolden muaf yollar; `source` desen sözdizimi. |
+| `csrf.cookieName` | `string` | `"csrf_token"` | Token cookie'sinin adı. |
+| `csrf.fieldName` | `string` | `"_csrf"` | `csrfField()`in bastığı alan adı. |
+| `csrf.headerName` | `string` | `"x-csrf-token"` | Token'ın kabul edildiği başlık. |
+
+`trustProxy` doğrudan internete açık bir sunucuda **kapatılmalı**: açıkken
+istemci kendi `X-Forwarded-For` başlığını uydurabilir ve rate limit ile audit
+log yanlış adresi görür.
+
+CSRF kontrolü yalnızca çapraz site olduğu **belli** olan istekleri reddeder —
+`Origin` uyuşmuyorsa ya da `Sec-Fetch-Site: cross-site` geldiyse. İkisi de yoksa
+istek geçer, çünkü tarayıcılar çapraz origin bir POST'ta `Origin`'i her zaman
+gönderirken webhook'lar hiç göndermez. Yine de tarayıcıdan gelmeyen uçları
+`csrf.exclude` listesine yazmak niyeti okunur kılıyor.
 
 ## `navigation`
 
@@ -521,6 +566,10 @@ html: {
 }
 ```
 
+Tek istisna `route(fn, { private: true })`: bu route'ta desen eşleşse bile yok
+sayılır. Kilidin tek yönlü olması bilinçli — ters yönde bir hata, bir
+kullanıcının HTML'inin bir başkasına servis edilmesi anlamına geliyor.
+
 ### `cache().prewarm`
 
 | Alan | Tip | Varsayılan | Anlamı |
@@ -622,6 +671,7 @@ basılmaz.
 | `NODE_ENV` | her yer | `production` (start/build), `development` (dev) | Dev overlay, EJS cache, manifest yeniden okuma, route hata davranışı ve prewarm varsayılanlarını belirler. `jskelet dev` bunu kendisi ayarlar — `cross-env` gerekmez. |
 | `PORT` | `startServer` | `3000` | Dinlenecek port |
 | `HOST` | `startServer` | `0.0.0.0` | Bağlanılacak arayüz |
+| `JSKELET_SECRET` | `jskelet/cookies` | — | İmzalı cookie sırrı. `security.cookieSecret` verilmediğinde buradan okunur; ikisi de yoksa imzalı cookie API'si hata verir. [12](./12-panel-ve-oturum.md) |
 | `DEV_TOKEN` | `devGate`, `prewarm` | — | Ayarlıysa token taşımayan her isteğe 404 döner. Isıtma token'ı çerez olarak taşır. [09](./09-dev-araclari.md) |
 | `PREWARM` | `startPrewarm` | — | `0` ısıtmayı kapatır; `1` config'teki `enabled: false`'u ezip açar |
 | `PREWARM_MAX` | `prewarm` | `400` | En fazla kaç yol ısıtılır |

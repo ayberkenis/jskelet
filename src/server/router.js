@@ -14,16 +14,21 @@
  *
  * Modül sözleşmesi: default export ya da `register` adlı named export,
  * `(app, api) => void | Promise<void>` imzasıyla. `api` içinde `route`,
- * `renderView`, `renderPage` ve `notFound`/`redirect` hazır gelir, böylece
- * route dosyaları framework'ten tek tek import yapmak zorunda kalmaz.
+ * `fragment`, `renderView`, `renderPage` ve `notFound`/`redirect` hazır gelir,
+ * böylece route dosyaları framework'ten tek tek import yapmak zorunda kalmaz.
  */
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
 import { getConfig } from "../config/index.js";
-import { renderPage, renderView, route } from "./render.js";
-import { notFound, permanentRedirect, redirect } from "../http/control-flow.js";
+import { fragment, renderPage, renderView, route } from "./render.js";
+import {
+  notFound,
+  permanentRedirect,
+  redirect,
+  seeOther,
+} from "../http/control-flow.js";
 
 const isDev = process.env.NODE_ENV === "development";
 
@@ -61,11 +66,13 @@ function discover(dir, out = []) {
  */
 const api = {
   route,
+  fragment,
   renderView,
   renderPage,
   notFound,
   redirect,
   permanentRedirect,
+  seeOther,
 };
 
 /**
@@ -81,7 +88,7 @@ export async function registerRoutes(app) {
 
   if (!files.length) {
     console.warn(
-      `[router] hiç route modülü bulunamadı — ${path.relative(config.root, config.dirs.routes)}/ boş mu?`,
+      `[router] no route modules found — is ${path.relative(config.root, config.dirs.routes)}/ empty?`,
     );
     return 0;
   }
@@ -99,7 +106,7 @@ export async function registerRoutes(app) {
       // et. Üretimde fırlat — yarım route tablosuyla yayına çıkmak,
       // sessizce 404 dönen sayfalar demek.
       if (isDev) {
-        console.warn(`[router] ${path.basename(file)} yüklenemedi, atlandı`, error);
+        console.warn(`[router] ${path.basename(file)} failed to load, skipped`, error);
         continue;
       }
       throw error;
@@ -108,7 +115,7 @@ export async function registerRoutes(app) {
     const register = module.default ?? module.register;
     if (typeof register !== "function") {
       console.warn(
-        `[router] ${path.basename(file)} default ya da 'register' fonksiyonu dışa açmıyor, atlandı`,
+        `[router] ${path.basename(file)} exports neither a default nor a 'register' function, skipped`,
       );
       continue;
     }

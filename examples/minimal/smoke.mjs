@@ -27,5 +27,5 @@ for (const [pathname, expectedStatus, expectedBody] of CASES) {
   );
 }
 
-console.log(failed ? `\n${failed} test başarısız` : "\nhepsi geçti");
+console.log(failed ? `\n${failed} test(s) failed` : "\nall passed");
 process.exitCode = failed ? 1 : 0;

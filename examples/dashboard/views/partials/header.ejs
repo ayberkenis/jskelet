@@ -1,0 +1,16 @@
+<%#
+  Header bilinçli olarak oturumdan habersiz: layout'a giden local'ler
+  `hooks.layoutContext()` üzerinden geliyor ve o hook isteği görmüyor.
+  Kullanıcı adı ve çıkış butonu sayfanın kendi gövdesinde — böylece layout
+  her koşulda aynı, oturuma bağlı her şey tek bir yerde kalıyor.
+-%>
+<header class="border-b border-slate-200 bg-white">
+  <div class="wrapper flex items-center justify-between py-4">
+    <a href="/" class="text-lg font-semibold tracking-tight">JSkelet Panel</a>
+
+    <nav class="flex items-center gap-4 text-sm">
+      <a href="/" class="<%= pathname === '/' ? 'font-semibold text-slate-900' : 'text-slate-600 hover:text-slate-900' %>">Tanıtım</a>
+      <a href="/panel" class="<%= pathname.startsWith('/panel') ? 'font-semibold text-slate-900' : 'text-slate-600 hover:text-slate-900' %>">Panel</a>
+    </nav>
+  </div>
+</header>

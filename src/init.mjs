@@ -12,43 +12,43 @@ import * as log from "./log.mjs";
 /** @type {Record<string, string>} */
 const FILES = {
   "jskelet.config.mjs": `/**
- * JSkelet yapılandırması. Tüm alanlar opsiyoneldir; bu dosyayı silseniz de
- * uygulama varsayılanlarla çalışır.
+ * JSkelet configuration. Every field is optional; the app still runs on
+ * defaults if you delete this file.
  *
- * Ayrıntılar: node_modules/jskelet/docs/07-yapilandirma.md
+ * Details: node_modules/jskelet/docs/en/07-configuration.md
  */
 export default {
-  brand: { lang: "tr" },
+  brand: { lang: "en" },
 
-  /** Üçüncü taraf kaynaklar; \`<head>\`e preconnect olarak basılır. */
+  /** Third-party origins; emitted as preconnect in \`<head>\`. */
   preconnect: [],
 
   async cache() {
     return {
-      /** Sayfa HTML'inin önbellekte kalma süresi (saniye). */
+      /** How long a page's HTML stays in the cache (seconds). */
       html: { "/": 60 },
     };
   },
 
   hooks: {
-    /** Her sayfanın metadata varsayılanı. */
+    /** Metadata defaults for every page. */
     metadata() {
       return {
         titleTemplate: "%s | JSkelet",
-        description: "JSkelet ile kurulmuş bir site.",
+        description: "A site built with JSkelet.",
       };
     },
 
-    /** Layout'a her render'da eklenen local'ler. */
+    /** Locals added to the layout on every render. */
     layoutContext() {
       return { bodyClass: "min-h-full" };
     },
 
-    /** 404 sayfası. */
+    /** 404 page. */
     notFound() {
       return {
         view: "pages/not-found",
-        metadata: { title: "Sayfa bulunamadı", robots: { index: false } },
+        metadata: { title: "Page not found", robots: { index: false } },
       };
     },
   },
@@ -56,11 +56,12 @@ export default {
 `,
 
   "routes/10-pages.mjs": `/**
- * Route modülü. Default export \`(app, api)\` alır; \`api.route()\` controller'ı
- * HTML cache'i, notFound/redirect akışı ve sıkıştırmayla sarar.
+ * Route module. The default export receives \`(app, api)\`; \`api.route()\` wraps
+ * the controller with the HTML cache, the notFound/redirect flow and
+ * compression.
  *
- * Dosya adındaki sayısal önek yükleme sırasını belirler: yakalayıcı
- * ("/:slug" gibi) route'lar daha yüksek numarada olmalı.
+ * The numeric prefix in the file name sets load order: catch-all routes
+ * (like "/:slug") belong to a higher number.
  */
 export default function register(app, { route }) {
   app.get(
@@ -68,8 +69,8 @@ export default function register(app, { route }) {
     route(
       async () => ({
         view: "pages/home",
-        metadata: { title: "Ana sayfa" },
-        data: { message: "JSkelet çalışıyor." },
+        metadata: { title: "Home" },
+        data: { message: "JSkelet is running." },
       }),
       { revalidate: 60 },
     ),
@@ -86,16 +87,16 @@ export default function register(app, { route }) {
 
   "views/pages/not-found.ejs": `<section class="wrapper">
   <h1>404</h1>
-  <p>Aradığınız sayfa bulunamadı.</p>
-  <p><a href="/">Ana sayfaya dön</a></p>
+  <p>The page you are looking for was not found.</p>
+  <p><a href="/">Back to home</a></p>
 </section>
 `,
 
   "views/components/button.js": `import { attrs, esc } from "jskelet/html";
 
 /**
- * \`views/components/**\` altındaki her named export şablonlarda doğrudan
- * kullanılabilir: \`<%- button({ text: "Kaydet" }) %>\`. Import gerekmez.
+ * Every named export under \`views/components/**\` is usable directly in
+ * templates: \`<%- button({ text: "Save" }) %>\`. No import needed.
  *
  * @param {{ text: string, href?: string, class?: string }} props
  * @returns {string}
@@ -109,8 +110,8 @@ export function button({ text, href, class: className }) {
   "client/entries/main.js": `import { registerAll, start } from "jskelet/client";
 
 /**
- * Island kaydı. Değerler dinamik import: modül yalnızca sayfada o island
- * gerçekten varsa ve görünür olduğunda indirilir.
+ * Island registry. Values are dynamic imports: a module is downloaded only if
+ * that island is actually on the page and becomes visible.
  */
 registerAll({
   counter: () => import("../islands/counter.js"),
@@ -120,8 +121,8 @@ start();
 `,
 
   "client/islands/counter.js": `/**
- * Island sözleşmesi: \`mount(element, props)\` adlı named export.
- * Dönen fonksiyon (varsa) temizlik için ayrılmıştır.
+ * Island contract: a named export called \`mount(element, props)\`.
+ * The returned function, if any, is reserved for cleanup.
  *
  * @param {HTMLElement} element
  * @param {{ start?: number }} props
@@ -133,7 +134,7 @@ export function mount(element, props) {
   button.type = "button";
 
   const paint = () => {
-    button.textContent = \`Tıklama: \${value}\`;
+    button.textContent = \`Clicks: \${value}\`;
   };
 
   button.addEventListener("click", () => {
@@ -149,9 +150,9 @@ export function mount(element, props) {
   "styles/globals.css": `@import "tailwindcss" source(none);
 
 /**
- * Tailwind'in sınıf taraması bu direktiflere bağlıdır. Otomatik tespit
- * yalnızca bu dosyanın bulunduğu dizini tarar; şablonlarda geçen varyantlar
- * (data-[active=false]:… gibi) aksi hâlde sessizce düşer.
+ * Tailwind's class scanning depends on these directives. Automatic detection
+ * only scans the directory holding this file; variants used in templates
+ * (like data-[active=false]:…) would otherwise be dropped silently.
  */
 @source "../views";
 @source "../client";
@@ -213,8 +214,8 @@ export async function init(root) {
   }
 
   for (const file of created) log.line(`+ ${file}`);
-  if (skipped.length) log.warn(`${skipped.length} dosya zaten vardı, atlandı`);
+  if (skipped.length) log.warn(`${skipped.length} files already existed, skipped`);
 
   log.line("");
-  log.line("sıradaki adım:  npx jskelet dev");
+  log.line("next step:  npx jskelet dev");
 }

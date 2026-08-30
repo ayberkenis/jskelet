@@ -72,7 +72,7 @@ export async function loadComponents(dir) {
       const previous = origin.get(name);
       if (previous && previous !== BARREL && previous !== relative) {
         console.warn(
-          `[components] '${name}' iki kez tanımlı: ${previous} ve ${relative} — ikincisi kazanıyor.`,
+          `[components] '${name}' is defined twice: ${previous} and ${relative} — the second one wins.`,
         );
       }
 

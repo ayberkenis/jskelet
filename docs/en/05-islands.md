@@ -210,15 +210,68 @@ start();
 - An element is **not mounted twice** with the same island name; the record is
   kept per element in a `WeakMap`.
 - A warning is printed to the console for a name that is not registered:
-  `[island] kayıtlı değil: <ad>`.
+  `[island] not registered: <name>`.
 - If the module import or `mount()` throws, an error is printed to the console
-  (`[island] <ad> yüklenemedi`) and **the rest of the page is unaffected**.
+  (`[island] <name> failed to load`) and **the rest of the page is unaffected**.
 - If `mount()` returns successfully, `data-island-ready="true"` is written on
   the element.
-- `mount()` may return a function; the contract reserves it for cleanup. The
-  framework does not currently call this function on its own — if the island
-  manages its own lifetime (for example while replacing a fragment) it must
-  keep the returned function and call it itself.
+- `mount()` may return a cleanup function; the framework stores it and runs it
+  when `unmount()` is called (see below).
+
+### `unmount(root?)`
+
+Unmounts the islands under `root`: it runs the stored cleanup functions, removes
+the `data-island-ready` marker and clears the registration, so the same node can
+be hydrated again if it re-enters the DOM. `root` itself may be an island.
+
+It is **required** when you replace a region of the DOM:
+
+```js
+import { hydrate, unmount } from "jskelet/client";
+
+unmount(container);
+container.innerHTML = html;
+hydrate(container);
+```
+
+Skipping it produces the leak that is easiest to miss. The islands inside a
+region replaced with `innerHTML` leave the DOM, but the listeners they installed
+on `document`/`window` and their `setInterval` timers keep running; after a few
+swaps the same work runs dozens of times.
+
+```js
+export function mount(element) {
+  const timer = setInterval(() => tick(element), 1000);
+  const onResize = () => layout(element);
+  window.addEventListener("resize", onResize);
+
+  return () => {
+    clearInterval(timer);
+    window.removeEventListener("resize", onResize);
+  };
+}
+```
+
+`swap()` and the form helpers call `unmount()` themselves; you call it wherever
+you change the DOM by hand.
+
+### `swap(target, url, options?)` and `startSwapLinks(root?)`
+
+Replaces a region with a partial from the server: it unmounts the old subtree,
+writes the content, hydrates it again and restores focus if it was lost.
+
+```html
+<a href="/_fragment/rows?page=2" data-swap="#rows">Next</a>
+```
+
+The server side and the full set of options are in
+[12-dashboards-and-sessions.md](./12-dashboards-and-sessions.md).
+
+### `enhanceForm(form)` and `startForms(root?)`
+
+Submits forms carrying `data-enhance` without a page reload, while the normal
+POST + redirect flow keeps working with JavaScript disabled. The whole contract
+is in [12-dashboards-and-sessions.md](./12-dashboards-and-sessions.md).
 
 ## Sharing state: `createStore`
 
@@ -238,7 +291,7 @@ import { theme } from "../stores/theme.js";
 
 export function mount(element) {
   const paint = (value) => {
-    element.textContent = value === "light" ? "Koyu tema" : "Açık tema";
+    element.textContent = value === "light" ? "Dark theme" : "Light theme";
   };
 
   const unsubscribe = theme.subscribe(paint);
@@ -328,7 +381,7 @@ Usage, on the template side:
 <div data-safe-image-host>
   <img src="/kapak.png" alt="Kapak" data-safe-image>
   <template data-safe-image-fallback>
-    <div class="flex h-40 items-center justify-center bg-slate-100">Görsel yok</div>
+    <div class="flex h-40 items-center justify-center bg-slate-100">No image</div>
   </template>
 </div>
 ```
@@ -364,7 +417,7 @@ this; it is a combination of two pieces you already have:
 ```js
 // routes/80-fragments.mjs
 export default function register(app, { renderView }) {
-  app.get("/_fragment/yorumlar/:id", async (req, res) => {
+  app.get("/_fragment/comments/:id", async (req, res) => {
     const comments = await getComments(req.params.id);
     res.type("html").send(await renderView("fragments/comments", { comments }));
   });
@@ -376,7 +429,7 @@ neither the module nor the fragment is downloaded if the visitor never scrolls
 to that section:
 
 ```ejs
-<div data-island="deferred" data-island-props='{"src":"/_fragment/yorumlar/42"}'></div>
+<div data-island="deferred" data-island-props='{"src":"/_fragment/comments/42"}'></div>
 ```
 
 **3. The island fetches the fragment, inserts it and hydrates the islands

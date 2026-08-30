@@ -6,12 +6,17 @@ import fs from "node:fs";
 import path from "node:path";
 import { FRAMEWORK_ROOT } from "./config/index.js";
 
-/** @type {string} */
-export const FRAMEWORK_VERSION = (() => {
+const manifest = (() => {
   try {
     const file = path.join(FRAMEWORK_ROOT, "package.json");
-    return JSON.parse(fs.readFileSync(file, "utf8")).version ?? "0.0.0";
+    return JSON.parse(fs.readFileSync(file, "utf8"));
   } catch {
-    return "0.0.0";
+    return {};
   }
 })();
+
+/** @type {string} */
+export const FRAMEWORK_VERSION = manifest.version ?? "0.0.0";
+
+/** Paket adı: sürüm kontrolü hangi kayıt defteri girdisine bakacağını buradan bilir. */
+export const FRAMEWORK_PACKAGE = manifest.name ?? "jskelet";

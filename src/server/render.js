@@ -21,6 +21,12 @@ import { matchPattern } from "../config/pattern.js";
 import { encodeText, negotiateEncoding } from "./middleware/compression.js";
 import { navigationHints, preconnectHints } from "./head-hints.js";
 import { withRequestCache } from "../http/request-cache.js";
+import {
+  createRequestContext,
+  getRequestContext,
+  guardRequest,
+  withRequestContext,
+} from "../http/request-context.js";
 import { getUpstreamFailures, withUpstreamTracking } from "./upstream-tracking.js";
 import { isNotFoundError, isRedirectError } from "../http/control-flow.js";
 import { renderHeadMeta } from "./metadata.js";
@@ -154,55 +160,218 @@ export async function renderPage(page) {
 }
 
 /**
+ * Kişiye özel yanıtın cache direktifi. Dinamik (cache'lenmeyen) her sayfa da
+ * bunu alır: bir yanıt hiçbir direktif taşımadığında HTTP onu "sezgisel olarak
+ * cache'lenebilir" sayar ve araya giren bir proxy ya da tarayıcının geri
+ * tuşu kullanıcıya özel HTML'i saklayabilir.
+ */
+const PRIVATE_CACHE = "private, no-store";
+
+/**
  * Controller'ı çalıştırıp yanıtı yazar; notFound/redirect kontrol akışını,
  * HTML cache'ini ve hata yönetimini üstlenir.
  *
+ * `private: true` kişiye özel sayfaları public cache yolundan tamamen ayırır:
+ * HTML cache devre dışı kalır, config'in `cache.html` deseni bu kararı
+ * ezemez, yanıt `no-store` ile ve ETag'siz gider. Dashboard tipi sayfalarda
+ * bu bayrak olmadan çalışmak, bir kullanıcının HTML'inin bir başkasına
+ * servis edilmesi anlamına gelir.
+ *
  * @param {(ctx: { params: object, query: object, pathname: string,
  *   req: import('express').Request }) => Promise<object>} controller
- * @param {{ revalidate?: number }} [options]
+ * @param {{ revalidate?: number, private?: boolean }} [options]
  * @returns {import('express').RequestHandler}
  */
 export function route(controller, options = {}) {
+  const isPrivate = options.private === true;
+
   return async (req, res, next) => {
+    const context = createRequestContext({ private: isPrivate, res });
     const ctx = {
       params: req.params ?? {},
       query: req.query ?? {},
       pathname: req.path,
-      req,
+      // Cookie/Authorization okunursa çıktı kullanıcıya bağlıdır; cache'e
+      // yazılmaması için işaretlenmesi gerekiyor.
+      req: guardRequest(req),
     };
 
-    const revalidate = resolveRevalidate(req.path, options.revalidate);
-    const cacheable = req.method === "GET" && Boolean(revalidate);
+    // Private route'ta desen taraması hiç yapılmaz: `cache.html` altındaki
+    // geniş bir kural (`/**` gibi) bu sayfayı cache'lenebilir hâle
+    // getirmesin. Kilit tek yönlü — route "özel" dediyse config açamaz.
+    const revalidate = isPrivate
+      ? undefined
+      : resolveRevalidate(req.path, options.revalidate);
+    const cacheable = !isPrivate && req.method === "GET" && Boolean(revalidate);
     const cacheKey = `${req.path}?${new URLSearchParams(
       Object.entries(ctx.query).map(([k, v]) => [k, String(v)]),
     ).toString()}`;
 
     try {
-      const result = await withHtmlCache(cacheKey, cacheable ? revalidate : 0, () =>
-        withUpstreamTracking(() => withRequestCache(() => produce(controller, ctx))),
+      const result = await withRequestContext(context, () =>
+        withHtmlCache(cacheKey, cacheable ? revalidate : 0, () =>
+          withUpstreamTracking(() => withRequestCache(() => produce(controller, ctx))),
+        ),
       );
+
+      // Cache'lenebilir bir route kimliğe dokunduysa yanıt yine gider ama
+      // saklanmaz (`produce` bunu `storable: false` ile bildirdi) ve public
+      // direktif yazılmaz.
+      const leaked = cacheable && context.tainted;
+      if (leaked && isDev) {
+        throw new Error(
+          `[render] ${req.path} is a cacheable route but read identity-bound data ` +
+            `(${context.taintReasons.join(", ")}). This page must be registered with ` +
+            `'route(fn, { private: true })'; otherwise one user's HTML is served to another.`,
+        );
+      }
+
+      const publicCache = cacheable && !leaked;
 
       res.status(result.status);
       res.setHeader("Content-Type", "text/html; charset=utf-8");
-      if (cacheable) {
+
+      if (publicCache) {
         res.setHeader(
           "Cache-Control",
           `public, max-age=0, s-maxage=${revalidate}, stale-while-revalidate=60`,
         );
+        res.setHeader(
+          getConfig().brand.cacheHeader,
+          result.cached ? (result.stale ? "STALE" : "HIT") : "MISS",
+        );
+      } else {
+        res.setHeader("Cache-Control", PRIVATE_CACHE);
+        // Anahtarında cookie olmayan bir cache'in bu yanıtı paylaşmasını
+        // engeller; `no-store`'a uymayan bir katman için ikinci savunma.
+        res.setHeader("Vary", "Cookie");
+
+        if (leaked) {
+          console.warn(
+            `[render] ${req.path} read identity-bound data (${context.taintReasons.join(", ")}), ` +
+              `not cached. The route should be registered with 'private: true'.`,
+          );
+        }
       }
-      res.setHeader(
-        getConfig().brand.cacheHeader,
-        result.cached ? (result.stale ? "STALE" : "HIT") : "MISS",
-      );
-      await sendHtml(req, res, result.html, result.encoded);
+
+      // ETag kişiye özel HTML için kullanıcıya özgü bir doğrulayıcıdır ve
+      // `no-store` ile birlikte hiçbir işe yaramaz; üretilmesi engellenir.
+      await sendHtml(req, res, result.html, result.encoded, { etag: publicCache });
     } catch (error) {
       if (isRedirectError(error)) {
+        // Oturuma bağlı bir yönlendirme de kişiye özeldir: "giriş yapmalısın"
+        // kararının cache'lenmesi, oturum açmış kullanıcıyı da login sayfasına
+        // atan türde hatalara yol açıyor.
+        if (isPrivate || context.tainted) {
+          res.setHeader("Cache-Control", PRIVATE_CACHE);
+          res.setHeader("Vary", "Cookie");
+        }
+
         res.redirect(error.statusCode, error.location);
         return;
       }
       next(error);
     }
   };
+}
+
+/**
+ * Layout'suz, asla cache'lenmeyen parça yanıtı.
+ *
+ * Fragment uçları (tablo sayfası, sekme paneli, canlı tazelenen kart) her
+ * projede elle yazılıyor ve `no-store` yazmayı unutmak sessiz bir sızıntıya
+ * dönüşüyor. Burada politika sabit: HTML cache'e hiç uğramaz, `no-store` ile
+ * ve ETag'siz gider.
+ *
+ * Hata durumunda tüm sayfa yerine küçük bir hata parçası döner: takas edilen
+ * bölge bir hata sayfasının tamamını içine almasın.
+ *
+ * @param {(ctx: { params: object, query: object, pathname: string,
+ *   req: import('express').Request }) => Promise<{ view: string, data?: object,
+ *   status?: number } | string>} controller
+ * @returns {import('express').RequestHandler}
+ */
+export function fragment(controller) {
+  return async (req, res, next) => {
+    const context = createRequestContext({ private: true, res });
+    const ctx = {
+      params: req.params ?? {},
+      query: req.query ?? {},
+      pathname: req.path,
+      req: guardRequest(req),
+    };
+
+    try {
+      const result = await withRequestContext(context, () =>
+        withRequestCache(async () => {
+          const value = await controller(ctx);
+          if (typeof value === "string") return { html: value, status: 200 };
+
+          return {
+            html: await renderView(value.view, value.data ?? {}),
+            status: value.status ?? 200,
+          };
+        }),
+      );
+
+      res.status(result.status);
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      res.setHeader("Cache-Control", PRIVATE_CACHE);
+      res.setHeader("Vary", "Cookie");
+      await sendHtml(req, res, result.html, undefined, { etag: false });
+    } catch (error) {
+      if (isRedirectError(error)) {
+        res.setHeader("Cache-Control", PRIVATE_CACHE);
+        res.redirect(error.statusCode, error.location);
+        return;
+      }
+
+      if (isNotFoundError(error)) {
+        res.status(404).setHeader("Cache-Control", PRIVATE_CACHE);
+        res.type("html").send(fragmentError("notFound"));
+        return;
+      }
+
+      console.error(`[fragment] ${req.method} ${req.originalUrl}`, error);
+
+      if (res.headersSent) {
+        next(error);
+        return;
+      }
+
+      res.status(500).setHeader("Cache-Control", PRIVATE_CACHE);
+      res.type("html").send(fragmentError("failed"));
+    }
+  };
+}
+
+/**
+ * Ziyaretçiye görünen parça hatası metinleri. Framework'ün kendi logları
+ * İngilizce ama bu satırlar ekranda okunuyor, bu yüzden durum sayfalarıyla
+ * aynı kuralı izliyorlar: dil `brand.lang`.
+ */
+const FRAGMENT_MESSAGES = {
+  tr: { notFound: "Bu içerik bulunamadı.", failed: "Bu bölüm yüklenemedi." },
+  en: { notFound: "This content was not found.", failed: "This section could not be loaded." },
+};
+
+/**
+ * Fragment hatası için minimal işaretleme. Şablona bağlı olmaması bilinçli:
+ * hata yolu, hatanın kaynağı olabilecek render katmanına geri dönmemeli.
+ *
+ * @param {"notFound" | "failed"} kind
+ * @returns {string}
+ */
+function fragmentError(kind) {
+  let lang = "en";
+  try {
+    lang = getConfig().brand.lang ?? "en";
+  } catch {
+    /* config yüklenmemişse İngilizce kalır */
+  }
+
+  const table = FRAGMENT_MESSAGES[lang.slice(0, 2).toLowerCase()] ?? FRAGMENT_MESSAGES.en;
+  return `<div role="alert" data-fragment-error>${html.esc(table[kind])}</div>`;
 }
 
 /**
@@ -253,13 +422,23 @@ function resolveRevalidate(pathname, fallback) {
  * @param {import('express').Response} res
  * @param {string} body
  * @param {Map<string, Buffer>} [encoded]
+ * @param {{ etag?: boolean }} [options] `etag: false` → `res.send()` atlanır,
+ *   böylece Express kullanıcıya özel gövde için doğrulayıcı üretmez.
  * @returns {Promise<void>}
  */
-async function sendHtml(req, res, body, encoded) {
+async function sendHtml(req, res, body, encoded, options = {}) {
   const encoding =
     req.method === "HEAD" ? null : negotiateEncoding(req.headers["accept-encoding"]);
 
   if (!encoding || !encoded) {
+    if (options.etag === false) {
+      // Sıkıştırma middleware'i devreye girerse Content-Length'i kendisi
+      // kaldırır; girmezse doğru uzunlukla gider.
+      res.setHeader("Content-Length", String(Buffer.byteLength(body)));
+      res.end(req.method === "HEAD" ? undefined : body);
+      return;
+    }
+
     res.send(body);
     return;
   }
@@ -279,7 +458,8 @@ async function sendHtml(req, res, body, encoded) {
 /**
  * @param {Function} controller
  * @param {{ pathname: string }} ctx
- * @returns {Promise<{ html: string, status: number, degraded?: boolean }>}
+ * @returns {Promise<{ html: string, status: number, degraded?: boolean,
+ *   storable?: boolean }>}
  */
 async function produce(controller, ctx) {
   try {
@@ -289,6 +469,9 @@ async function produce(controller, ctx) {
       html: rendered,
       status: page.status ?? 200,
       degraded: hasUpstreamFailures(ctx.pathname),
+      // Kimliğe bağlı çıktı önbelleğe yazılmaz. Karar burada verilmeli:
+      // `withHtmlCache` yazma anında controller'ın ne okuduğunu bilemez.
+      storable: getRequestContext()?.tainted !== true,
     };
   } catch (error) {
     if (isNotFoundError(error)) {
@@ -332,14 +515,14 @@ function hasUpstreamFailures(pathname) {
 
   if (permanent.length) {
     console.warn(
-      `[render] ${pathname} eksik veriyle üretildi, upstream kalıcı hata veriyor (${summarize(permanent)})`,
+      `[render] ${pathname} was produced with missing data, upstream is failing permanently (${summarize(permanent)})`,
     );
   }
 
   if (!transient.length) return false;
 
   console.warn(
-    `[render] ${pathname} eksik veriyle üretildi, önbelleğe alınmıyor (${summarize(transient)})`,
+    `[render] ${pathname} was produced with missing data, not caching it (${summarize(transient)})`,
   );
 
   return true;

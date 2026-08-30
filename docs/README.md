@@ -9,6 +9,9 @@ kullanır. React yok, TypeScript yok; düz JavaScript ve JSDoc.
 Bu dizin framework'ün tam referansıdır. Sıralı okumak için baştan başlayın;
 belirli bir konuyu arıyorsanız doğrudan ilgili başlığa gidin.
 
+Aynı belgelerin İngilizcesi [`docs/en/`](./en/README.md) altında. İki sürüm elle
+eşlenik tutuluyor; birini değiştiriyorsan diğerini de değiştir.
+
 ## Sıralı okuma
 
 | Belge | Konu |
@@ -24,6 +27,7 @@ belirli bir konuyu arıyorsanız doğrudan ilgili başlığa gidin.
 | [09-dev-araclari.md](./09-dev-araclari.md) | `jskelet dev` akışı, watch dizinleri, CSS hot-swap, devtools overlay (Alt+D), rapor sayfası, dev gate |
 | [10-dagitim.md](./10-dagitim.md) | Prod build + start, ortam değişkenleri, Docker, ters proxy, sağlık kontrolü |
 | [11-tasima.md](./11-tasima.md) | Next.js'ten taşıma: karşılık tablosu ve adım adım plan |
+| [12-panel-ve-oturum.md](./12-panel-ve-oturum.md) | Kişiye özel sayfalar: `private: true`, imzalı cookie oturumu, CSRF, `fragment()`, parça takası ve form döngüsü |
 
 ## Konuya göre hızlı erişim
 
@@ -33,13 +37,15 @@ belirli bir konuyu arıyorsanız doğrudan ilgili başlığa gidin.
   [05-islands.md](./05-islands.md)
 - **Sayfa neden `MISS` dönüyor / neden eski veri görüyorum?** →
   [06-cache.md](./06-cache.md)
+- **Oturuma bağlı bir sayfa nasıl yazılır?** →
+  [12-panel-ve-oturum.md](./12-panel-ve-oturum.md)
 - **Hangi config alanı ne yapıyor?** → [07-yapilandirma.md](./07-yapilandirma.md)
 - **Stil çıkmıyor / ikon görünmüyor** → [08-build.md](./08-build.md)
 - **Yayına alma** → [10-dagitim.md](./10-dagitim.md)
 
 ## Çalışan örnekler
 
-Üçü de çalışır durumda; belgelerdeki örneklerin çoğu buralardan alınmıştır.
+Dördü de çalışır durumda; belgelerdeki örneklerin çoğu buralardan alınmıştır.
 
 **`examples/minimal/`** — iki route, bir bileşen, bir island, minimal config.
 Framework'ün en küçük çalışan hâli.
@@ -67,6 +73,12 @@ sayfası. Sayfadaki bayt sayıları `lib/payload.js` içinde sitenin **kendi** b
 ölçülür. Uzun TTL (bir saat) ve tüm sayfaları ısıtan prewarm ile, cache'in en
 verimli çalıştığı profili gösterir.
 
+Site aynı zamanda **bu belgeleri** servis ediyor: `/docs/<bölüm>` adresleri
+`node_modules/jskelet/docs/` altındaki markdown dosyalarını okuyup sol gezinme,
+"bu sayfada" listesi ve sıralı geçişle basıyor. Çevirici `lib/markdown.js`
+içinde küçük bir modül — bağımlılık yok — ve kaynak paketin kendisi olduğu için
+site kurulu sürümden hiç ayrışmıyor.
+
 Site aynı zamanda **iki dilli**: varsayılan İngilizce kökte, Türkçe `/tr`
 altında ve route adları iki dilde de aynı. Framework'te i18n yok; dil
 çözümlemesi `lib/i18n.js` içinde uygulamanın kendi sözleşmesi olarak duruyor ve
@@ -78,5 +90,16 @@ npm --prefix examples/marketing install
 npm --prefix examples/marketing run dev
 ```
 
-Her üç örnekte `node smoke.mjs` sunucu ayaktayken uçların beklendiği gibi
+**`examples/dashboard/`** — diğer üçünün tersi eksen: kişiye özel sayfalar.
+İmzalı cookie ile giriş, `private: true` korumalı panel, sayfalı tablo
+fragment'i, CSRF'li mutasyon formu ve temizlik fonksiyonu döndüren bir island.
+Public bir tanıtım sayfası da var, böylece aynı uygulamada önbelleklenen ve
+`no-store` dönen iki yanıt yan yana görülüyor.
+
+```bash
+npm --prefix examples/dashboard install
+npm --prefix examples/dashboard run dev
+```
+
+Her dört örnekte `node smoke.mjs` sunucu ayaktayken uçların beklendiği gibi
 yanıt verdiğini doğrular.

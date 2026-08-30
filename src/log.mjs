@@ -75,9 +75,15 @@ function clearLine() {
   if (isTTY) write("\r\u001b[2K");
 }
 
-/** @returns {string} `01:49:02` */
+/**
+ * Saat, yerelden bağımsız olarak 24 saatlik biçimde. Dil etiketi vermek
+ * sunucunun bulunduğu makinenin diline göre `ÖÖ/ÖS` ya da `AM/PM` basılmasına
+ * yol açıyordu; log satırının genişliği sabit kalmalı.
+ *
+ * @returns {string} `01:49:02`
+ */
 export function clock() {
-  return new Date().toLocaleTimeString("tr-TR", { hour12: false });
+  return new Date().toLocaleTimeString("en-GB", { hour12: false });
 }
 
 /**

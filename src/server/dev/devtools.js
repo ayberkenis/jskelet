@@ -21,6 +21,7 @@ import {
   recordPageReport,
   trackServerFetch,
 } from "./report.js";
+import { startVersionCheck, versionStatus } from "./version-check.mjs";
 
 /** Overlay dosyaları framework paketinden servis edilir, uygulamadan değil. */
 const DEVTOOLS_DIR = path.join(FRAMEWORK_ROOT, "src", "client", "devtools");
@@ -267,7 +268,8 @@ function router() {
 
   api.get("/logo.png", (req, res) => {
     res.type("image/png");
-    res.setHeader("Cache-Control", "no-store");
+    // Logo geliştirme sırasında değişmiyor; her gezinmede yeniden indirmesin.
+    res.setHeader("Cache-Control", "public, max-age=86400");
     fs.createReadStream(LOGO_FILE).pipe(res);
   });
 
@@ -293,6 +295,7 @@ function router() {
       boot: BOOT_ID,
       uptime: process.uptime(),
       node: process.version,
+      version: versionStatus(),
       memory: { rss: usage.rss, heapUsed: usage.heapUsed },
       prewarm: { ...prewarmProgress },
       requests: requests.slice(-25).reverse(),
@@ -351,7 +354,7 @@ function router() {
       origin: `${req.protocol}://${req.get("host")}`,
       paths: paths.length ? paths : undefined,
     }).catch((error) => {
-      console.error("[prewarm] elle tetikleme başarısız", error);
+      console.error("[prewarm] manual trigger failed", error);
     });
 
     res.json({ ok: true, scope: paths.length || "all" });
@@ -378,6 +381,7 @@ export function mountDevtools(app) {
   patchConsole();
   trackServerFetch();
   watchManifest();
+  startVersionCheck();
   app.use(timing());
   app.use(brand.devBasePath, router());
 }

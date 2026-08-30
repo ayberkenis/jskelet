@@ -1,0 +1,42 @@
+@import "tailwindcss" source(none);
+
+/**
+ * Sınıf taraması: `source(none)` otomatik tespiti kapatır, çünkü varsayılan
+ * davranış yalnızca bu dosyanın dizinini tarar ve şablonlardaki sınıflar
+ * sessizce çıktıdan düşer. Sınıf kullanılan her dizin burada listelenmeli.
+ */
+@source "../views";
+@source "../client";
+@source "../routes";
+
+.wrapper {
+  max-width: 72rem;
+  margin-inline: auto;
+  padding-inline: 1rem;
+  padding-block: 2rem;
+}
+
+/**
+ * Takas sırasında bölge yarı saydam oluyor: `swap()` isteği süresince
+ * `aria-busy` yazıyor, yani gösterge ek bir sınıfa ya da JS'e ihtiyaç
+ * duymuyor. Bekleme durumunu erişilebilirlik durumuna bağlamak, ikisinin
+ * birbirinden ayrı düşmesini de engelliyor.
+ */
+[aria-busy="true"] {
+  opacity: 0.6;
+  transition: opacity 120ms ease-out;
+}
+
+/** Gönderim sırasında butonlar zaten `disabled`; form da geri bildirim verir. */
+form[data-submitting] {
+  opacity: 0.7;
+}
+
+/**
+ * Odak halkası her koşulda görünür kalmalı: `swap()` takastan sonra odağı
+ * bölgeye taşıyor ve klavye kullanıcısı nerede olduğunu görmeli.
+ */
+:focus-visible {
+  outline: 2px solid var(--color-slate-900);
+  outline-offset: 2px;
+}

@@ -13,14 +13,17 @@
  *      static'e düşer ve middleware anında sıkıştırır (kalite 5).
  *   5. body parser'lar — statikten sonra: görsel isteklerinde gövde ayrıştırma
  *      maliyeti ödenmesin.
- *   6. rewrites(afterFiles) — statik denendikten sonra, sayfalardan önce.
- *   7. route'lar → 404 → hata yönetimi.
+ *   6. csrf — body parser'lardan sonra olmalı: token form alanından okunuyor.
+ *      Rewrite'lardan önce, çünkü kontrol istemcinin gördüğü yola bakar.
+ *   7. rewrites(afterFiles) — statik denendikten sonra, sayfalardan önce.
+ *   8. route'lar → 404 → hata yönetimi.
  */
 import path from "node:path";
 import process from "node:process";
 import express from "express";
 import { compression } from "./middleware/compression.js";
 import { headersMiddleware } from "./middleware/headers.js";
+import { csrf } from "./middleware/csrf.js";
 import { staticPrecompressed } from "./middleware/static-precompressed.js";
 import { devGate } from "./middleware/dev-gate.js";
 import { redirects } from "./middleware/redirects.js";
@@ -51,8 +54,11 @@ export async function createApp(options = {}) {
   });
 
   app.set("etag", "strong");
-  // Ters proxy arkasında doğru protokol ve istemci IP'si için.
-  app.set("trust proxy", true);
+  // Ters proxy arkasında doğru protokol ve istemci IP'si için. Doğrudan
+  // internete açık bir sunucuda kapatılmalı: açıkken istemci kendi
+  // `X-Forwarded-For` başlığını uydurabilir ve rate limit ile audit log
+  // yanlış IP görür.
+  app.set("trust proxy", config.security.trustProxy);
 
   app.use(configRewrites("beforeFiles"));
   app.use(compression());
@@ -86,6 +92,8 @@ export async function createApp(options = {}) {
 
   app.use(express.urlencoded({ extended: false, limit: "64kb" }));
   app.use(express.json({ limit: "256kb" }));
+
+  app.use(csrf());
 
   app.use(configRewrites("afterFiles"));
 

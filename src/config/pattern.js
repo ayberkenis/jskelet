@@ -28,7 +28,7 @@ function escapeLiteral(text) {
  */
 export function compilePattern(source) {
   if (typeof source !== "string" || !source.startsWith("/")) {
-    console.warn(`[config] geçersiz source (\`/\` ile başlamalı): ${source}`);
+    console.warn(`[config] invalid source (must start with \`/\`): ${source}`);
     return null;
   }
 

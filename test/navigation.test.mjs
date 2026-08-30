@@ -11,17 +11,17 @@ const nav = (overrides = {}) => ({
   ...overrides,
 });
 
-test("ikisi de kapalıysa kural üretilmez", () => {
+test("no rule is emitted when both are disabled", () => {
   assert.equal(buildSpeculationRules(nav({ prefetch: false })), null);
 });
 
-test("yalnızca açık olan bölüm basılır", () => {
+test("only the enabled section is printed", () => {
   const rules = buildSpeculationRules(nav());
   assert.deepEqual(Object.keys(rules), ["prefetch"]);
   assert.equal(rules.prefetch[0].eagerness, "moderate");
 });
 
-test("prefetch ve prerender birlikte farklı eagerness taşıyabilir", () => {
+test("prefetch and prerender can carry different eagerness together", () => {
   const rules = buildSpeculationRules(
     nav({ prefetch: "moderate", prerender: "conservative" }),
   );
@@ -30,17 +30,17 @@ test("prefetch ve prerender birlikte farklı eagerness taşıyabilir", () => {
   assert.equal(rules.prerender[0].eagerness, "conservative");
 });
 
-test("kural yalnızca aynı origin yollarını eşler", () => {
+test("the rule matches same-origin paths only", () => {
   const [first] = buildSpeculationRules(nav()).prefetch[0].where.and;
   assert.deepEqual(first, { href_matches: "/*" });
 });
 
-test("exclude desenleri olumsuz koşula çevrilir", () => {
+test("exclude patterns become a negative condition", () => {
   const { and } = buildSpeculationRules(nav({ exclude: ["/api/*"] })).prefetch[0].where;
   assert.ok(and.some((clause) => clause.not?.href_matches === "/api/*"));
 });
 
-test("yan etkili bağlantılar her koşulda muaf", () => {
+test("links with side effects are always exempt", () => {
   const { and } = buildSpeculationRules(nav()).prefetch[0].where;
   const selectors = and
     .map((clause) => clause.not?.selector_matches)

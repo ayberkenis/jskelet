@@ -205,14 +205,67 @@ start();
 - Bir element aynı island adıyla **iki kez bağlanmaz**; kayıt element bazında
   `WeakMap` içinde tutulur.
 - Kayıtlı olmayan bir ad için konsola uyarı basılır:
-  `[island] kayıtlı değil: <ad>`.
+  `[island] not registered: <name>`.
 - Modül import'u ya da `mount()` hata verirse konsola hata basılır
-  (`[island] <ad> yüklenemedi`) ve **sayfanın kalanı etkilenmez**.
+  (`[island] <name> failed to load`) ve **sayfanın kalanı etkilenmez**.
 - `mount()` başarıyla dönerse elemente `data-island-ready="true"` yazılır.
-- `mount()` bir fonksiyon döndürebilir; sözleşmede temizlik için ayrılmıştır.
-  Framework bu fonksiyonu şu anda kendiliğinden çağırmaz — island'ın ömrünü
-  kendisi yönetiyorsa (ör. bir fragment'ı değiştirirken) dönen fonksiyonu
-  saklayıp kendisi çağırmalıdır.
+- `mount()` bir temizlik fonksiyonu döndürebilir; framework onu saklar ve
+  `unmount()` çağrıldığında işletir (aşağıya bakın).
+
+### `unmount(root?)`
+
+`root` altındaki island'ları söker: saklanan temizlik fonksiyonlarını çağırır,
+`data-island-ready` işaretini kaldırır ve kaydı siler, böylece aynı düğüm
+tekrar DOM'a girerse yeniden bağlanabilir. `root`'un kendisi de island olabilir.
+
+DOM'un bir bölgesini değiştirirken çağrılması **zorunlu**:
+
+```js
+import { hydrate, unmount } from "jskelet/client";
+
+unmount(container);
+container.innerHTML = html;
+hydrate(container);
+```
+
+Atlanması en kolay gözden kaçan sızıntı biçimini üretiyor. `innerHTML` ile
+değiştirilen bir bölgenin island'ları DOM'dan çıkar, ama `document`/`window`
+üzerine kurdukları dinleyiciler ve `setInterval`'ları yaşamaya devam eder;
+birkaç takastan sonra aynı iş onlarca kez çalışır.
+
+```js
+export function mount(element) {
+  const timer = setInterval(() => tick(element), 1000);
+  const onResize = () => layout(element);
+  window.addEventListener("resize", onResize);
+
+  return () => {
+    clearInterval(timer);
+    window.removeEventListener("resize", onResize);
+  };
+}
+```
+
+`swap()` ve form yardımcıları `unmount()`u kendileri çağırıyor; elle DOM
+değiştirdiğiniz yerlerde siz çağırıyorsunuz.
+
+### `swap(target, url, options?)` ve `startSwapLinks(root?)`
+
+Bir bölgeyi sunucudan gelen parçayla değiştirir: eski alt ağacı söker, içeriği
+yazar, yeniden hidre eder ve odağı kaybolmuşsa geri getirir.
+
+```html
+<a href="/_fragment/satirlar?sayfa=2" data-swap="#satirlar">Sonraki</a>
+```
+
+Sunucu tarafı ve tüm seçenekler
+[12-panel-ve-oturum.md](./12-panel-ve-oturum.md)'de.
+
+### `enhanceForm(form)` ve `startForms(root?)`
+
+`data-enhance` taşıyan formları sayfa yenilemeden gönderir; JS kapalıyken
+normal POST + yönlendirme akışı çalışmaya devam eder. Sözleşmenin tamamı
+[12-panel-ve-oturum.md](./12-panel-ve-oturum.md)'de.
 
 ## Durum paylaşımı: `createStore`
 

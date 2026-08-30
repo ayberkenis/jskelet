@@ -30,7 +30,7 @@ function load() {
   } catch {
     if (!warned) {
       warned = true;
-      console.warn("[assets] manifest yok — `jskelet build` çalıştırın.");
+      console.warn("[assets] no manifest — run `jskelet build`.");
     }
   }
 

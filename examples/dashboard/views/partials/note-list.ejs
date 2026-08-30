@@ -1,0 +1,18 @@
+<%#
+  Not listesi. Başarılı bir gönderimden sonra fragment olarak bu şablon
+  dönüyor ve `#notlar` bölgesine takılıyor.
+-%>
+<% if (!notlar.length) { %>
+<p class="rounded-lg border border-dashed border-slate-300 px-3 py-6 text-center text-sm text-slate-500">
+  Henüz not yok.
+</p>
+<% } else { %>
+<ul class="divide-y divide-slate-100 rounded-lg border border-slate-200 bg-white">
+  <% for (const not of notlar) { %>
+  <li class="px-3 py-2 text-sm">
+    <p><%= not.metin %></p>
+    <p class="mt-0.5 text-xs text-slate-400"><%= not.tarih %></p>
+  </li>
+  <% } %>
+</ul>
+<% } %>

@@ -41,7 +41,7 @@ export async function renderStatusPage(status, options = {}) {
     const { renderPage } = await import("./render.js");
     return await renderPage({ pathname: `/${status}`, ...page });
   } catch (error) {
-    console.error(`[render] ${status} sayfası render edilemedi`, error);
+    console.error(`[render] failed to render the ${status} page`, error);
     return fallbackPage(status);
   }
 }

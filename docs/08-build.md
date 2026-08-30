@@ -69,7 +69,7 @@ dosya adlarını okunur tutuyor. Hash'li olmaları sayesinde bu dosyalara
 Build çalışmadıysa uygulama yine ayağa kalkar: `hasAsset()` false olur, layout
 stylesheet ve script etiketlerini hiç basmaz. `jskelet build` unutulduğunda hata
 yerine stilsiz ama çalışan bir sayfa görürsünüz. Manifest hiç yoksa bir kez uyarı
-basılır: `[assets] manifest yok — 'jskelet build' çalıştırın.`
+basılır: ``[assets] no manifest — run `jskelet build`.``
 
 Manifest **dev'de her istekte** yeniden okunur (watch build hash'leri
 değiştirir), prod'da bir kez.
@@ -244,8 +244,8 @@ Son satır için iki güvenlik ağı var: ad taşıyan yapılandırma alanları
 sembolleri okuyup eksik olan için tek seferlik uyarı basar:
 
 ```
-[icon] sprite'ta yok: x-logo-regular — adı sabit yazın ya da
-build/tasks/icons.mjs taramasına ekleyin.
+[icon] missing from sprite: x-logo-regular — write the name as a literal or add
+it to the build/tasks/icons.mjs scan.
 ```
 
 Bu uyarıyı görürseniz ya adı sabit yazın, ya `icons.scan` listesine ilgili
@@ -352,7 +352,7 @@ karşılaşmaması.
   kontrol edin.
 - **Bazı Tailwind sınıfları çalışmıyor.** `@source` direktifi eksik olan bir
   dizinde yazılmışlar.
-- **İkon boş görünüyor.** Sprite'ta o sembol yok; dev'de `[icon] sprite'ta yok`
+- **İkon boş görünüyor.** Sprite'ta o sembol yok; dev'de `[icon] missing from sprite`
   uyarısına bakın.
 - **Island'lar hiç açılmıyor.** `main.js` manifest'te yok (entry dizini boş ya
   da build atlanmış) veya bir build hatası var.

@@ -1,5 +1,5 @@
 /**
- * "Detaylı İnceleme" sayfasının arayüzü.
+ * "Inspect in detail" sayfasının arayüzü.
  *
  * Overlay ile aynı mantık: build'e girmez, dev sunucusu bu dosyayı ham olarak
  * servis eder. Tüm veri tek bir uçtan gelir (`/__jskelet/dev/report/data`),
@@ -25,13 +25,13 @@ const filters = new Map();
 let selectedChunk = null;
 
 const TABS = [
-  { id: "overview", label: "Genel bakış" },
-  { id: "pages", label: "Sayfalar" },
-  { id: "chunks", label: "Chunk analizi" },
-  { id: "assets", label: "Varlıklar" },
+  { id: "overview", label: "Overview" },
+  { id: "pages", label: "Pages" },
+  { id: "chunks", label: "Chunk analysis" },
+  { id: "assets", label: "Assets" },
   { id: "ssr", label: "SSR & CSR" },
-  { id: "api", label: "API istekleri" },
-  { id: "errors", label: "Hatalar" },
+  { id: "api", label: "API requests" },
+  { id: "errors", label: "Errors" },
 ];
 
 /* ------------------------------------------------------------- yardımcılar */
@@ -129,19 +129,19 @@ function table(id, columns, rows, options = {}) {
     const compare =
       typeof left === "number" && typeof right === "number"
         ? left - right
-        : String(left ?? "").localeCompare(String(right ?? ""), "tr");
+        : String(left ?? "").localeCompare(String(right ?? ""));
     return sort.dir === "asc" ? compare : -compare;
   });
 
   const search = options.search
     ? `<div class="toolbar">
          <input type="search" data-filter="${id}" value="${escapeHtml(filters.get(id) ?? "")}"
-           placeholder="Filtrele — ${visible.length}/${rows.length} satır" />
+           placeholder="Filter — ${visible.length}/${rows.length} rows" />
        </div>`
     : "";
 
   if (!rows.length) {
-    return `${search}<div class="empty">Kayıt yok.</div>`;
+    return `${search}<div class="empty">No records.</div>`;
   }
 
   return `${search}
@@ -191,42 +191,42 @@ function overview() {
   const islandReady = pages.reduce((sum, page) => sum + (page.islands?.ready ?? 0), 0);
 
   return `
-    <h2>Site geneli<span class="note">${pages.length} sayfa biliniyor, ${measured.length} tanesi tarayıcıda ölçüldü</span></h2>
+    <h2>Site wide<span class="note">${pages.length} pages known, ${measured.length} of them measured in the browser</span></h2>
     ${metrics([
       {
-        label: "Ortalama LCP",
+        label: "Average LCP",
         value: ms(average),
         tone: tone(average, [2500, 4000]),
         ratio: average == null ? null : average / 4000,
-        sub: `en kötü ${ms(worst[0]?.metrics?.lcp)}`,
+        sub: `worst ${ms(worst[0]?.metrics?.lcp)}`,
       },
       {
-        label: "Ölçülen sayfa",
+        label: "Measured pages",
         value: `${measured.length}/${pages.length}`,
         ratio: pages.length ? measured.length / pages.length : null,
         tone: "good",
-        sub: "gez ki ölçülsün",
+        sub: "browse to measure",
       },
-      { label: "JS çıktısı", value: size(jsBytes), sub: `${js.length} dosya` },
-      { label: "CSS çıktısı", value: size(cssBytes), sub: `${css.length} dosya` },
-      { label: "SSR HTML", value: size(ssrBytes), sub: "bilinen sayfaların toplamı" },
+      { label: "JS output", value: size(jsBytes), sub: `${js.length} files` },
+      { label: "CSS output", value: size(cssBytes), sub: `${css.length} files` },
+      { label: "SSR HTML", value: size(ssrBytes), sub: "total of known pages" },
       {
         label: "Island (CSR)",
         value: `${islandReady}/${islandTotal}`,
         ratio: islandTotal ? islandReady / islandTotal : null,
         tone: "good",
-        sub: "bağlanan / işaretlenen",
+        sub: "mounted / marked",
       },
       {
-        label: "HTML önbelleği",
+        label: "HTML cache",
         value: String(data.cache?.size ?? 0),
-        sub: `${size((data.cache?.entries ?? []).reduce((sum, item) => sum + item.bytes, 0))} bellekte`,
+        sub: `${size((data.cache?.entries ?? []).reduce((sum, item) => sum + item.bytes, 0))} in memory`,
       },
       {
-        label: "Sunucu API çağrısı",
+        label: "Server API calls",
         value: String((data.serverApi ?? []).length),
         tone: apiErrors ? "bad" : "good",
-        sub: apiErrors ? `${apiErrors} hata` : "hata yok",
+        sub: apiErrors ? `${apiErrors} errors` : "no errors",
       },
       {
         label: "Prewarm",
@@ -237,19 +237,19 @@ function overview() {
         tone: data.prewarm?.failed ? "mid" : "good",
       },
       {
-        label: "Süreç",
+        label: "Process",
         value: size(data.process?.memory?.rss),
-        sub: `${data.process?.node} · ${Math.round(data.process?.uptime ?? 0)} sn`,
+        sub: `${data.process?.node} · ${Math.round(data.process?.uptime ?? 0)} s`,
       },
     ])}
 
-    <h2>En yavaş sayfalar<span class="note">LCP'ye göre</span></h2>
+    <h2>Slowest pages<span class="note">by LCP</span></h2>
     ${
       worst.length
         ? table(
             "worst",
             [
-              { key: "url", label: "Sayfa", render: (row) => link(row.url) },
+              { key: "url", label: "Page", render: (row) => link(row.url) },
               { key: "lcp", label: "LCP", value: (row) => row.metrics.lcp, render: (row) => `<span class="${tone(row.metrics.lcp, [2500, 4000])}">${ms(row.metrics.lcp)}</span>` },
               { key: "cls", label: "CLS", value: (row) => row.metrics.cls ?? 0, render: (row) => (row.metrics.cls ?? 0).toFixed(3) },
               { key: "inp", label: "INP", value: (row) => row.metrics.inp ?? 0, render: (row) => ms(row.metrics.inp) },
@@ -258,10 +258,10 @@ function overview() {
             ],
             worst,
           )
-        : `<div class="empty">Henüz tarayıcı ölçümü yok. Sitede gezindikçe sayfalar buraya düşer.</div>`
+        : `<div class="empty">No browser measurements yet. Pages land here as you browse the site.</div>`
     }
 
-    <h2>Web Vitals dağılımı</h2>
+    <h2>Web Vitals distribution</h2>
     <div class="card">
       ${["lcp", "fcp", "ttfb", "inp"]
         .map((key) => {
@@ -273,7 +273,7 @@ function overview() {
           const p = (ratio) => values[Math.min(values.length - 1, Math.floor(values.length * ratio))];
           const bounds = { lcp: [2500, 4000], fcp: [1800, 3000], ttfb: [800, 1800], inp: [200, 500] }[key];
           return `<div class="barrow">
-            <span class="name">${key.toUpperCase()} — medyan ${ms(p(0.5))}, p75 ${ms(p(0.75))}, p95 ${ms(p(0.95))}</span>
+            <span class="name">${key.toUpperCase()} — median ${ms(p(0.5))}, p75 ${ms(p(0.75))}, p95 ${ms(p(0.95))}</span>
             <span class="size ${tone(p(0.75), bounds)}">${ms(p(0.75))}</span>
             <span class="track"><span class="${tone(p(0.75), bounds)}" style="width:${Math.min(100, (p(0.75) / (bounds[1] * 1.5)) * 100)}%"></span></span>
           </div>`;
@@ -287,19 +287,19 @@ function pagesTab() {
   const rows = data.pages ?? [];
 
   return `
-    <h2>Sayfalar<span class="note">tarayıcı ölçümleri gezdikçe birikir; SSR sütunları ısıtma turundan gelir</span></h2>
+    <h2>Pages<span class="note">browser measurements build up as you browse; SSR columns come from the prewarm round</span></h2>
     ${table(
       "pages",
       [
-        { key: "url", label: "Sayfa", render: (row) => link(row.url) },
-        { key: "visits", label: "Ziyaret", value: (row) => row.visits },
+        { key: "url", label: "Page", render: (row) => link(row.url) },
+        { key: "visits", label: "Visits", value: (row) => row.visits },
         { key: "lcp", label: "LCP", value: (row) => row.metrics?.lcp ?? -1, render: (row) => `<span class="${tone(row.metrics?.lcp, [2500, 4000])}">${ms(row.metrics?.lcp)}</span>` },
         { key: "cls", label: "CLS", value: (row) => row.metrics?.cls ?? -1, render: (row) => (row.metrics?.cls == null ? "—" : `<span class="${tone(row.metrics.cls * 1000, [100, 250])}">${row.metrics.cls.toFixed(3)}</span>`) },
         { key: "inp", label: "INP", value: (row) => row.metrics?.inp ?? -1, render: (row) => `<span class="${tone(row.metrics?.inp, [200, 500])}">${ms(row.metrics?.inp)}</span>` },
         { key: "fcp", label: "FCP", value: (row) => row.metrics?.fcp ?? -1, render: (row) => ms(row.metrics?.fcp) },
         { key: "ttfb", label: "TTFB", value: (row) => row.metrics?.ttfb ?? -1, render: (row) => `<span class="${tone(row.metrics?.ttfb, [800, 1800])}">${ms(row.metrics?.ttfb)}</span>` },
         { key: "blocking", label: "Blocking", value: (row) => row.metrics?.blocking ?? -1, render: (row) => ms(row.metrics?.blocking) },
-        { key: "requests", label: "İstek", value: (row) => row.resources?.count ?? 0 },
+        { key: "requests", label: "Requests", value: (row) => row.resources?.count ?? 0 },
         { key: "transfer", label: "Transfer", value: (row) => row.resources?.bytes ?? 0, render: (row) => size(row.resources?.bytes) },
         { key: "islands", label: "Island", value: (row) => row.islands?.total ?? 0, render: (row) => (row.islands?.total ? `${row.islands.ready}/${row.islands.total}` : "—") },
         { key: "api", label: "API", value: (row) => row.api?.length ?? 0 },
@@ -316,7 +316,7 @@ function pagesTab() {
 function chunksTab() {
   const build = data.build ?? {};
   if (!build.available) {
-    return `<div class="empty">Chunk analizi için <code>build/generated/metafile.json</code> gerekiyor. <code>npm run dev</code> veya <code>npm run build</code> bir tur döndüğünde oluşur.</div>`;
+    return `<div class="empty">Chunk analysis needs <code>build/generated/metafile.json</code>. It appears once <code>npm run dev</code> or <code>npm run build</code> has completed a round.</div>`;
   }
 
   const outputs = build.outputs ?? [];
@@ -327,7 +327,7 @@ function chunksTab() {
   const groupTotal = (build.groups ?? []).reduce((sum, item) => sum + item.bytes, 0) || 1;
 
   return `
-    <h2>Çıktılar<span class="note">${outputs.length} dosya · ${size(totalBytes)} ham</span></h2>
+    <h2>Outputs<span class="note">${outputs.length} files · ${size(totalBytes)} raw</span></h2>
     <div class="split">
       <div>
         ${table(
@@ -335,18 +335,18 @@ function chunksTab() {
           [
             {
               key: "file",
-              label: "Dosya",
+              label: "File",
               render: (row) =>
                 `${link(row.file)} <span class="tag ${row.isChunk ? "chunk" : "entry"}">${row.isChunk ? "chunk" : "entry"}</span>`,
             },
-            { key: "bytes", label: "Ham", value: (row) => row.bytes, render: (row) => size(row.bytes) },
+            { key: "bytes", label: "Raw", value: (row) => row.bytes, render: (row) => size(row.bytes) },
             { key: "gzip", label: "Gzip", value: (row) => row.gzip ?? 0, render: (row) => size(row.gzip) },
             { key: "brotli", label: "Brotli", value: (row) => row.brotli ?? 0, render: (row) => size(row.brotli) },
-            { key: "inputCount", label: "Modül", value: (row) => row.inputCount },
-            { key: "imports", label: "Import", value: (row) => row.imports.length },
+            { key: "inputCount", label: "Modules", value: (row) => row.inputCount },
+            { key: "imports", label: "Imports", value: (row) => row.imports.length },
             {
               key: "share",
-              label: "Pay",
+              label: "Share",
               value: (row) => row.bytes / heaviest,
               render: (row) => `${Math.round((row.bytes / totalBytes) * 100)}%`,
             },
@@ -361,12 +361,12 @@ function chunksTab() {
       </div>
       <div>
         <div class="card">
-          <h2 style="margin-top:0">Seçili çıktı</h2>
+          <h2 style="margin-top:0">Selected output</h2>
           ${
             selected
               ? `<div class="hint" style="margin-bottom:10px">
                    <code>${escapeHtml(selected.file)}</code><br />
-                   ${size(selected.bytes)} ham · ${size(selected.gzip)} gzip · ${selected.inputCount} modül
+                   ${size(selected.bytes)} raw · ${size(selected.gzip)} gzip · ${selected.inputCount} modules
                    ${selected.entry ? `<br />entry: <code>${escapeHtml(selected.entry)}</code>` : ""}
                  </div>
                  <div class="bars">
@@ -382,19 +382,19 @@ function chunksTab() {
                  </div>
                  ${
                    selected.imports.length
-                     ? `<h2>Import ettiği chunk'lar</h2>
+                     ? `<h2>Chunks it imports</h2>
                         <div class="hint">${selected.imports
                           .map((item) => `<div><code>${escapeHtml(item.path)}</code> <span class="tag">${escapeHtml(item.kind)}</span></div>`)
                           .join("")}</div>`
                      : ""
                  }`
-              : `<div class="hint">Soldan bir çıktı seç.</div>`
+              : `<div class="hint">Pick an output on the left.</div>`
           }
         </div>
       </div>
     </div>
 
-    <h2>Kaynak grupları<span class="note">tüm çıktılarda paket / klasör payı</span></h2>
+    <h2>Source groups<span class="note">package / folder share across all outputs</span></h2>
     <div class="card bars">
       ${(build.groups ?? [])
         .slice(0, 25)
@@ -415,19 +415,19 @@ function assetsTab() {
   const total = assets.reduce((sum, item) => sum + (item.bytes ?? 0), 0);
 
   return `
-    <h2>Manifest varlıkları<span class="note">${assets.length} girdi · ${size(total)}</span></h2>
+    <h2>Manifest assets<span class="note">${assets.length} entries · ${size(total)}</span></h2>
     ${table(
       "assets",
       [
-        { key: "name", label: "Ad" },
-        { key: "url", label: "Yol", render: (row) => link(row.url) },
-        { key: "kind", label: "Tür", render: (row) => `<span class="tag">${escapeHtml(row.kind)}</span>` },
-        { key: "bytes", label: "Ham", value: (row) => row.bytes ?? 0, render: (row) => size(row.bytes) },
+        { key: "name", label: "Name" },
+        { key: "url", label: "Path", render: (row) => link(row.url) },
+        { key: "kind", label: "Kind", render: (row) => `<span class="tag">${escapeHtml(row.kind)}</span>` },
+        { key: "bytes", label: "Raw", value: (row) => row.bytes ?? 0, render: (row) => size(row.bytes) },
         { key: "gzip", label: "Gzip", value: (row) => row.gzip ?? 0, render: (row) => size(row.gzip) },
         { key: "brotli", label: "Brotli", value: (row) => row.brotli ?? 0, render: (row) => size(row.brotli) },
         {
           key: "ratio",
-          label: "Kazanç",
+          label: "Savings",
           value: (row) => (row.bytes && row.gzip ? 1 - row.gzip / row.bytes : 0),
           render: (row) =>
             row.bytes && row.gzip
@@ -459,36 +459,36 @@ function ssrTab() {
   const partial = csr.filter((page) => page.islands.ready < page.islands.total);
 
   return `
-    <h2>Sunucu render & istemci hidrasyonu</h2>
+    <h2>Server render & client hydration</h2>
     ${metrics([
-      { label: "SSR sayfa", value: String(pages.filter((page) => page.html?.bytes).length), sub: "HTML boyutu bilinen" },
-      { label: "Island'lı sayfa", value: `${csr.length}/${pages.length}`, ratio: pages.length ? csr.length / pages.length : null, tone: "good" },
-      { label: "Eksik hidrasyon", value: String(partial.length), tone: partial.length ? "mid" : "good", sub: "bazı island'lar bağlanmadı" },
-      { label: "Farklı island", value: String(islands.size) },
-      { label: "Önbellek girdisi", value: String(data.cache?.size ?? 0) },
-      { label: "Önbellek boyutu", value: size(cache.reduce((sum, item) => sum + item.bytes, 0)) },
+      { label: "SSR pages", value: String(pages.filter((page) => page.html?.bytes).length), sub: "HTML size known" },
+      { label: "Pages with islands", value: `${csr.length}/${pages.length}`, ratio: pages.length ? csr.length / pages.length : null, tone: "good" },
+      { label: "Partial hydration", value: String(partial.length), tone: partial.length ? "mid" : "good", sub: "some islands did not mount" },
+      { label: "Distinct islands", value: String(islands.size) },
+      { label: "Cache entries", value: String(data.cache?.size ?? 0) },
+      { label: "Cache size", value: size(cache.reduce((sum, item) => sum + item.bytes, 0)) },
     ])}
 
-    <h2>Island envanteri<span class="note">gezilen sayfalarda görülen island'lar</span></h2>
+    <h2>Island inventory<span class="note">islands seen on the pages you browsed</span></h2>
     ${table(
       "islands",
       [
         { key: "name", label: "Island" },
-        { key: "pages", label: "Sayfa sayısı", value: (row) => row.pages },
+        { key: "pages", label: "Page count", value: (row) => row.pages },
       ],
       [...islands.values()],
       { search: true },
     )}
 
-    <h2>HTML önbelleği<span class="note">bellekteki girdiler, bayatlama süresiyle</span></h2>
+    <h2>HTML cache<span class="note">entries in memory, with time to stale</span></h2>
     ${table(
       "cache",
       [
-        { key: "key", label: "Anahtar" },
-        { key: "status", label: "Durum", render: (row) => `<span class="status ${row.status >= 400 ? "bad" : ""}">${row.status}</span>` },
+        { key: "key", label: "Key" },
+        { key: "status", label: "Status", render: (row) => `<span class="status ${row.status >= 400 ? "bad" : ""}">${row.status}</span>` },
         { key: "bytes", label: "HTML", value: (row) => row.bytes, render: (row) => size(row.bytes) },
-        { key: "expiresIn", label: "Tazelik", value: (row) => row.expiresIn, render: (row) => (row.stale ? `<span class="mid">bayat</span>` : `${row.expiresIn} sn`) },
-        { key: "encodings", label: "Sıkıştırma", render: (row) => (row.encodings.length ? row.encodings.map((item) => `<span class="tag">${escapeHtml(item)}</span>`).join(" ") : "—") },
+        { key: "expiresIn", label: "Freshness", value: (row) => row.expiresIn, render: (row) => (row.stale ? `<span class="mid">stale</span>` : `${row.expiresIn} s`) },
+        { key: "encodings", label: "Compression", render: (row) => (row.encodings.length ? row.encodings.map((item) => `<span class="tag">${escapeHtml(item)}</span>`).join(" ") : "—") },
       ],
       cache,
       { search: true },
@@ -522,46 +522,46 @@ function apiTab() {
   );
 
   return `
-    <h2>Sunucu tarafı çağrılar<span class="note">SSR sırasında yapılan dış istekler, yola göre gruplu</span></h2>
+    <h2>Server side calls<span class="note">outbound requests made during SSR, grouped by path</span></h2>
     ${table(
       "api-groups",
       [
-        { key: "key", label: "Yol" },
+        { key: "key", label: "Path" },
         { key: "host", label: "Host" },
-        { key: "calls", label: "Çağrı", value: (row) => row.calls },
-        { key: "avg", label: "Ort. süre", value: (row) => row.ms / row.calls, render: (row) => `<span class="${tone(row.ms / row.calls, [200, 800])}">${ms(row.ms / row.calls)}</span>` },
-        { key: "total", label: "Toplam süre", value: (row) => row.ms, render: (row) => ms(row.ms) },
-        { key: "bytes", label: "Gövde", value: (row) => row.bytes, render: (row) => size(row.bytes) },
-        { key: "errors", label: "Hata", value: (row) => row.errors, render: (row) => (row.errors ? `<span class="bad">${row.errors}</span>` : "0") },
+        { key: "calls", label: "Calls", value: (row) => row.calls },
+        { key: "avg", label: "Avg. time", value: (row) => row.ms / row.calls, render: (row) => `<span class="${tone(row.ms / row.calls, [200, 800])}">${ms(row.ms / row.calls)}</span>` },
+        { key: "total", label: "Total time", value: (row) => row.ms, render: (row) => ms(row.ms) },
+        { key: "bytes", label: "Body", value: (row) => row.bytes, render: (row) => size(row.bytes) },
+        { key: "errors", label: "Errors", value: (row) => row.errors, render: (row) => (row.errors ? `<span class="bad">${row.errors}</span>` : "0") },
       ],
       [...grouped.values()],
       { search: true },
     )}
 
-    <h2>Son çağrılar</h2>
+    <h2>Recent calls</h2>
     ${table(
       "api-calls",
       [
         { key: "url", label: "URL" },
-        { key: "method", label: "Metot" },
-        { key: "status", label: "Durum", render: (row) => `<span class="status ${row.error ? "bad" : ""}">${row.status || "—"}</span>` },
-        { key: "ms", label: "Süre", value: (row) => row.ms, render: (row) => `<span class="${tone(row.ms, [200, 800])}">${ms(row.ms)}</span>` },
-        { key: "bytes", label: "Gövde", value: (row) => row.bytes, render: (row) => size(row.bytes) },
-        { key: "error", label: "Hata", render: (row) => (row.error ? `<span class="bad">${escapeHtml(row.error)}</span>` : "—") },
+        { key: "method", label: "Method" },
+        { key: "status", label: "Status", render: (row) => `<span class="status ${row.error ? "bad" : ""}">${row.status || "—"}</span>` },
+        { key: "ms", label: "Time", value: (row) => row.ms, render: (row) => `<span class="${tone(row.ms, [200, 800])}">${ms(row.ms)}</span>` },
+        { key: "bytes", label: "Body", value: (row) => row.bytes, render: (row) => size(row.bytes) },
+        { key: "error", label: "Error", render: (row) => (row.error ? `<span class="bad">${escapeHtml(row.error)}</span>` : "—") },
       ],
       server.slice(0, 200),
       { search: true },
     )}
 
-    <h2>Tarayıcı tarafı çağrılar<span class="note">island'ların yaptığı fetch istekleri</span></h2>
+    <h2>Browser side calls<span class="note">fetch requests made by islands</span></h2>
     ${table(
       "api-client",
       [
         { key: "url", label: "URL" },
-        { key: "page", label: "Sayfa", render: (row) => link(row.page) },
-        { key: "status", label: "Durum", render: (row) => `<span class="status ${row.status >= 400 || !row.status ? "bad" : ""}">${row.status || "—"}</span>` },
-        { key: "ms", label: "Süre", value: (row) => row.ms, render: (row) => `<span class="${tone(row.ms, [200, 800])}">${ms(row.ms)}</span>` },
-        { key: "bytes", label: "Gövde", value: (row) => row.bytes, render: (row) => size(row.bytes) },
+        { key: "page", label: "Page", render: (row) => link(row.page) },
+        { key: "status", label: "Status", render: (row) => `<span class="status ${row.status >= 400 || !row.status ? "bad" : ""}">${row.status || "—"}</span>` },
+        { key: "ms", label: "Time", value: (row) => row.ms, render: (row) => `<span class="${tone(row.ms, [200, 800])}">${ms(row.ms)}</span>` },
+        { key: "bytes", label: "Body", value: (row) => row.bytes, render: (row) => size(row.bytes) },
       ],
       client,
       { search: true },
@@ -571,27 +571,27 @@ function apiTab() {
 
 function errorsTab() {
   return `
-    <h2>Hatalar<span class="note">sunucu günlüğü</span></h2>
+    <h2>Errors<span class="note">server log</span></h2>
     ${table(
       "errors",
       [
-        { key: "message", label: "Mesaj" },
-        { key: "level", label: "Seviye", render: (row) => `<span class="tag">${escapeHtml(row.level)}</span>` },
-        { key: "at", label: "Zaman", value: (row) => row.at, render: (row) => new Date(row.at).toLocaleTimeString("tr-TR") },
+        { key: "message", label: "Message" },
+        { key: "level", label: "Level", render: (row) => `<span class="tag">${escapeHtml(row.level)}</span>` },
+        { key: "at", label: "Time", value: (row) => row.at, render: (row) => new Date(row.at).toLocaleTimeString() },
       ],
       data.errors ?? [],
       { search: true },
     )}
 
-    <h2>Son istekler</h2>
+    <h2>Recent requests</h2>
     ${table(
       "requests",
       [
         { key: "url", label: "URL", render: (row) => link(row.url) },
-        { key: "status", label: "Durum", render: (row) => `<span class="status ${row.status >= 500 ? "bad" : row.status >= 400 ? "warn" : ""}">${row.status}</span>` },
-        { key: "ms", label: "Süre", value: (row) => row.ms, render: (row) => `<span class="${tone(row.ms, [150, 500])}">${ms(row.ms)}</span>` },
+        { key: "status", label: "Status", render: (row) => `<span class="status ${row.status >= 500 ? "bad" : row.status >= 400 ? "warn" : ""}">${row.status}</span>` },
+        { key: "ms", label: "Time", value: (row) => row.ms, render: (row) => `<span class="${tone(row.ms, [150, 500])}">${ms(row.ms)}</span>` },
         { key: "cache", label: "Cache", render: (row) => (row.cache ? `<span class="tag">${escapeHtml(row.cache)}</span>` : "—") },
-        { key: "at", label: "Zaman", value: (row) => row.at, render: (row) => new Date(row.at).toLocaleTimeString("tr-TR") },
+        { key: "at", label: "Time", value: (row) => row.at, render: (row) => new Date(row.at).toLocaleTimeString() },
       ],
       data.requests ?? [],
       { search: true },
@@ -621,12 +621,12 @@ function render() {
   const main = document.querySelector("[data-part='main']");
   main.innerHTML = data
     ? RENDERERS[activeTab]()
-    : `<div class="empty">Veri yükleniyor…</div>`;
+    : `<div class="empty">Loading data…</div>`;
 
   const status = document.querySelector("[data-part='status']");
   if (data) {
-    const time = new Date(data.generatedAt).toLocaleTimeString("tr-TR");
-    status.textContent = `${data.pages.length} sayfa · ${time}`;
+    const time = new Date(data.generatedAt).toLocaleTimeString();
+    status.textContent = `${data.pages.length} pages · ${time}`;
   }
 
   document.querySelector("[data-action='auto']").setAttribute("aria-pressed", String(auto));
@@ -637,7 +637,7 @@ async function load() {
     const response = await fetch(`${BASE}/report/data`, { cache: "no-store" });
     data = await response.json();
   } catch {
-    document.querySelector("[data-part='status']").textContent = "sunucuya ulaşılamıyor";
+    document.querySelector("[data-part='status']").textContent = "server unreachable";
     return;
   }
   render();

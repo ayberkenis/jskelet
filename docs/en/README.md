@@ -11,6 +11,10 @@ This directory is the full reference for the framework. To read it in order,
 start from the beginning; if you are looking for a specific topic, go straight
 to the relevant entry.
 
+The Turkish edition of the same documents lives one directory up, in
+[`docs/`](../README.md). Both editions are kept in sync by hand, so if you
+change one, change the other.
+
 ## Read in order
 
 | Document | Topic |
@@ -26,6 +30,7 @@ to the relevant entry.
 | [09-dev-tools.md](./09-dev-tools.md) | The `jskelet dev` flow, watch directories, CSS hot-swap, devtools overlay (Alt+D), the report page, the dev gate |
 | [10-deployment.md](./10-deployment.md) | Prod build + start, environment variables, Docker, reverse proxy, health check |
 | [11-migration.md](./11-migration.md) | Migrating from Next.js: the equivalence table and a step-by-step plan |
+| [12-dashboards-and-sessions.md](./12-dashboards-and-sessions.md) | Per-visitor pages: `private: true`, signed cookie sessions, CSRF, `fragment()`, swapping regions and the form loop |
 
 ## Quick access by topic
 
@@ -35,13 +40,15 @@ to the relevant entry.
   [05-islands.md](./05-islands.md)
 - **Why is the page returning `MISS` / why am I seeing stale data?** →
   [06-caching.md](./06-caching.md)
+- **How do I write a page that depends on the session?** →
+  [12-dashboards-and-sessions.md](./12-dashboards-and-sessions.md)
 - **What does each config field do?** → [07-configuration.md](./07-configuration.md)
 - **Styles are missing / icons don't show up** → [08-build.md](./08-build.md)
 - **Going live** → [10-deployment.md](./10-deployment.md)
 
 ## Runnable examples
 
-All three are in working order; most of the examples in the docs were taken from
+All four are in working order; most of the examples in the docs were taken from
 them.
 
 **`examples/minimal/`** — two routes, one component, one island, minimal config.
@@ -72,6 +79,12 @@ browser by the `latency` island. With a long TTL (one hour) and a prewarm that
 warms every page, it shows the profile in which the cache works most
 efficiently.
 
+It also serves **these documents**: `/docs/<chapter>` reads the markdown files
+in `node_modules/jskelet/docs/` and renders them with a sidebar, an "on this
+page" list and sequential navigation. The renderer is a small module in
+`lib/markdown.js` — no dependency — and the source of truth stays the package,
+so the site never drifts from the installed version.
+
 The site is also **bilingual**: English by default at the root, Turkish under
 `/tr`, with the same route names in both languages. There is no i18n in the
 framework; language resolution lives in `lib/i18n.js` as the application's own
@@ -84,5 +97,16 @@ npm --prefix examples/marketing install
 npm --prefix examples/marketing run dev
 ```
 
-In all three examples, `node smoke.mjs` verifies that the endpoints respond as
+**`examples/dashboard/`** — the opposite axis from the other three: per-visitor
+pages. Sign-in with a signed cookie session, a `private: true` protected panel,
+a paginated table fragment, a CSRF-protected mutation form and an island that
+returns a cleanup function. It also has a public landing page, so a cached
+response and a `no-store` one sit side by side in the same application.
+
+```bash
+npm --prefix examples/dashboard install
+npm --prefix examples/dashboard run dev
+```
+
+In all four examples, `node smoke.mjs` verifies that the endpoints respond as
 expected while the server is up.

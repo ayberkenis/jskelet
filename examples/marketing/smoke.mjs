@@ -16,7 +16,7 @@ const CASES = [
   ["/how-it-works", 200, /five clear stops/],
   ["/compare", 200, /data-island="latency"/],
   ["/migrate", 200, /Next\.js/],
-  ["/docs", 200, /11-tasima/],
+  ["/docs", 200, /href="\/docs\/getting-started"/],
   ["/changelog", 200, /Release history/],
   ["/download", 200, /data-island="copy-command"/],
 
@@ -27,9 +27,23 @@ const CASES = [
   ["/tr/how-it-works", 200, /beş net durak/],
   ["/tr/compare", 200, /data-island="latency"/],
   ["/tr/migrate", 200, /Next\.js bilginizi/],
-  ["/tr/docs", 200, /11-tasima/],
+  ["/tr/docs", 200, /href="\/tr\/docs\/getting-started"/],
   ["/tr/changelog", 200, /Sürüm geçmişi/],
   ["/tr/download", 200, /Kurulumun tamamı/],
+
+  // Belge bölümü: markdown paketin `docs/` dizininden okunup render ediliyor.
+  // Kontrol edilen üç şey, çeviricinin üç ayrı yüzeyi: başlık anchor'ı (ve
+  // dolayısıyla "bu sayfada" listesi), tablo sarmalayıcısı ve kod bloğu.
+  ["/docs/getting-started", 200, /class="doc-prose/],
+  ["/docs/getting-started", 200, /data-island="doc-toc"/],
+  ["/docs/configuration", 200, /<div class="doc-table">/],
+  ["/docs/caching", 200, /<div class="doc-code">/],
+  // Belgeler arası bağlantılar dosya adı değil site URL'i olmalı.
+  ["/docs/architecture", 200, /href="\/docs\/caching/],
+  ["/docs/migration", 200, /Previous/],
+  ["/tr/docs/getting-started", 200, /class="doc-prose/],
+  ["/tr/docs/caching", 200, /href="\/tr\/docs\//],
+  ["/docs/bilinmeyen-bolum", 404],
 
   ["/_fragment/render-demo", 200, /<li/],
   ["/robots.txt", 200, /Sitemap:/],
@@ -65,7 +79,7 @@ for (const [pathname, expectedStatus, expectedBody] of CASES) {
   if (!statusOk || !bodyOk) failed += 1;
 
   console.log(
-    `${statusOk && bodyOk ? "✓" : "✗"} ${pathname.padEnd(26)} ${response.status} (beklenen ${expectedStatus}) cache=${cache}${bodyOk ? "" : " · gövde eşleşmedi"}`,
+    `${statusOk && bodyOk ? "✓" : "✗"} ${pathname.padEnd(26)} ${response.status} (expected ${expectedStatus}) cache=${cache}${bodyOk ? "" : " · body did not match"}`,
   );
 }
 
@@ -78,9 +92,9 @@ if (fragmentCacheControl !== "no-store") {
 }
 
 const second = await fetch(`${BASE}/compare`);
-console.log(`\ncache ikinci istek: ${second.headers.get("x-jskelet-cache")}`);
+console.log(`\ncache on second request: ${second.headers.get("x-jskelet-cache")}`);
 
-console.log(failed ? `\n${failed} test başarısız` : "\nhepsi geçti");
+console.log(failed ? `\n${failed} test(s) failed` : "\nall passed");
 
 // `process.exit()` değil: açık fetch handle'ları varken zorla çıkmak
 // Windows'ta libuv assertion'ına düşüyor.

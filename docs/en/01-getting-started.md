@@ -24,7 +24,7 @@ config field mentioned here see
 ## Installation
 
 ```bash
-mkdir benim-sitem && cd benim-sitem
+mkdir my-site && cd my-site
 npm init -y
 npm pkg set type=module
 npm install jskelet
@@ -106,7 +106,7 @@ separate setting for them: `public/assets` (hashed build output) and
 A typical project:
 
 ```
-benim-sitem/
+my-site/
 ├── jskelet.config.mjs
 ├── jsconfig.json
 ├── routes/
@@ -147,8 +147,8 @@ export default function register(app, { route }) {
     route(
       async () => ({
         view: "pages/home",
-        metadata: { title: "Ana sayfa" },
-        data: { heading: "JSkelet çalışıyor", items: ["Bir", "İki"] },
+        metadata: { title: "Home" },
+        data: { heading: "JSkelet is running", items: ["One", "Two"] },
       }),
       { revalidate: 60 },
     ),
@@ -165,7 +165,7 @@ return a page definition.
 
 The `10-` prefix in the file name determines the load order. Because `routes/`
 is scanned alphabetically, you should put catch-all routes such as `/:slug` in a
-file with a higher number; otherwise `/hakkinda` will be mistaken for a slug.
+file with a higher number; otherwise `/about` will be mistaken for a slug.
 Details: [03-routing.md](./03-routing.md).
 
 The template side is plain EJS:
@@ -211,7 +211,7 @@ export function mount(element, props) {
   button.type = "button";
 
   const paint = () => {
-    button.textContent = `Tıklama: ${value}`;
+    button.textContent = `Clicks: ${value}`;
   };
 
   button.addEventListener("click", () => {

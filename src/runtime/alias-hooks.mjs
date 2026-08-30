@@ -56,7 +56,7 @@ function readAliases() {
       // Uzun önek önce: `@flags/` `@/`den önce denenmeli, yoksa `@/` yakalar.
       return aliases.sort((a, b) => b.prefix.length - a.prefix.length);
     } catch (error) {
-      console.warn(`[alias] ${name} okunamadı, alias'lar devre dışı`, error);
+      console.warn(`[alias] could not read ${name}, aliases disabled`, error);
       return [];
     }
   }

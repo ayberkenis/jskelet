@@ -1,0 +1,38 @@
+<%#
+  Panel layout'u. Blog örneğindekiyle aynı iskelet; tek fark oturum bilgisinin
+  header'a girmesi ve arama motorlarına yönelik hiçbir yapılandırılmış veri
+  taşımaması — panel indekslenmez.
+-%>
+<!DOCTYPE html>
+<html lang="<%= lang %>" class="h-full bg-slate-50 antialiased">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <%- extraHead %>
+    <% if (hasAsset('app.css')) { %>
+    <link rel="stylesheet" href="<%= asset('app.css') %>">
+    <% } %>
+    <%- headMeta %>
+  </head>
+  <body class="<%= bodyClass %> flex min-h-full flex-col">
+    <%- await include('partials/header') %>
+
+    <main class="min-w-0 flex-1"><%- body %></main>
+
+    <footer class="border-t border-slate-200 bg-white">
+      <div class="wrapper text-sm text-slate-500">
+        JSkelet panel örneği — kişiye özel render, CSRF ve fragment.
+      </div>
+    </footer>
+
+    <div id="jskelet-overlays"></div>
+
+    <script type="module" src="<%= asset('main.js') %>"></script>
+    <% entries.forEach(function (entry) { %>
+    <script type="module" src="<%= asset(entry) %>"></script>
+    <% }); %>
+    <% if (devtools) { %>
+    <script type="module" src="<%= devBasePath %>/overlay.js"></script>
+    <% } %>
+  </body>
+</html>

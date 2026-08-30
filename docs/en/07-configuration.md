@@ -29,7 +29,7 @@ function **or a plain value**; when they are functions they may be `async`, and
 ignored.
 
 When the config loads successfully, a summary is printed:
-`[config] jskelet.config.mjs yüklendi — 3 header, 2 redirect, 1 cache kuralı`
+`[config] jskelet.config.mjs loaded — 3 headers, 2 redirects, 1 cache rule`
 
 ## Full example
 
@@ -46,11 +46,11 @@ export default {
   },
 
   brand: {
-    name: "Örnek",
-    poweredBy: "Örnek",
-    cacheHeader: "X-Ornek-Cache",
-    devBasePath: "/__ornek/dev",
-    prewarmUserAgent: "ornek-prewarm",
+    name: "Example",
+    poweredBy: "Example",
+    cacheHeader: "X-Example-Cache",
+    devBasePath: "/__example/dev",
+    prewarmUserAgent: "example-prewarm",
     devTokenCookie: "dev_token",
     lang: "tr",
   },
@@ -64,21 +64,35 @@ export default {
   },
 
   devGateBypass: ["/api/healthcheck", "/robots.txt"],
-  preconnect: ["https://cdn.ornek.com"],
+  preconnect: ["https://cdn.example.com"],
+
+  security: {
+    trustProxy: true,
+    cookieSecret: process.env.JSKELET_SECRET,
+    csrf: {
+      enabled: true,
+      token: false,
+      allowedOrigins: [],
+      exclude: ["/webhook/:path*"],
+      cookieName: "csrf_token",
+      fieldName: "_csrf",
+      headerName: "x-csrf-token",
+    },
+  },
 
   navigation: {
     prefetch: "moderate",
     prerender: "conservative",
     viewTransition: true,
-    exclude: ["/cikis"],
+    exclude: ["/logout"],
   },
 
-  prewarmSkip: ["/api/", "/_fragment/", "/__ornek/"],
+  prewarmSkip: ["/api/", "/_fragment/", "/__example/"],
   watch: ["data"],
 
   fonts: [{ family: "Inter", weights: [400, 600, 700] }],
   icons: { scan: ["views", "client", "routes", "lib"] },
-  images: { widths: [400, 800, 1200], quality: 78, skip: ["indirmeler"] },
+  images: { widths: [400, 800, 1200], quality: 78, skip: ["downloads"] },
   clientEnv: ["PUBLIC_WS_URL"],
 
   async headers() {
@@ -97,14 +111,14 @@ export default {
   async rewrites() {
     return {
       afterFiles: [
-        { source: "/api/:path*", destination: "https://api.ornek.com/:path*" },
+        { source: "/api/:path*", destination: "https://api.example.com/:path*" },
       ],
     };
   },
 
   async cache() {
     return {
-      html: { "/": 60, "/haber/:slug": 300 },
+      html: { "/": 60, "/news/:slug": 300 },
       prewarm: { enabled: true, max: 400, concurrency: 4, intervalSeconds: 0 },
     };
   },
@@ -168,7 +182,7 @@ Precedence for `lang`: `hooks.layoutContext()` → `lang` **>** `brand.lang`
 **>** `"en"`.
 
 ```js
-brand: { lang: "tr", poweredBy: "Örnek", cacheHeader: "X-Ornek-Cache" }
+brand: { lang: "tr", poweredBy: "Example", cacheHeader: "X-Example-Cache" }
 ```
 
 ## `layout`
@@ -177,7 +191,7 @@ brand: { lang: "tr", poweredBy: "Örnek", cacheHeader: "X-Ornek-Cache" }
 
 Path of the layout `.ejs` file. The value given is resolved relative to the
 **parent directory of the views directory**, so with the default `views`,
-`"views/ozel.ejs"` → `<root>/views/ozel.ejs`.
+`"views/custom.ejs"` → `<root>/views/custom.ejs`.
 
 If not given, in order: `views/layout.ejs` if it exists, otherwise the
 framework's minimal layout. Details: [04-rendering.md](./04-rendering.md).
@@ -242,8 +256,39 @@ Since the list is the same on every page, it is computed once and stored. An
 empty list is a valid configuration.
 
 ```js
-preconnect: ["https://cdn.ornek.com", "https://api.ornek.com"]
+preconnect: ["https://cdn.example.com", "https://api.example.com"]
 ```
+
+## `security`
+
+**Type:** `object` — **Default:**
+`{ trustProxy: true, cookieSecret: null, csrf: { enabled: true, token: false, … } }`
+
+The whole picture for per-visitor pages, with the reasoning, is in
+[12-dashboards-and-sessions.md](./12-dashboards-and-sessions.md); this is the
+field reference.
+
+| Field | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `trustProxy` | `boolean` | `true` | Express's `trust proxy` setting. Needed behind a reverse proxy for the correct protocol and client IP. |
+| `cookieSecret` | `string \| null` | `null` | The signed cookie secret. When absent, `JSKELET_SECRET` is read. |
+| `csrf.enabled` | `boolean` | `true` | The origin / `Sec-Fetch-Site` check. |
+| `csrf.token` | `boolean` | `false` | The double-submit token layer. |
+| `csrf.allowedOrigins` | `string[]` | `[]` | Origins accepted alongside our own host. |
+| `csrf.exclude` | `string[]` | `[]` | Paths exempt from the check; `source` pattern syntax. |
+| `csrf.cookieName` | `string` | `"csrf_token"` | Name of the token cookie. |
+| `csrf.fieldName` | `string` | `"_csrf"` | Field name printed by `csrfField()`. |
+| `csrf.headerName` | `string` | `"x-csrf-token"` | Header the token is also accepted in. |
+
+`trustProxy` should be **turned off** on a server exposed directly to the
+internet: while it is on, a client can forge its own `X-Forwarded-For` and rate
+limiting or audit logs see the wrong address.
+
+The CSRF check only rejects requests that are **known** to be cross-site — when
+`Origin` does not match or `Sec-Fetch-Site: cross-site` arrives. If neither is
+present the request passes, because browsers always send `Origin` on a
+cross-origin POST while webhooks never do. Even so, listing non-browser
+endpoints in `csrf.exclude` makes the intent readable.
 
 ## `navigation`
 
@@ -285,7 +330,7 @@ covered by any rule. The easiest way to keep a single link with side effects out
 is the last one:
 
 ```html
-<a href="/cikis" data-no-prefetch>Çıkış</a>
+<a href="/logout" data-no-prefetch>Logout</a>
 ```
 
 **When turning on `viewTransition`, put the background on `<html>`.** During the
@@ -336,7 +381,7 @@ navigation: {
   prefetch: "moderate",
   prerender: "conservative",
   viewTransition: true,
-  exclude: ["/cikis", "/sepet/*"],
+  exclude: ["/logout", "/cart/*"],
 }
 ```
 
@@ -427,7 +472,7 @@ If `false` is given, the image step never runs. The step requires `sharp` and
 never runs on a watch pass. Details: [08-build.md](./08-build.md).
 
 ```js
-images: { widths: [400, 800, 1200], quality: 82, skip: ["indirmeler"] }
+images: { widths: [400, 800, 1200], quality: 82, skip: ["downloads"] }
 ```
 
 ## `clientEnv`
@@ -472,12 +517,12 @@ async headers() {
         { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
         {
           key: "Content-Security-Policy",
-          value: "default-src 'self'; img-src 'self' https://cdn.ornek.com data:",
+          value: "default-src 'self'; img-src 'self' https://cdn.example.com data:",
         },
       ],
     },
     {
-      source: "/indirme/:path*",
+      source: "/download/:path*",
       headers: [{ key: "Cache-Control", value: "no-store" }],
     },
   ];
@@ -525,11 +570,15 @@ A pattern → seconds mapping. A matching rule **overrides** the route's own
 `revalidate` value. Negative or non-finite values are ignored; `0` means "no
 caching".
 
+The one exception is `route(fn, { private: true })`: on that route a matching
+pattern is ignored. The lock is deliberately one-way — a mistake in the other
+direction means one user's HTML is served to another.
+
 ```js
 html: {
   "/": 60,
-  "/haber/:slug": 300,
-  "/arama": 0,
+  "/news/:slug": 300,
+  "/search": 0,
 }
 ```
 
@@ -564,7 +613,7 @@ its own default and warns — the page does not go down.
 ```js
 hooks: {
   metadata() {
-    return { titleTemplate: "%s | Örnek", siteUrl: "https://ornek.com" };
+    return { titleTemplate: "%s | Example", siteUrl: "https://example.com" };
   },
 
   async layoutContext({ pathname }) {
@@ -574,7 +623,7 @@ hooks: {
   notFound() {
     return {
       view: "pages/not-found",
-      metadata: { title: "Sayfa bulunamadı", robots: { index: false } },
+      metadata: { title: "Page not found", robots: { index: false } },
     };
   },
 
@@ -582,7 +631,7 @@ hooks: {
     return {
       view: "pages/error",
       data: { status },
-      metadata: { title: "Bir hata oluştu", robots: { index: false } },
+      metadata: { title: "Something went wrong", robots: { index: false } },
     };
   },
 
@@ -601,12 +650,12 @@ syntax is not silently accepted as a literal — it produces a warning.
 
 | Pattern | Regex equivalent | Example match |
 | --- | --- | --- |
-| `/hakkinda` | exact match | `/hakkinda` |
-| `/haber/:slug` | `([^/]+)` — a single segment | `/haber/abc` (✗ `/haber/a/b`) |
+| `/about` | exact match | `/about` |
+| `/news/:slug` | `([^/]+)` — a single segment | `/news/abc` (✗ `/news/a/b`) |
 | `/:path*` | `(.*)` — zero or more segments | `/`, `/a`, `/a/b/c` |
 | `/blog/:path*` | wildcard sub-path; the leading `/` is optional | `/blog`, `/blog/`, `/blog/a/b` |
 | `/:path*.svg` | wildcard + fixed suffix | `/ikon.svg`, `/a/b/c.svg` |
-| `/etiket-:slug` | a parameter in the middle of a segment | `/etiket-finans` |
+| `/tag-:slug` | a parameter in the middle of a segment | `/tag-finance` |
 
 Rules:
 
@@ -616,7 +665,7 @@ Rules:
 - A pattern always matches **from start to end** (`^…$`); use `:path*` for
   prefix matching.
 - `:path*` also captures zero segments and the `/` immediately before it is
-  optional: `/hesabim/:path*` covers the section's root path (`/hesabim`) too.
+  optional: `/account/:path*` covers the section's root path (`/account`) too.
   Otherwise a rule that wanted to close off a whole section was skipping
   precisely its landing page.
 - Every character other than parameters is treated as a literal and escaped for
@@ -635,6 +684,7 @@ and no warning is printed.
 | `NODE_ENV` | everywhere | `production` (start/build), `development` (dev) | Determines the dev overlay, EJS cache, manifest re-reading, route error behaviour and prewarm defaults. `jskelet dev` sets it itself — `cross-env` is not needed. |
 | `PORT` | `startServer` | `3000` | Port to listen on |
 | `HOST` | `startServer` | `0.0.0.0` | Interface to bind to |
+| `JSKELET_SECRET` | `jskelet/cookies` | — | The signed cookie secret. Read when `security.cookieSecret` is not set; if neither exists, the signed cookie API throws. [12](./12-dashboards-and-sessions.md) |
 | `DEV_TOKEN` | `devGate`, `prewarm` | — | If set, every request without a token gets a 404. Prewarming carries the token as a cookie. [09](./09-dev-tools.md) |
 | `PREWARM` | `startPrewarm` | — | `0` turns prewarming off; `1` overrides `enabled: false` in the config and turns it on |
 | `PREWARM_MAX` | `prewarm` | `400` | At most how many paths are prewarmed |

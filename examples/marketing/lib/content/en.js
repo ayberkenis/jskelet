@@ -443,60 +443,87 @@ export default {
       body: "The minimal example is the smallest thing that runs, the blog example touches every surface of the framework, and the marketing example is the page you are reading.",
       note: "With the server running, the smoke script verifies that every endpoint answers as expected.",
     },
-    openLabel: "Open chapter",
+    openLabel: "Read chapter",
+
+    /** Sidebar bölümleri; anahtarlar `lib/docs.js` → `DOC_GROUPS` ile aynı. */
+    groups: {
+      start: "Getting started",
+      build: "Building pages",
+      performance: "Performance",
+      reference: "Reference",
+    },
+
+    /** Belge kabuğunun tüm etiketleri: sidebar, TOC, gezinme ve uyarılar. */
+    shell: {
+      nav: "Documentation sections",
+      breadcrumb: "Breadcrumb",
+      docsLabel: "Docs",
+      overview: "Overview",
+      browse: "Browse chapters",
+      onThisPage: "On this page",
+      previous: "Previous",
+      next: "Next",
+      edit: "Edit this page on GitHub",
+      versionLabel: "Latest version",
+      version: "Documents v%s",
+      start: "Start reading",
+      untranslated:
+        "This chapter has not been translated yet, so it is shown in English.",
+    },
+
     items: [
       {
-        file: "01-baslangic",
+        slug: "getting-started",
         title: "Getting started",
         body: "Installation, your first route, your first island, the directory layout and the CLI.",
       },
       {
-        file: "02-mimari",
+        slug: "architecture",
         title: "Architecture",
         body: "The decisions, their reasoning, and the middleware order that is treated as a contract.",
       },
       {
-        file: "03-routing",
+        slug: "routing",
         title: "Routing",
         body: "Route modules, the controller contract and how load order is decided.",
       },
       {
-        file: "04-render-ve-sablonlar",
+        slug: "rendering",
         title: "Rendering and templates",
         body: "Layout, components, helpers and the metadata schema.",
       },
       {
-        file: "05-islands",
+        slug: "islands",
         title: "Islands",
         body: "The island contract, hydration strategies, shared state and DOM helpers.",
       },
       {
-        file: "06-cache",
-        title: "Cache",
+        slug: "caching",
+        title: "Caching",
         body: "TTLs, stale-while-revalidate, cache keys and prewarming.",
       },
       {
-        file: "07-yapilandirma",
-        title: "Configuration",
-        body: "The complete configuration reference, field by field.",
-      },
-      {
-        file: "08-build",
+        slug: "build",
         title: "Build",
         body: "The build pipeline, the manifest, Tailwind sources and the icon sprite.",
       },
       {
-        file: "09-dev-araclari",
+        slug: "configuration",
+        title: "Configuration",
+        body: "The complete configuration reference, field by field.",
+      },
+      {
+        slug: "dev-tools",
         title: "Dev tools",
         body: "The development flow, the overlay, the report page and the dev gate.",
       },
       {
-        file: "10-dagitim",
+        slug: "deployment",
         title: "Deployment",
         body: "Production, Docker, reverse proxies and health checks.",
       },
       {
-        file: "11-tasima",
+        slug: "migration",
         title: "Migration",
         body: "Moving from Next.js: the mapping table and a staged plan.",
       },

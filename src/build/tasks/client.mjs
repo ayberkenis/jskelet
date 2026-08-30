@@ -85,7 +85,7 @@ export async function buildClient(config, { watch = false } = {}) {
   const outDir = path.join(paths.assets, "js");
 
   if (!fs.existsSync(entryDir)) {
-    log.detail("entry yok, atlandı");
+    log.detail("no entries, skipped");
     return {};
   }
 
@@ -95,7 +95,7 @@ export async function buildClient(config, { watch = false } = {}) {
     .map((file) => path.join(entryDir, file));
 
   if (!entryPoints.length) {
-    log.detail("entry yok, atlandı");
+    log.detail("no entries, skipped");
     return {};
   }
 

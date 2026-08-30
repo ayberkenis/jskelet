@@ -10,6 +10,7 @@
  * Tam referans: node_modules/jskelet/docs/07-yapilandirma.md
  */
 import { getContent } from "./lib/content.js";
+import { docPaths } from "./lib/docs.js";
 import {
   DEFAULT_LOCALE,
   PAGES,
@@ -113,11 +114,16 @@ export default {
        * listesinden türetiliyor, yani yeni bir sayfa ya da dil eklendiğinde
        * burada güncellenecek bir şey kalmıyor.
        */
-      html: Object.fromEntries(pagePaths().map((pathname) => [pathname, HOUR])),
+      html: Object.fromEntries(
+        [...pagePaths(), ...docPaths()].map((pathname) => [pathname, HOUR]),
+      ),
 
       prewarm: {
         enabled: true,
-        max: 50,
+        // Sayfa sayısı belge bölümüyle iki katına çıktı; sınır listeyi
+        // kesmeyecek kadar yukarıda durmalı, yoksa ısıtma sessizce yarısını
+        // atlar.
+        max: 80,
         concurrency: 4,
         intervalSeconds: 0,
       },
@@ -168,6 +174,14 @@ export default {
         nav: t.nav.map((item) => ({
           href: paths[item.key],
           label: item.label,
+          // Belge bölümünün alt sayfaları da "Docs" başlığına ait: eşitlik
+          // kontrolü tek başına `/docs/routing` üzerinde menüyü sönük
+          // bırakıyordu.
+          // Ana sayfa önek kontrolünden muaf: `/tr` her Türkçe yolun öneki.
+          active:
+            pathname === paths[item.key] ||
+            (paths[item.key] !== paths.home &&
+              pathname.startsWith(`${paths[item.key]}/`)),
         })),
         // Dil değiştirici ve `hreflang` etiketleri aynı listeden besleniyor;
         // ayrıştıklarında düğmenin götürdüğü yer ile arama motoruna bildirilen
@@ -220,7 +234,7 @@ export default {
     },
 
     prewarmPaths() {
-      return pagePaths();
+      return [...pagePaths(), ...docPaths()];
     },
   },
 };

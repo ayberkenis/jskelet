@@ -33,6 +33,7 @@
     "./client": "./src/client/index.js",
     "./html": "./src/views/helpers/html.js",
     "./tags": "./src/views/helpers/tags.js",
+    "./cookies": "./src/http/cookies.js",
     "./log": "./src/log.mjs",
     "./register": "./src/runtime/register.mjs",
     "./layout": "./src/templates/layout.ejs"
@@ -53,7 +54,8 @@
     "lint": "eslint",
     "test": "node --test \"test/**/*.test.mjs\"",
     "example:minimal": "npm --prefix examples/minimal run dev",
-    "example:blog": "npm --prefix examples/blog run dev"
+    "example:blog": "npm --prefix examples/blog run dev",
+    "example:dashboard": "npm --prefix examples/dashboard run dev"
   },
   "dependencies": {
     "ejs": "^6.0.1",

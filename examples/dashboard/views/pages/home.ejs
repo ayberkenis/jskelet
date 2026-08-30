@@ -1,0 +1,32 @@
+<%#
+  Public tanıtım sayfası. Cache'lenebilir ve herkese aynı gider — panelin tam
+  karşıtı. İki sayfayı aynı uygulamada tutmak, `route()` ile
+  `route(fn, { private: true })` arasındaki farkı somutlaştırıyor.
+-%>
+<div class="wrapper max-w-2xl">
+  <h1 class="text-3xl font-semibold tracking-tight">Kişiye özel sayfa, güvenli cache</h1>
+
+  <p class="mt-4 text-slate-600">
+    Bu sayfa public ve önbellekte duruyor: yanıtı
+    <code class="rounded bg-slate-100 px-1 py-0.5 text-sm">s-maxage</code> ile
+    işaretli. Paneldeki sayfalar ise
+    <code class="rounded bg-slate-100 px-1 py-0.5 text-sm">private, no-store</code>
+    ile dönüyor ve HTML önbelleğine hiç girmiyor.
+  </p>
+
+  <ul class="mt-6 space-y-2 text-slate-600">
+    <li>İmzalı cookie ile oturum, kurcalanmış değer sessizce reddedilir.</li>
+    <li>Form gönderimlerinde CSRF token'ı; JS kapalıyken de çalışır.</li>
+    <li>Sipariş tablosu fragment ile tazelenir, tam sayfa dönmez.</li>
+  </ul>
+
+  <p class="mt-8">
+    <a href="/giris" class="inline-flex rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700">
+      Panele giriş
+    </a>
+  </p>
+
+  <p class="mt-4 text-sm text-slate-500">
+    Örnek kullanıcı: <strong>ayse</strong> / <strong>panel123</strong>
+  </p>
+</div>

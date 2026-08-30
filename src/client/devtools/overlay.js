@@ -117,7 +117,7 @@ function captureErrors() {
     const target = /** @type {HTMLElement | null} */ (event.target);
     if (target && target !== /** @type {any} */ (window)) {
       const url = target.getAttribute?.("src") ?? target.getAttribute?.("href");
-      pushError("error", `Kaynak yüklenemedi: ${url ?? target.tagName}`, {
+      pushError("error", `Resource failed to load: ${url ?? target.tagName}`, {
         source: "resource",
       });
       return;
@@ -799,26 +799,26 @@ const TRASH_ICON = `<svg viewBox="0 0 16 16"><path d="M2.5 4.5h11M6 4.5V3h4v1.5M
 const SKELETON = `
   <div class="root">
     <div class="backdrop" data-action="backdrop" hidden>
-      <div class="panel" role="dialog" aria-label="JSkelet dev araçları">
+      <div class="panel" role="dialog" aria-label="JSkelet dev tools">
         <div class="head">
           <img src="${BASE}/logo.png" alt="">
           <span class="title">JSkelet Dev</span>
           <span class="pill"><span class="dot"></span><span data-part="pill"></span></span>
           <span class="spacer"></span>
           <span class="kbd">Alt+D</span>
-          <button class="btn icon" data-action="toggle" title="Kapat (Esc)">✕</button>
+          <button class="btn icon" data-action="toggle" title="Close (Esc)">✕</button>
         </div>
         <div class="rail">
-          <button class="tab" data-tab="errors">${TAB_ICONS.errors} Hatalar<span class="chip" data-part="chip" hidden></span></button>
-          <button class="tab" data-tab="perf">${TAB_ICONS.perf} Performans</button>
-          <button class="tab" data-tab="server">${TAB_ICONS.server} Sunucu</button>
+          <button class="tab" data-tab="errors">${TAB_ICONS.errors} Errors<span class="chip" data-part="chip" hidden></span></button>
+          <button class="tab" data-tab="perf">${TAB_ICONS.perf} Performance</button>
+          <button class="tab" data-tab="server">${TAB_ICONS.server} Server<span class="chip neutral" data-part="version-chip" hidden>update</span></button>
           <button class="tab" data-tab="warm">${TAB_ICONS.warm} Prewarming<span class="chip neutral" data-part="warm-chip" hidden></span></button>
           <div class="rail-foot">
-            <button class="tab" data-tab="about">${TAB_ICONS.about} Hakkında</button>
+            <button class="tab" data-tab="about">${TAB_ICONS.about} About</button>
             <div class="divider"></div>
-            <button class="btn wide" data-action="reload">${REFRESH_ICON} Sayfayı yenile</button>
-            <a class="btn wide" href="${BASE}/report" target="_blank" rel="noreferrer">${SCOPE_ICON} Detaylı İncele</a>
-            <button class="btn wide danger" data-action="clear">${TRASH_ICON} Kayıtları temizle</button>
+            <button class="btn wide" data-action="reload">${REFRESH_ICON} Reload page</button>
+            <a class="btn wide" href="${BASE}/report" target="_blank" rel="noreferrer">${SCOPE_ICON} Inspect in detail</a>
+            <button class="btn wide danger" data-action="clear">${TRASH_ICON} Clear records</button>
           </div>
         </div>
         <div class="body"></div>
@@ -830,7 +830,7 @@ const SKELETON = `
         <span data-part="warm-text"></span>
       </span>
       <button class="bubble" data-action="toggle">
-        <img src="${BASE}/logo.png" alt="JSkelet dev araçları">
+        <img src="${BASE}/logo.png" alt="JSkelet dev tools">
         <span class="badge" hidden></span>
       </button>
     </div>
@@ -892,7 +892,7 @@ function pathLink(value) {
   const text = escapeHtml(value);
   if (!value?.startsWith("/")) return text;
 
-  return `<a href="${escapeHtml(value)}" target="_blank" rel="noreferrer" title="Yeni sekmede aç: ${text}">${text}</a>`;
+  return `<a href="${escapeHtml(value)}" target="_blank" rel="noreferrer" title="Open in new tab: ${text}">${text}</a>`;
 }
 
 /** @param {string} value */
@@ -938,7 +938,7 @@ function ratio(value, ceiling) {
  */
 const clipboard = new Map();
 
-/** Kısa süreli "kopyalandı" geri bildirimi için. */
+/** Kısa süreli "Copied" geri bildirimi için. */
 let copiedKey = null;
 
 /**
@@ -958,7 +958,7 @@ function asText(item) {
 
 /** @param {{ id?: number, level: string, message: string, stack?: string | null, source?: string, at: number }[]} list */
 function errorList(list, scope) {
-  if (!list.length) return `<div class="empty">Kayıt yok.</div>`;
+  if (!list.length) return `<div class="empty">No records.</div>`;
   return list
     .map((item) => {
       const key = `${scope}:${item.id ?? item.at}`;
@@ -968,14 +968,14 @@ function errorList(list, scope) {
       return `<div class="item ${item.level === "warn" ? "warn" : ""}">
         <div class="meta">
           <span class="tag">${escapeHtml(item.source ?? "server")}</span>
-          <span>${new Date(item.at).toLocaleTimeString("tr-TR")}</span>
+          <span>${new Date(item.at).toLocaleTimeString()}</span>
           <span class="spacer"></span>
           ${copyButton(key)}
         </div>
         <div class="msg">${escapeHtml(item.message)}</div>
         ${
           item.stack
-            ? `<button class="link" data-action="stack" data-key="${escapeHtml(key)}">${shown ? "▾ yığını gizle" : "▸ yığını göster"}</button>
+            ? `<button class="link" data-action="stack" data-key="${escapeHtml(key)}">${shown ? "▾ hide stack" : "▸ show stack"}</button>
                ${shown ? `<pre>${escapeHtml(item.stack)}</pre>` : ""}`
             : ""
         }
@@ -994,7 +994,7 @@ const CHECK_ICON = `<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l
 function copyButton(key, label = "") {
   const done = copiedKey === key;
   return `<button class="copy ${done ? "done" : ""}" data-action="copy" data-key="${escapeHtml(key)}"
-    title="${done ? "Kopyalandı" : "Kopyala"}">${done ? CHECK_ICON : COPY_ICON}${
+    title="${done ? "Copied" : "Copy"}">${done ? CHECK_ICON : COPY_ICON}${
       label ? `<span>${escapeHtml(label)}</span>` : ""
     }</button>`;
 }
@@ -1028,16 +1028,16 @@ function errorsTab() {
     ${lede(
       errorCount ? "bad" : total ? "mid" : "good",
       errorCount
-        ? `<strong>${errorCount} hata</strong> yakalandı${total - errorCount ? `, yanında ${total - errorCount} uyarı var` : ""}. En yenisi üstte; yığın izini açıp kaydı tek tıkla kopyalayabilirsin.`
+        ? `<strong>${errorCount} errors</strong> captured${total - errorCount ? `, plus ${total - errorCount} warnings` : ""}. Newest first; expand the stack trace and copy a record with one click.`
         : total
-          ? `Hata yok, <strong>${total} uyarı</strong> var. Uyarılar genelde eksik veri ya da port edilmemiş island'lardan gelir.`
-          : "Bu oturumda tarayıcı ya da sunucu tarafında hiç hata görülmedi.",
+          ? `No errors, <strong>${total} warnings</strong>. Warnings usually come from missing data or islands that were never ported.`
+          : "No browser or server side errors were seen in this session.",
     )}
-    <h4>Tarayıcı · ${clientErrors.length}${
-      total ? `<span class="head-action">${copyButton("all", "tümünü kopyala")}</span>` : ""
+    <h4>Browser · ${clientErrors.length}${
+      total ? `<span class="head-action">${copyButton("all", "copy all")}</span>` : ""
     }</h4>
     ${errorList(clientErrors, "client")}
-    <h4>Sunucu · ${server.length}</h4>
+    <h4>Server · ${server.length}</h4>
     ${errorList(
       server.map((item) => ({ ...item, source: "server" })),
       "server",
@@ -1063,7 +1063,7 @@ function perfTab() {
       `LCP: ${ms(metrics.lcp)}  CLS: ${metrics.cls.toFixed(3)}  INP: ${ms(metrics.inp)}`,
       `FCP: ${ms(metrics.fcp)}  TTFB: ${ms(metrics.ttfb)}`,
       `Long task: ${metrics.longTasks}  Blocking: ${ms(metrics.blocking)}`,
-      `İstek: ${resources.count}  Transfer: ${kb(resources.bytes)}`,
+      `Requests: ${resources.count}  Transfer: ${kb(resources.bytes)}`,
       `Island: ${islands.ready}/${islands.total}`,
     ].join("\n"),
   );
@@ -1078,11 +1078,11 @@ function perfTab() {
   return `
     ${lede(
       tone,
-      `Sayfa <strong>${ms(metrics.lcp)}</strong>'de en büyük içeriği boyadı, düzen kayması <strong>${metrics.cls.toFixed(3)}</strong>. ` +
-        `Ana iş parçacığı ${metrics.longTasks} uzun görevle <strong>${ms(metrics.blocking)}</strong> bloke oldu; ` +
-        `${resources.count} istekte <strong>${kb(resources.bytes)}</strong> indirildi ve ${islands.total} island'ın ${islands.ready}'i bağlandı.`,
+      `The page painted its largest content at <strong>${ms(metrics.lcp)}</strong>, layout shift is <strong>${metrics.cls.toFixed(3)}</strong>. ` +
+        `The main thread was blocked <strong>${ms(metrics.blocking)}</strong> by ${metrics.longTasks} long tasks; ` +
+        `<strong>${kb(resources.bytes)}</strong> was downloaded over ${resources.count} requests and ${islands.ready} of ${islands.total} islands mounted.`,
     )}
-    <h4>Core Web Vitals<span class="head-action">${copyButton("perf", "özeti kopyala")}</span></h4>
+    <h4>Core Web Vitals<span class="head-action">${copyButton("perf", "copy summary")}</span></h4>
     ${metricGrid([
       { label: "LCP", value: ms(metrics.lcp), tone: grade(metrics.lcp, [2500, 4000]), ratio: ratio(metrics.lcp, 4000) },
       { label: "CLS", value: metrics.cls.toFixed(3), tone: grade(metrics.cls * 1000, [100, 250]), ratio: metrics.cls / 0.25 },
@@ -1090,7 +1090,7 @@ function perfTab() {
       { label: "FCP", value: ms(metrics.fcp), tone: grade(metrics.fcp, [1800, 3000]), ratio: ratio(metrics.fcp, 3000) },
       { label: "TTFB", value: ms(metrics.ttfb), tone: grade(metrics.ttfb, [800, 1800]), ratio: ratio(metrics.ttfb, 1800) },
     ])}
-    <h4>Yükleme</h4>
+    <h4>Loading</h4>
     ${metricGrid([
       { label: "DOMContentLoaded", value: ms(metrics.dcl) },
       { label: "Load", value: ms(metrics.load) },
@@ -1098,9 +1098,9 @@ function perfTab() {
       { label: "Blocking", value: ms(metrics.blocking), tone: grade(metrics.blocking, [200, 600]), ratio: metrics.blocking / 600 },
       ...(memory ? [{ label: "JS heap", value: kb(memory) }] : []),
     ])}
-    <h4>Kaynaklar</h4>
+    <h4>Resources</h4>
     ${metricGrid([
-      { label: "İstek", value: String(resources.count) },
+      { label: "Requests", value: String(resources.count) },
       { label: "Transfer", value: kb(resources.bytes) },
       { label: "Island", value: `${islands.ready}/${islands.total}`, ratio: islands.total ? islands.ready / islands.total : null, tone: "good" },
     ])}
@@ -1109,7 +1109,7 @@ function perfTab() {
         .map(
           ([kind, info]) => `<div class="row">
             <span class="tag">${escapeHtml(kind)}</span>
-            <span class="path">${info.count} istek</span>
+            <span class="path">${info.count} requests</span>
             <span class="hint">${Math.round((info.bytes / heaviest) * 100)}%</span>
             <span>${kb(info.bytes)}</span>
           </div>`,
@@ -1119,9 +1119,30 @@ function perfTab() {
   `;
 }
 
-function serverTab() {
-  if (!serverStats) return `<div class="empty">Sunucu istatistikleri bekleniyor…</div>`;
+/**
+ * Yeni bir sürüm varsa yükseltme satırı. Kayıt defterine ulaşılamadıysa
+ * (`latest` boş) hiçbir şey basılmaz: dev panelinde "bilinmiyor" satırı
+ * gürültüden başka bir şey değil.
+ */
+function versionNotice() {
+  const version = serverStats?.version;
+  if (!version?.outdated) return "";
 
+  clipboard.set("upgrade", `npm install jskelet@${version.latest}`);
+
+  return lede(
+    "mid",
+    `JSkelet <strong>${escapeHtml(version.latest)}</strong> is out; this project runs ` +
+      `<strong>${escapeHtml(version.current)}</strong>. Upgrade with ` +
+      `<code>npm install jskelet@latest</code> and skim the changelog for breaking changes. ` +
+      copyButton("upgrade", "copy command"),
+  );
+}
+
+function serverTab() {
+  if (!serverStats) return `<div class="empty">Waiting for server stats…</div>`;
+
+  const version = serverStats.version;
   const requests = serverStats.requests ?? [];
   const slowest = requests.reduce((max, item) => Math.max(max, item.ms), 0);
   const average = requests.length
@@ -1144,24 +1165,30 @@ function serverTab() {
     ${lede(
       offline ? "mid" : grade(average, [150, 500]) || "good",
       offline
-        ? "Sunucuya şu an ulaşılamıyor; yeniden başlatılmayı bekliyoruz. Eldeki kayıtlar korunuyor."
-        : `Sunucu <strong>${Math.round(serverStats.uptime ?? 0)} sn</strong> ayakta, ` +
-          `son ${requests.length} isteği ortalama <strong>${ms(average)}</strong> ile yanıtladı ` +
-          `(en yavaş ${ms(slowest)}). Süreç ${kb(serverStats.memory?.rss ?? 0)} bellek kullanıyor` +
-          `${restarts ? ` ve bu oturumda ${restarts} kez yeniden başladı` : ""}.`,
+        ? "The server is unreachable right now; we are waiting for it to restart. Existing records are kept."
+        : `The server has been up <strong>${Math.round(serverStats.uptime ?? 0)} s</strong>, ` +
+          `answering the last ${requests.length} requests in <strong>${ms(average)}</strong> on average ` +
+          `(slowest ${ms(slowest)}). The process uses ${kb(serverStats.memory?.rss ?? 0)} of memory` +
+          `${restarts ? ` and restarted ${restarts} times in this session` : ""}.`,
     )}
-    <h4>Süreç${
+    ${versionNotice()}
+    <h4>Process${
       requests.length
-        ? `<span class="head-action">${copyButton("requests", "istekleri kopyala")}</span>`
+        ? `<span class="head-action">${copyButton("requests", "copy requests")}</span>`
         : ""
     }</h4>
     ${metricGrid([
+      {
+        label: "JSkelet",
+        value: version?.current ?? "—",
+        tone: version?.outdated ? "mid" : "",
+      },
       { label: "Node", value: serverStats.node ?? "—" },
-      { label: "Uptime", value: `${Math.round(serverStats.uptime ?? 0)} sn` },
+      { label: "Uptime", value: `${Math.round(serverStats.uptime ?? 0)} s` },
       { label: "RSS", value: kb(serverStats.memory?.rss ?? 0) },
       { label: "Heap", value: kb(serverStats.memory?.heapUsed ?? 0) },
-      { label: "Ort. render", value: ms(average), tone: grade(average, [150, 500]) },
-      { label: "En yavaş", value: ms(slowest), tone: grade(slowest, [300, 1000]) },
+      { label: "Avg. render", value: ms(average), tone: grade(average, [150, 500]) },
+      { label: "Slowest", value: ms(slowest), tone: grade(slowest, [300, 1000]) },
       { label: "Restart", value: String(restarts), tone: offline ? "mid" : "" },
       ...(serverStats.prewarm?.total
         ? [
@@ -1174,7 +1201,7 @@ function serverTab() {
           ]
         : []),
     ])}
-    <h4>Son istekler</h4>
+    <h4>Recent requests</h4>
     ${
       requests.length
         ? `<div class="rows">${requests
@@ -1187,7 +1214,7 @@ function serverTab() {
               </div>`,
             )
             .join("")}</div>`
-        : `<div class="empty">Henüz istek yok.</div>`
+        : `<div class="empty">No requests yet.</div>`
     }
   `;
 }
@@ -1198,7 +1225,7 @@ function warmTab() {
   if (!warm?.total) {
     return `
       ${warmToolbar(false)}
-      <div class="empty">Önbellek ısıtması henüz başlamadı. Dev'de sunucu bir süre sakin kalınca tetiklenir; <code>PREWARM=0</code> ile kapatılabilir.</div>
+      <div class="empty">Cache prewarming has not started yet. In dev it triggers once the server stays idle for a while; disable it with <code>PREWARM=0</code>.</div>
     `;
   }
 
@@ -1220,7 +1247,7 @@ function warmTab() {
   clipboard.set(
     "warm",
     [
-      `Prewarm ${warm.ok}/${warm.total} · ${warm.failed} hata · ${(elapsed / 1000).toFixed(1)}s · ${kb(bytes)}`,
+      `Prewarm ${warm.ok}/${warm.total} · ${warm.failed} errors · ${(elapsed / 1000).toFixed(1)}s · ${kb(bytes)}`,
       ...entries.map(
         (item) =>
           `${String(item.status).padStart(3)} ${String(item.ms).padStart(5)}ms ${String(
@@ -1235,38 +1262,38 @@ function warmTab() {
     ${lede(
       warm.active ? "mid" : warm.failed ? "bad" : "good",
       warm.active
-        ? `Isıtma sürüyor: <strong>${warm.done}/${warm.total}</strong> sayfa denendi, şu ana kadar ${kb(bytes)} render edildi.`
+        ? `Prewarming in progress: <strong>${warm.done}/${warm.total}</strong> pages tried, ${kb(bytes)} rendered so far.`
         : warm.failed
-          ? `<strong>${warm.ok}/${warm.total}</strong> sayfa ısındı, <strong>${warm.failed} sayfa hata verdi</strong>. Hatalı yollar aşağıda en üstte listeli.`
-          : `Tüm <strong>${warm.total}</strong> sayfa ${(elapsed / 1000).toFixed(1)} saniyede ısıtıldı, toplam <strong>${kb(bytes)}</strong> HTML üretildi. İlk ziyaretçi soğuk render beklemeyecek.`,
+          ? `<strong>${warm.ok}/${warm.total}</strong> pages warmed, <strong>${warm.failed} pages failed</strong>. The failing paths are listed at the top below.`
+          : `All <strong>${warm.total}</strong> pages were warmed in ${(elapsed / 1000).toFixed(1)} seconds, producing <strong>${kb(bytes)}</strong> of HTML in total. The first visitor will not wait for a cold render.`,
     )}
-    <h4>Özet<span class="head-action">${copyButton("warm", "listeyi kopyala")}</span></h4>
+    <h4>Summary<span class="head-action">${copyButton("warm", "copy list")}</span></h4>
     ${metricGrid([
-      { label: "Denenen", value: `${warm.done}/${warm.total}`, ratio: warm.done / warm.total, tone: "good" },
-      { label: "Başarılı", value: String(warm.ok), tone: "good" },
-      { label: "Hata", value: String(warm.failed), tone: warm.failed ? "bad" : "" },
-      { label: "Süre", value: `${(elapsed / 1000).toFixed(1)} sn` },
-      { label: "Toplam HTML", value: kb(bytes) },
-      { label: "Ort. render", value: ms(average), tone: grade(average, [150, 500]) },
-      { label: "En yavaş", value: ms(slowest?.ms ?? null), tone: grade(slowest?.ms ?? null, [300, 1000]) },
-      { label: "Cache'ten", value: `${cached}/${entries.length}` },
+      { label: "Tried", value: `${warm.done}/${warm.total}`, ratio: warm.done / warm.total, tone: "good" },
+      { label: "Succeeded", value: String(warm.ok), tone: "good" },
+      { label: "Failed", value: String(warm.failed), tone: warm.failed ? "bad" : "" },
+      { label: "Duration", value: `${(elapsed / 1000).toFixed(1)} s` },
+      { label: "Total HTML", value: kb(bytes) },
+      { label: "Avg. render", value: ms(average), tone: grade(average, [150, 500]) },
+      { label: "Slowest", value: ms(slowest?.ms ?? null), tone: grade(slowest?.ms ?? null, [300, 1000]) },
+      { label: "From cache", value: `${cached}/${entries.length}` },
     ])}
     ${
       failures.length
-        ? `<h4>Hatalar · ${failures.length}<span class="head-action">
-             <button class="btn mini" data-action="warm-retry" ${warm.active ? "disabled" : ""}>${REFRESH_ICON} Tekrar dene</button>
+        ? `<h4>Errors · ${failures.length}<span class="head-action">
+             <button class="btn mini" data-action="warm-retry" ${warm.active ? "disabled" : ""}>${REFRESH_ICON} Retry</button>
            </span></h4>
            <div class="rows">${failures.map(warmRow).join("")}</div>`
         : ""
     }
-    <h4>Denenen sayfalar · ${entries.length}</h4>
+    <h4>Pages tried · ${entries.length}</h4>
     ${
       entries.length
         ? `<div class="rows">${[...entries]
             .sort((a, b) => b.ms - a.ms)
             .map(warmRow)
             .join("")}</div>`
-        : `<div class="empty">Henüz sonuç yok.</div>`
+        : `<div class="empty">No results yet.</div>`
     }
   `;
 }
@@ -1278,7 +1305,7 @@ function warmTab() {
 function warmToolbar(active) {
   return `<div class="toolbar">
     <button class="btn mini" data-action="warm-run" ${active ? "disabled" : ""}>
-      ${REFRESH_ICON} ${active ? "Isıtma sürüyor…" : "Baştan prewarm başlat"}
+      ${REFRESH_ICON} ${active ? "Prewarming…" : "Start prewarm from scratch"}
     </button>
   </div>`;
 }
@@ -1305,145 +1332,145 @@ const ABOUT = {
   framework: {
     label: "Framework",
     html: `
-    <p><strong>JSkelet</strong>, hazır bir meta-framework kullanmadan yazılmış
-    ince bir katman: Express üstünde EJS ile sunucu tarafı render, esbuild ile island
-    tabanlı istemci kodu ve token'lara bağlı bir tema sistemi.</p>
+    <p><strong>JSkelet</strong> is a thin layer written without any off-the-shelf
+    meta-framework: server side rendering with EJS on top of Express, island based
+    client code via esbuild and a token driven theme system.</p>
     <div class="steps">
-      <div class="step"><span class="n">1</span><span><b>Sunucu render</b><span>Express + EJS sayfayı tamamen sunucuda üretir; sonuç HTML önbelleğinde tutulur, tekrar eden istekler milisaniyenin altında döner.</span></span></div>
-      <div class="step"><span class="n">2</span><span><b>Island'lar</b><span>Etkileşimli her parça <code>data-island</code> ile işaretlenir, modülü görünüm alanına girince yüklenir. Sayfanın tamamı hidrate edilmez.</span></span></div>
-      <div class="step"><span class="n">3</span><span><b>Build hattı</b><span>esbuild JS'i, Tailwind + LightningCSS stilleri, sharp görselleri, Phosphor ikonları derler; çıktı hash'lenip <code>manifest.json</code>'a yazılır.</span></span></div>
-      <div class="step"><span class="n">4</span><span><b>Dev döngüsü</b><span>Kaynaklar izlenir: CSS değişince stylesheet takas edilir, JS veya sunucu değişince tek seferlik tam yenileme yapılır.</span></span></div>
-      <div class="step"><span class="n">5</span><span><b>Gözlemlenebilirlik</b><span>Bu panel hataları, Web Vitals ölçümlerini ve sunucu isteklerini toplar; kayıtlar sunucu yeniden başlasa da korunur.</span></span></div>
+      <div class="step"><span class="n">1</span><span><b>Server render</b><span>Express + EJS produce the page entirely on the server; the result is kept in the HTML cache, so repeat requests return in under a millisecond.</span></span></div>
+      <div class="step"><span class="n">2</span><span><b>Islands</b><span>Every interactive piece is marked with <code>data-island</code> and its module loads once it enters the viewport. The whole page is never hydrated.</span></span></div>
+      <div class="step"><span class="n">3</span><span><b>Build pipeline</b><span>esbuild compiles JS, Tailwind + LightningCSS the styles, sharp the images, Phosphor the icons; the output is hashed and written to <code>manifest.json</code>.</span></span></div>
+      <div class="step"><span class="n">4</span><span><b>Dev loop</b><span>Sources are watched: on a CSS change the stylesheet is swapped, on a JS or server change a single full reload happens.</span></span></div>
+      <div class="step"><span class="n">5</span><span><b>Observability</b><span>This panel collects errors, Web Vitals measurements and server requests; records survive a server restart.</span></span></div>
     </div>
     <div class="cards">
-      <div class="card"><b>Çalışma zamanı</b><span>Node + Express 5, ESM. Sayfa şablonları EJS, veri katmanı <code>lib/</code> altındaki servisler.</span></div>
-      <div class="card"><b>Hedef tarayıcılar</b><span>Chrome/Edge/Firefox 111+, Safari 16.4+. Modern CSS ve ESM doğrudan kullanılır, transpile yükü yok.</span></div>
-      <div class="card"><b>Bu panel</b><span>Yalnızca <code>npm run dev</code>'de yüklenir; layout script etiketini sadece development'ta basar, prod çıktısına girmez.</span></div>
+      <div class="card"><b>Runtime</b><span>Node + Express 5, ESM. Page templates are EJS, the data layer is the services under <code>lib/</code>.</span></div>
+      <div class="card"><b>Target browsers</b><span>Chrome/Edge/Firefox 111+, Safari 16.4+. Modern CSS and ESM are used directly, with no transpile overhead.</span></div>
+      <div class="card"><b>This panel</b><span>Loaded only under <code>npm run dev</code>; the layout prints the script tag in development only, so it never reaches the production output.</span></div>
     </div>
   `,
   },
   request: {
-    label: "İstek akışı",
+    label: "Request flow",
     html: `
-    <p>Bir sayfa isteğinin sunucuda izlediği yol. Her adım <code>server/</code> altında
-    ayrı bir dosyada durur; hiçbiri diğerinin içine gömülü değildir.</p>
+    <p>The path a page request follows on the server. Every step lives in its own file
+    under <code>server/</code>; none of them is buried inside another.</p>
     <div class="steps">
-      <div class="step"><span class="n">1</span><span><b>Route</b><span><code>server/routes/</code> URL'i eşler ve isteği ilgili controller'a verir.</span></span></div>
-      <div class="step"><span class="n">2</span><span><b>Controller</b><span><code>server/controllers/</code> gerekli veriyi <code>lib/</code> servislerinden toplar, şablona geçecek modeli hazırlar.</span></span></div>
-      <div class="step"><span class="n">3</span><span><b>Render</b><span><code>server/render.js</code> EJS şablonunu çalıştırır, layout'a manifest girdilerini ve head ipuçlarını basar.</span></span></div>
-      <div class="step"><span class="n">4</span><span><b>HTML önbelleği</b><span><code>server/html-cache.js</code> çıktıyı saklar; aynı URL tekrar istenirse şablon hiç çalıştırılmaz. Sunucu sekmesindeki <code>cached</code> etiketi bunu gösterir.</span></span></div>
-      <div class="step"><span class="n">5</span><span><b>Yanıt</b><span>Sıkıştırma ve önbellek başlıkları <code>server/middleware/</code> içinde belirlenir; olay akışı gibi yanıtlar sıkıştırmadan geçer.</span></span></div>
+      <div class="step"><span class="n">1</span><span><b>Route</b><span><code>server/routes/</code> matches the URL and hands the request to the right controller.</span></span></div>
+      <div class="step"><span class="n">2</span><span><b>Controller</b><span><code>server/controllers/</code> gathers the data it needs from the <code>lib/</code> services and prepares the model for the template.</span></span></div>
+      <div class="step"><span class="n">3</span><span><b>Render</b><span><code>server/render.js</code> runs the EJS template and prints manifest entries and head hints into the layout.</span></span></div>
+      <div class="step"><span class="n">4</span><span><b>HTML cache</b><span><code>server/html-cache.js</code> stores the output; if the same URL is requested again the template never runs. The <code>cached</code> label on the Server tab shows this.</span></span></div>
+      <div class="step"><span class="n">5</span><span><b>Response</b><span>Compression and cache headers are decided in <code>server/middleware/</code>; responses like event streams skip compression.</span></span></div>
     </div>
-    <p><strong>Ön ısıtma:</strong> <code>server/prewarm.js</code> açılışta sık gezilen
-    rotaları kendi kendine ziyaret eder, böylece ilk gerçek ziyaretçi sıcak önbelleğe düşer.
-    Aynı işi elle yapmak için <code>npm run warm</code>.</p>
+    <p><strong>Prewarming:</strong> <code>server/prewarm.js</code> visits the most travelled
+    routes by itself at startup, so the first real visitor lands on a warm cache.
+    To do the same by hand, use <code>npm run warm</code>.</p>
   `,
   },
   islands: {
-    label: "Island'lar",
+    label: "Islands",
     html: `
-    <p>İstemci kodu sayfa başına tek bir dev bundle değil; parça parça yüklenen
-    <strong>island</strong>'lardan oluşur. Şablon parçası HTML'i basar, island yalnızca
-    davranışı ekler.</p>
+    <p>Client code is not one huge bundle per page; it is made of
+    <strong>islands</strong> loaded piece by piece. The template partial prints the HTML,
+    the island only adds behaviour.</p>
     <div class="steps">
-      <div class="step"><span class="n">1</span><span><b>İşaretleme</b><span>EJS partial'ı kök elemana <code>data-island="ad"</code> koyar.</span></span></div>
-      <div class="step"><span class="n">2</span><span><b>Modül</b><span><code>client/islands/</code> altında aynı adla bir dosya bulunur ve mount fonksiyonunu dışa verir.</span></span></div>
-      <div class="step"><span class="n">3</span><span><b>Yükleme</b><span><code>client/core/registry.js</code> IntersectionObserver ile eleman görünüm alanına yaklaşınca modülü dinamik import eder.</span></span></div>
-      <div class="step"><span class="n">4</span><span><b>Bağlanma</b><span>Mount başarılıysa elemana <code>data-island-ready</code> yazılır. Performans sekmesindeki <b>Island</b> kartı bu oranı gösterir.</span></span></div>
+      <div class="step"><span class="n">1</span><span><b>Marking</b><span>The EJS partial puts <code>data-island="name"</code> on the root element.</span></span></div>
+      <div class="step"><span class="n">2</span><span><b>Module</b><span>A file with the same name lives under <code>client/islands/</code> and exports the mount function.</span></span></div>
+      <div class="step"><span class="n">3</span><span><b>Loading</b><span><code>client/core/registry.js</code> dynamically imports the module once an IntersectionObserver sees the element approach the viewport.</span></span></div>
+      <div class="step"><span class="n">4</span><span><b>Mounting</b><span>If the mount succeeds, <code>data-island-ready</code> is written on the element. The <b>Island</b> card on the Performance tab shows this ratio.</span></span></div>
     </div>
     <div class="cards">
-      <div class="card"><b>Neden</b><span>Ekranın altındaki grafik, harita veya yorum bloğu için JS indirmeye ilk boyamada gerek yok.</span></div>
-      <div class="card"><b>Hata izi</b><span>Bir island patlarsa hata bu panelin <b>Hatalar</b> sekmesine <code>client</code> kaynağıyla düşer, sayfanın kalanı çalışmaya devam eder.</span></div>
-      <div class="card"><b>Stub'lar</b><span><code>build/tasks/island-stubs.mjs</code> eksik island dosyalarını yakalar; isim uyuşmazlıkları build'de görünür.</span></div>
+      <div class="card"><b>Why</b><span>There is no need to download JS at first paint for a chart, map or comment block below the fold.</span></div>
+      <div class="card"><b>Error trail</b><span>If an island blows up, the error lands on the <b>Errors</b> tab of this panel with the <code>client</code> source, and the rest of the page keeps working.</span></div>
+      <div class="card"><b>Stubs</b><span><code>build/tasks/island-stubs.mjs</code> catches missing island files; name mismatches show up at build time.</span></div>
     </div>
   `,
   },
   build: {
     label: "Build",
     html: `
-    <p><code>npm run build</code> tüm varlıkları <code>build/generated/</code> altına
-    üretir ve hash'li dosya adlarını <code>manifest.json</code>'a yazar. Şablonlar dosya
-    adını asla elle yazmaz, hep manifest üzerinden okur.</p>
+    <p><code>npm run build</code> produces every asset under <code>build/generated/</code>
+    and writes the hashed file names into <code>manifest.json</code>. Templates never write
+    a file name by hand; they always read it from the manifest.</p>
     <div class="rows">
-      <div class="row"><span class="tag">client</span><span class="path">esbuild ile island'lar ve çekirdek JS; watch modunda artımlı yeniden paketleme.</span><span class="hint"></span><span></span></div>
-      <div class="row"><span class="tag">css</span><span class="path">Tailwind + PostCSS derlemesi, ardından LightningCSS ile küçültme ve tarayıcı hedefine indirme.</span><span class="hint"></span><span></span></div>
-      <div class="row"><span class="tag">icons</span><span class="path">Phosphor setinden yalnızca kullanılan ikonlar toplanır, tek sprite'a yazılır.</span><span class="hint"></span><span></span></div>
-      <div class="row"><span class="tag">fonts</span><span class="path">Font dosyaları alt kümelenip kopyalanır, preload ipuçları üretilir.</span><span class="hint"></span><span></span></div>
-      <div class="row"><span class="tag">images</span><span class="path">sharp ile boyut varyantları ve modern formatlar.</span><span class="hint"></span><span></span></div>
-      <div class="row"><span class="tag">precompress</span><span class="path">Statik çıktının gzip/brotli sürümleri önceden hazırlanır; sunucu istek anında sıkıştırmaz.</span><span class="hint"></span><span></span></div>
+      <div class="row"><span class="tag">client</span><span class="path">Islands and core JS via esbuild; incremental rebundling in watch mode.</span><span class="hint"></span><span></span></div>
+      <div class="row"><span class="tag">css</span><span class="path">Tailwind + PostCSS compilation, then minification and browser downleveling with LightningCSS.</span><span class="hint"></span><span></span></div>
+      <div class="row"><span class="tag">icons</span><span class="path">Only the icons actually used are collected from the Phosphor set and written into a single sprite.</span><span class="hint"></span><span></span></div>
+      <div class="row"><span class="tag">fonts</span><span class="path">Font files are subset and copied, and preload hints are generated.</span><span class="hint"></span><span></span></div>
+      <div class="row"><span class="tag">images</span><span class="path">Size variants and modern formats via sharp.</span><span class="hint"></span><span></span></div>
+      <div class="row"><span class="tag">precompress</span><span class="path">gzip/brotli versions of the static output are prepared ahead of time; the server never compresses per request.</span><span class="hint"></span><span></span></div>
     </div>
-    <p><code>npm start</code> öncesinde <code>build/ensure-build.mjs</code> çalışır: çıktı
-    eksikse build kendiliğinden tetiklenir, yani derlenmemiş bir sunucu ayağa kalkmaz.</p>
+    <p><code>build/ensure-build.mjs</code> runs before <code>npm start</code>: if the output
+    is missing the build triggers itself, so an uncompiled server never comes up.</p>
   `,
   },
   dev: {
-    label: "Dev akışı",
+    label: "Dev flow",
     html: `
-    <p><code>npm run dev</code> tek bir süreç değil: <code>scripts/dev.mjs</code> build'i
-    watch modunda başlatır, sunucuyu ayağa kaldırır ve ikisinin çıktısını tek bir
-    okunur akışta birleştirir.</p>
+    <p><code>npm run dev</code> is not a single process: <code>scripts/dev.mjs</code> starts
+    the build in watch mode, brings the server up and merges the output of both into one
+    readable stream.</p>
     <div class="steps">
-      <div class="step"><span class="n">1</span><span><b>İzleme</b><span>Yalnızca <code>server/</code>, <code>lib/</code> ve <code>views/</code> izlenir. Build çıktısı izlenmediği için kendi kendini tetikleyen restart döngüsü oluşmaz.</span></span></div>
-      <div class="step"><span class="n">2</span><span><b>CSS takası</b><span>Stil değişince sayfa yenilenmez; yeni stylesheet yüklenip eskisi kaldırılır, kaydırma konumu ve açık paneller korunur.</span></span></div>
-      <div class="step"><span class="n">3</span><span><b>Tam yenileme</b><span>JS veya sunucu kodu değişince tek seferlik reload yapılır. Sunucu süreç kimliği değiştiğinde de aynı yol izlenir.</span></span></div>
-      <div class="step"><span class="n">4</span><span><b>Durum korunması</b><span>Panelin açık/kapalı durumu ve sekmesi sekme belleğinde; sunucu günlükleri ise süreç dışında saklanır. Restart panelin içeriğini silmez.</span></span></div>
+      <div class="step"><span class="n">1</span><span><b>Watching</b><span>Only <code>server/</code>, <code>lib/</code> and <code>views/</code> are watched. The build output is not watched, so no self-triggering restart loop can form.</span></span></div>
+      <div class="step"><span class="n">2</span><span><b>CSS swap</b><span>A style change does not reload the page; the new stylesheet loads and the old one is removed, keeping scroll position and open panels.</span></span></div>
+      <div class="step"><span class="n">3</span><span><b>Full reload</b><span>A JS or server code change causes a single reload. The same path is taken when the server process id changes.</span></span></div>
+      <div class="step"><span class="n">4</span><span><b>State retention</b><span>The panel's open state and tab live in session storage; server logs are kept outside the process. A restart does not wipe the panel's contents.</span></span></div>
     </div>
     <div class="cards">
-      <div class="card"><b>Alt+D</b><span>Paneli açar/kapatır. <code>Esc</code> kapatır, karartma alanına tıklamak da kapatır.</span></div>
-      <div class="card"><b>Sayfayı yenile</b><span>Panel açıkken yenileme yapar; yenileme sonrası panel aynı sekmeyle geri gelir.</span></div>
-      <div class="card"><b>Kayıtları temizle</b><span>Tarayıcı ve sunucu taraflı hata/istek günlüklerini sıfırlar, paneli kapatmaz.</span></div>
+      <div class="card"><b>Alt+D</b><span>Opens/closes the panel. <code>Esc</code> closes it, and so does clicking the backdrop.</span></div>
+      <div class="card"><b>Reload page</b><span>Reloads while the panel is open; afterwards the panel comes back on the same tab.</span></div>
+      <div class="card"><b>Clear records</b><span>Resets the browser and server side error/request logs without closing the panel.</span></div>
     </div>
   `,
   },
   theme: {
-    label: "Tema & UI",
+    label: "Theme & UI",
     html: `
-    <p>Stil kararları tek kaynaktan gelir. Renk, boşluk, radius ve tipografi
-    token'ları <code>styles/theme.css</code> içindeki <code>:root</code> değişkenlerinde
-    tanımlıdır; Tailwind sınıfları <code>styles/JSkelet.css</code> içindeki
-    <code>@theme inline</code> bloğuyla bu token'lara bağlanır.</p>
+    <p>Style decisions come from a single source. Colour, spacing, radius and typography
+    tokens are defined in the <code>:root</code> variables inside
+    <code>styles/theme.css</code>; Tailwind classes are bound to those tokens by the
+    <code>@theme inline</code> block in <code>styles/JSkelet.css</code>.</p>
     <div class="rows">
-      <div class="row"><span class="tag">theme.css</span><span class="path">Token'lar ve <code>.wrapper</code>, <code>.clamp-2</code> gibi hazır sınıflar.</span><span class="hint"></span><span></span></div>
-      <div class="row"><span class="tag">JSkelet.css</span><span class="path">Tailwind utility eşlemeleri ve <code>.JSkelet-type-*</code> gibi bileşik sınıflar.</span><span class="hint"></span><span></span></div>
-      <div class="row"><span class="tag">components/ui</span><span class="path">Buton, kart, modal gibi yeniden kullanılabilir parçaların tek adresi.</span><span class="hint"></span><span></span></div>
+      <div class="row"><span class="tag">theme.css</span><span class="path">Tokens and ready-made classes such as <code>.wrapper</code> and <code>.clamp-2</code>.</span><span class="hint"></span><span></span></div>
+      <div class="row"><span class="tag">JSkelet.css</span><span class="path">Tailwind utility mappings and composite classes such as <code>.JSkelet-type-*</code>.</span><span class="hint"></span><span></span></div>
+      <div class="row"><span class="tag">components/ui</span><span class="path">The single home for reusable pieces like buttons, cards and modals.</span><span class="hint"></span><span></span></div>
     </div>
-    <p><strong>Kural:</strong> yeni bir renk ya da ölçü gerektiğinde hex/pixel
-    hardcode edilmez; önce token eklenir, gerekiyorsa Tailwind tarafına eşlenir,
-    sonra bileşende kullanılır. Yeni genel amaçlı bir UI parçası da
-    <code>views/components/ui/</code> dışına çıkmaz.</p>
+    <p><strong>Rule:</strong> when a new colour or measure is needed, never hardcode a
+    hex/pixel value; add a token first, map it on the Tailwind side if necessary, then use
+    it in the component. A new general purpose UI piece also never leaves
+    <code>views/components/ui/</code>.</p>
   `,
   },
   commands: {
-    label: "Komutlar",
+    label: "Commands",
     html: `
-    <p>Sık kullanılan npm script'leri. Doğrulama script'leri belirli sayfaların
-    beklenen parçaları içerip içermediğini gerçek çıktı üzerinden kontrol eder.</p>
+    <p>Commonly used npm scripts. The verification scripts check against real output
+    whether specific pages contain the pieces they are expected to.</p>
     <div class="rows">
-      <div class="row"><span class="tag">dev</span><span class="path">Build watch + sunucu, bu panelle birlikte.</span><span class="hint"></span><span></span></div>
-      <div class="row"><span class="tag">build</span><span class="path">Üretim çıktısı: JS, CSS, ikon, font, görsel, ön sıkıştırma.</span><span class="hint"></span><span></span></div>
-      <div class="row"><span class="tag">start</span><span class="path">Üretim sunucusu; öncesinde build eksikse tamamlanır.</span><span class="hint"></span><span></span></div>
-      <div class="row"><span class="tag">lint</span><span class="path">ESLint. Değişiklik sonrası varsayılan doğrulama yolu budur, tam build şart değil.</span><span class="hint"></span><span></span></div>
-      <div class="row"><span class="tag">warm</span><span class="path">Önbelleği elle ısıtır.</span><span class="hint"></span><span></span></div>
-      <div class="row"><span class="tag">perf</span><span class="path">Performans denetimi raporu üretir.</span><span class="hint"></span><span></span></div>
-      <div class="row"><span class="tag">verify:*</span><span class="path">Rota dumanı, head etiketleri, grafik, yorumlar, hisse sekmeleri, haber akışı ve ana sayfa widget'ları için hedefli kontroller.</span><span class="hint"></span><span></span></div>
+      <div class="row"><span class="tag">dev</span><span class="path">Build watch + server, together with this panel.</span><span class="hint"></span><span></span></div>
+      <div class="row"><span class="tag">build</span><span class="path">Production output: JS, CSS, icons, fonts, images, precompression.</span><span class="hint"></span><span></span></div>
+      <div class="row"><span class="tag">start</span><span class="path">Production server; a missing build is completed first.</span><span class="hint"></span><span></span></div>
+      <div class="row"><span class="tag">lint</span><span class="path">ESLint. This is the default verification path after a change; a full build is not required.</span><span class="hint"></span><span></span></div>
+      <div class="row"><span class="tag">warm</span><span class="path">Warms the cache by hand.</span><span class="hint"></span><span></span></div>
+      <div class="row"><span class="tag">perf</span><span class="path">Produces a performance audit report.</span><span class="hint"></span><span></span></div>
+      <div class="row"><span class="tag">verify:*</span><span class="path">Targeted checks for route smoke, head tags, charts, comments, stock tabs, the news feed and home page widgets.</span><span class="hint"></span><span></span></div>
     </div>
   `,
   },
   layout: {
-    label: "Klasörler",
+    label: "Folders",
     html: `
-    <p>Bir şeyi nerede arayacağını bilmek için kısa harita.</p>
+    <p>A short map so you know where to look for something.</p>
     <div class="rows">
-      <div class="row"><span class="tag">server/</span><span class="path">Express uygulaması: rotalar, controller'lar, middleware, render ve önbellek.</span><span class="hint"></span><span></span></div>
-      <div class="row"><span class="tag">views/</span><span class="path">EJS layout'u, sayfalar ve partial'lar. HTML'in tek kaynağı.</span><span class="hint"></span><span></span></div>
-      <div class="row"><span class="tag">client/</span><span class="path">Tarayıcı kodu: <code>core/</code> island altyapısı, <code>islands/</code> davranışlar, <code>devtools/</code> bu panel.</span><span class="hint"></span><span></span></div>
-      <div class="row"><span class="tag">lib/</span><span class="path">Veri servisleri ve alan mantığı; API çağrıları, dönüşümler, formatlayıcılar.</span><span class="hint"></span><span></span></div>
-      <div class="row"><span class="tag">app/</span><span class="path">Tema dosyaları ve paylaşılan UI bileşenleri.</span><span class="hint"></span><span></span></div>
-      <div class="row"><span class="tag">build/</span><span class="path">Derleme script'leri (<code>tasks/</code>) ve üretilen çıktı (<code>generated/</code>).</span><span class="hint"></span><span></span></div>
-      <div class="row"><span class="tag">framework/</span><span class="path">Build ve dev süreçlerinin paylaştığı yardımcılar, terminal günlüğü dahil.</span><span class="hint"></span><span></span></div>
-      <div class="row"><span class="tag">scripts/</span><span class="path">Dev orkestrasyonu ve doğrulama/bakım araçları.</span><span class="hint"></span><span></span></div>
-      <div class="row"><span class="tag">public/</span><span class="path">Doğrudan servis edilen statik dosyalar.</span><span class="hint"></span><span></span></div>
-      <div class="row"><span class="tag">docs/</span><span class="path">Uzun biçimli notlar ve karar kayıtları.</span><span class="hint"></span><span></span></div>
+      <div class="row"><span class="tag">server/</span><span class="path">The Express application: routes, controllers, middleware, render and cache.</span><span class="hint"></span><span></span></div>
+      <div class="row"><span class="tag">views/</span><span class="path">The EJS layout, pages and partials. The single source of HTML.</span><span class="hint"></span><span></span></div>
+      <div class="row"><span class="tag">client/</span><span class="path">Browser code: <code>core/</code> island infrastructure, <code>islands/</code> behaviours, <code>devtools/</code> this panel.</span><span class="hint"></span><span></span></div>
+      <div class="row"><span class="tag">lib/</span><span class="path">Data services and domain logic; API calls, transforms, formatters.</span><span class="hint"></span><span></span></div>
+      <div class="row"><span class="tag">app/</span><span class="path">Theme files and shared UI components.</span><span class="hint"></span><span></span></div>
+      <div class="row"><span class="tag">build/</span><span class="path">Build scripts (<code>tasks/</code>) and the generated output (<code>generated/</code>).</span><span class="hint"></span><span></span></div>
+      <div class="row"><span class="tag">framework/</span><span class="path">Helpers shared by the build and dev processes, including the terminal logger.</span><span class="hint"></span><span></span></div>
+      <div class="row"><span class="tag">scripts/</span><span class="path">Dev orchestration and verification/maintenance tools.</span><span class="hint"></span><span></span></div>
+      <div class="row"><span class="tag">public/</span><span class="path">Static files served directly.</span><span class="hint"></span><span></span></div>
+      <div class="row"><span class="tag">docs/</span><span class="path">Long form notes and decision records.</span><span class="hint"></span><span></span></div>
     </div>
   `,
   },
@@ -1457,8 +1484,8 @@ function aboutTab() {
   return `
     ${lede(
       "good",
-      `JSkelet ön yüzü kendi ince framework'ü üstünde çalışıyor: <strong>sunucuda HTML</strong>, ` +
-        `tarayıcıda yalnızca gerekli <strong>island'lar</strong>. Bu sekme panelin içindeki kısa dokümantasyon.`,
+      `The JSkelet front end runs on its own thin framework: <strong>HTML on the server</strong>, ` +
+        `only the necessary <strong>islands</strong> in the browser. This tab is the short documentation inside the panel.`,
     )}
     <div class="subtabs">
       ${Object.entries(ABOUT)
@@ -1519,9 +1546,9 @@ function paintPrewarm(root) {
 
   chip.hidden = false;
   chip.className = `warm ${warm.active ? "" : "done"}`;
-  chip.title = `Önbellek ısıtması: ${warm.ok} başarılı${
-    warm.failed ? `, ${warm.failed} hata` : ""
-  } / ${warm.total} sayfa`;
+  chip.title = `Cache prewarming: ${warm.ok} succeeded${
+    warm.failed ? `, ${warm.failed} failed` : ""
+  } / ${warm.total} pages`;
   chip.querySelector("[data-part='warm-text']").textContent = warm.active
     ? `${warm.done}/${warm.total} prewarmed`
     : `${warm.ok}/${warm.total} prewarmed`;
@@ -1541,12 +1568,12 @@ function paint() {
 
   const tone = errorCount ? "bad" : warnCount ? "warn" : "";
   const badgeCount = errorCount || warnCount;
-  const lcpLabel = metrics.lcp ? `${Math.round(metrics.lcp)} ms` : "ölçülüyor";
+  const lcpLabel = metrics.lcp ? `${Math.round(metrics.lcp)} ms` : "measuring";
 
   const bubble = root.querySelector(".bubble");
   bubble.className = `bubble ${tone}`;
-  bubble.title = `JSkelet dev araçları — LCP ${lcpLabel}${
-    badgeCount ? `, ${errorCount} hata, ${warnCount} uyarı` : ""
+  bubble.title = `JSkelet dev tools — LCP ${lcpLabel}${
+    badgeCount ? `, ${errorCount} errors, ${warnCount} warnings` : ""
   }`;
 
   const badge = root.querySelector(".badge");
@@ -1563,14 +1590,19 @@ function paint() {
   const pill = root.querySelector(".pill");
   pill.className = `pill ${offline ? "warn" : tone}`;
   pill.querySelector("[data-part='pill']").textContent = offline
-    ? "sunucu yeniden başlıyor…"
+    ? "server restarting…"
     : errorCount || warnCount
-      ? `${errorCount} hata · ${warnCount} uyarı`
-      : "sorun yok";
+      ? `${errorCount} errors · ${warnCount} warnings`
+      : "all good";
 
   const chip = root.querySelector("[data-part='chip']");
   chip.hidden = !errorCount;
   chip.textContent = String(errorCount);
+
+  const version = serverStats?.version;
+  const versionChip = root.querySelector("[data-part='version-chip']");
+  versionChip.hidden = !version?.outdated;
+  if (version?.outdated) versionChip.title = `JSkelet ${version.latest} is available`;
 
   const warm = serverStats?.prewarm;
   const warmChip = root.querySelector("[data-part='warm-chip']");

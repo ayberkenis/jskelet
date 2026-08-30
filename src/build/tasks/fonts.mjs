@@ -89,7 +89,7 @@ export async function copyFonts(config) {
     );
     if (stillMissing.length) {
       log.warn(
-        `${family.family} ${stillMissing.join(", ")} indirilemedi — sistem font yığınına düşülecek.`,
+        `${family.family} ${stillMissing.join(", ")} could not be downloaded — falling back to the system font stack.`,
       );
     }
   }
@@ -118,7 +118,7 @@ async function downloadFromGoogle(url, weights) {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     css = await response.text();
   } catch (error) {
-    log.warn(`Google Fonts CSS alınamadı (${error.message})`);
+    log.warn(`could not fetch Google Fonts CSS (${error.message})`);
     return out;
   }
 
@@ -138,7 +138,7 @@ async function downloadFromGoogle(url, weights) {
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       out.push([weight, Buffer.from(await response.arrayBuffer())]);
     } catch (error) {
-      log.warn(`${weight} indirilemedi (${error.message})`);
+      log.warn(`${weight} could not be downloaded (${error.message})`);
     }
   }
 

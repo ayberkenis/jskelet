@@ -4,6 +4,9 @@
  */
 import { attrs, esc, cn } from "./html.js";
 import { asset, getSpriteIds, optimizedImage } from "../../server/assets.js";
+import { getRequestContext, markTainted } from "../../http/request-context.js";
+import { getSignedCookie, randomToken, setSignedCookie } from "../../http/cookies.js";
+import { getConfig } from "../../config/index.js";
 
 const isDev = process.env.NODE_ENV === "development";
 
@@ -160,7 +163,7 @@ export function icon(props) {
     if (ids.size && !ids.has(id)) {
       warnedIcons.add(id);
       console.warn(
-        `[icon] sprite'ta yok: ${id} — adı sabit yazın ya da build/tasks/icons.mjs taramasına ekleyin.`,
+        `[icon] missing from sprite: ${id} — write the name as a literal or add it to the build/tasks/icons.mjs scan.`,
       );
     }
   }
@@ -177,6 +180,55 @@ export function icon(props) {
   });
 
   return `<svg${attributes}><use href="${esc(spritePath)}#${esc(id)}"></use></svg>`;
+}
+
+/**
+ * Formun içine CSRF token'ını gizli alan olarak basar.
+ *
+ * Token **burada** üretilir ve imzalı cookie olarak yazılır: bir sayfada
+ * token gerçekten gerekiyorsa o sayfa zaten kişiye özeldir. Bu yüzden çağrı
+ * render'ı işaretler (`tainted`) ve sayfa public HTML cache'ine giremez —
+ * aksi hâlde tüm ziyaretçiler cache'ten aynı token'ı alırdı ve çift gönderim
+ * kontrolü hiçbir şey doğrulamazdı.
+ *
+ * `security.csrf.token` kapalıysa boş string döner; şablon her koşulda
+ * render edilebilmeli, korumanın açık olması config'in kararı.
+ *
+ * @returns {string}
+ */
+export function csrfField() {
+  const context = getRequestContext();
+  if (!context?.res) return "";
+
+  const { csrf } = getConfig().security;
+  if (!csrf.token) return "";
+
+  if (!context.csrfToken) {
+    const existing = getSignedCookie(context.res.req, csrf.cookieName);
+    const token = existing ?? randomToken(24);
+
+    if (!existing) {
+      try {
+        setSignedCookie(context.res, csrf.cookieName, token, {
+          // Token'ı istemci cookie'den değil, basılan gizli alandan okur;
+          // HttpOnly kalması XSS durumunda bir katman daha demek.
+          httpOnly: true,
+        });
+      } catch (error) {
+        console.warn(
+          "[csrf] could not emit the token: no secret for signed cookies",
+          error instanceof Error ? error.message : error,
+        );
+        return "";
+      }
+    }
+
+    context.csrfToken = token;
+  }
+
+  markTainted("csrfField()");
+
+  return `<input type="hidden" name="${esc(csrf.fieldName)}" value="${esc(context.csrfToken)}">`;
 }
 
 /**

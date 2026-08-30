@@ -29,7 +29,7 @@ export function preconnectHints() {
       try {
         return `<link rel="preconnect" href="${esc(new URL(origin).origin)}">`;
       } catch {
-        console.warn(`[head] preconnect geçersiz URL, atlandı: ${origin}`);
+        console.warn(`[head] invalid preconnect URL, skipped: ${origin}`);
         return "";
       }
     })

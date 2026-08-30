@@ -26,10 +26,20 @@ import { esc } from "jskelet/html";
  * @property {TocEntry[]} toc "Bu sayfada" listesi
  *
  * @typedef {object} RenderOptions
- * @property {(href: string) => string} [resolveLink] Bağlantı hedefini çevirir
+ * @property {(href: string, label: string) => string | { href: string,
+ *   label?: string }} [resolveLink] Bağlantı hedefini çevirir; görünen metni de
+ *   değiştirmek isterse nesne döndürür
  * @property {{ idle: string, done: string, failed: string }} [copy]
  *   Kod bloklarındaki kopyalama düğmesinin metinleri; verilmezse düğme basılmaz
  */
+
+/**
+ * Satır içi kod parçalarının geçici yer tutucusu. Özel kullanım alanından
+ * (U+E000) bir karakter: kaynak metinde geçme olasılığı yok ve kontrol
+ * karakterlerinin aksine düzenli ifadede sorun çıkarmıyor.
+ */
+const SENTINEL = "\uE000";
+const SENTINEL_PATTERN = /\uE000(\d+)\uE000/g;
 
 /** Türkçe harfleri anchor'da kullanılabilir hâle getiren eşleme. */
 const FOLD = {
@@ -421,23 +431,31 @@ function inline(text, state) {
 
   let out = text.replace(/`([^`]+)`/g, (_, code) => {
     codes.push(code);
-    return `\u0000${codes.length - 1}\u0000`;
+    return `${SENTINEL}${codes.length - 1}${SENTINEL}`;
   });
 
   out = esc(out);
 
   out = out.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_, label, href) => {
-    const target = state.resolveLink(unescapeAttribute(href));
+    const resolved = state.resolveLink(unescapeAttribute(href), label);
+    const target = typeof resolved === "string" ? resolved : resolved.href;
+
+    // `label` bu noktada zaten kaçırılmış durumda ve satır içi kod yer
+    // tutucuları taşıyabiliyor; yerine geçen metin ise ham geliyor.
+    const replacement =
+      typeof resolved === "string" ? undefined : resolved.label;
+    const text = replacement === undefined ? label : esc(replacement);
+
     const external = /^https?:\/\//.test(target);
     const extra = external ? ' rel="noopener" target="_blank"' : "";
-    return `<a href="${esc(target)}"${extra}>${label}</a>`;
+    return `<a href="${esc(target)}"${extra}>${text}</a>`;
   });
 
   out = out.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
   out = out.replace(/(^|[\s(])\*([^*]+)\*/g, "$1<em>$2</em>");
 
   return out.replace(
-    /\u0000(\d+)\u0000/g,
+    SENTINEL_PATTERN,
     (_, position) => `<code>${esc(codes[Number(position)])}</code>`,
   );
 }

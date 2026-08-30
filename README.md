@@ -172,10 +172,15 @@ client.
   everything".
 - **No global state management** beyond the small island store.
 
-If you are building an app-shaped interface behind a login — a dashboard, an
-editor, an admin panel — page HTML cannot be cached and this framework is the
-wrong tool. The reasoning and a feature-by-feature comparison with Next.js live
-in [docs/11-tasima.md](./docs/11-tasima.md).
+An app-shaped interface behind a login — a dashboard, an editor, an admin panel
+— cannot benefit from the HTML cache, which is the main reason to pick this
+framework. It is supported rather than recommended: `route(fn, { private: true })`
+keeps per-visitor pages out of the cache, and signed cookies, CSRF, fragment
+endpoints and region swapping cover the rest
+([docs/12-panel-ve-oturum.md](./docs/12-panel-ve-oturum.md)). Live data
+transport is deliberately left to you; pick SSE, WebSocket or polling yourself.
+A feature-by-feature comparison with Next.js is in
+[docs/11-tasima.md](./docs/11-tasima.md).
 
 ## Project layout
 
@@ -261,10 +266,11 @@ Only the specifiers in the `exports` map are supported:
 
 | Specifier | Contents |
 | --- | --- |
-| `jskelet` | `route`, `createApp`, `startServer`, `notFound`, `redirect`, `cache`, `asset`, `getConfig`, HTML cache and prewarm helpers |
-| `jskelet/client` | `register`, `registerAll`, `hydrate`, `start`, `createStore`, DOM helpers |
+| `jskelet` | `route`, `fragment`, `createApp`, `startServer`, `notFound`, `redirect`, `seeOther`, `cache`, `asset`, `getConfig`, cookie helpers, HTML cache and prewarm helpers |
+| `jskelet/client` | `register`, `registerAll`, `hydrate`, `unmount`, `start`, `swap`, `startForms`, `createStore`, DOM helpers |
 | `jskelet/html` | `attrs`, `cn`, `cx`, `esc`, `jsonScript` |
-| `jskelet/tags` | `icon`, `image`, `link`, `preloadImage` |
+| `jskelet/tags` | `icon`, `image`, `link`, `preloadImage`, `csrfField` |
+| `jskelet/cookies` | `parseCookies`, `setCookie`, `clearCookie`, `setSignedCookie`, `getSignedCookie`, `randomToken`, `safeEqual` |
 
 Anything reachable by a deeper path is internal and may change without notice.
 
@@ -296,6 +302,7 @@ written in Turkish; translations are a welcome contribution.
 | [09-dev-araclari](./docs/09-dev-araclari.md) | Dev workflow, overlay, report page, dev gate |
 | [10-dagitim](./docs/10-dagitim.md) | Production, Docker, reverse proxy, health checks |
 | [11-tasima](./docs/11-tasima.md) | Migrating from Next.js: mapping table and plan |
+| [12-panel-ve-oturum](./docs/12-panel-ve-oturum.md) | Per-visitor pages: `private: true`, sessions, CSRF, fragments, swapping |
 
 If you work with AI agents, [AGENTS.md](./AGENTS.md) summarizes the rules that
 apply to this repository.
@@ -306,6 +313,7 @@ apply to this repository.
 npm --prefix examples/minimal   install && npm --prefix examples/minimal   run dev
 npm --prefix examples/blog      install && npm --prefix examples/blog      run dev
 npm --prefix examples/marketing install && npm --prefix examples/marketing run dev
+npm --prefix examples/dashboard install && npm --prefix examples/dashboard run dev
 ```
 
 - **`examples/minimal`** — two routes, one component, one island. The smallest
@@ -320,6 +328,11 @@ npm --prefix examples/marketing install && npm --prefix examples/marketing run d
   are measured in the browser; there are no invented benchmarks. It is also
   bilingual — English at the root, Turkish under `/tr` — which shows how to build
   a multi-language site on a framework that ships no i18n of its own.
+- **`examples/dashboard`** — the opposite axis: per-visitor pages. A signed
+  cookie session, a `private: true` page that never enters the HTML cache, a
+  paginated table fragment, a CSRF-protected form that still works without
+  JavaScript, and an island with cleanup. A public landing page sits next to it,
+  so a cached response and a `no-store` one are visible side by side.
 
 With a server running, `node smoke.mjs` inside an example verifies that its
 endpoints respond as expected.

@@ -432,60 +432,87 @@ export default {
       body: "Minimal örnek çalışan en küçük hâl, blog örneği framework'ün her yüzeyine dokunur, pazarlama örneği ise okuduğunuz bu sayfa.",
       note: "Sunucu ayaktayken duman testi her ucun beklendiği gibi yanıt verdiğini doğrular.",
     },
-    openLabel: "Bölümü aç",
+    openLabel: "Bölümü oku",
+
+    /** Sidebar bölümleri; anahtarlar `lib/docs.js` → `DOC_GROUPS` ile aynı. */
+    groups: {
+      start: "Başlangıç",
+      build: "Sayfa kurmak",
+      performance: "Performans",
+      reference: "Referans",
+    },
+
+    /** Belge kabuğunun tüm etiketleri: sidebar, TOC, gezinme ve uyarılar. */
+    shell: {
+      nav: "Belge bölümleri",
+      breadcrumb: "Konum",
+      docsLabel: "Belgeler",
+      overview: "Genel bakış",
+      browse: "Bölümlere göz at",
+      onThisPage: "Bu sayfada",
+      previous: "Önceki",
+      next: "Sonraki",
+      edit: "Bu sayfayı GitHub'da düzenle",
+      versionLabel: "Güncel sürüm",
+      version: "v%s belgeleri",
+      start: "Okumaya başla",
+      untranslated:
+        "Bu bölüm henüz çevrilmedi, bu yüzden İngilizce gösteriliyor.",
+    },
+
     items: [
       {
-        file: "01-baslangic",
+        slug: "getting-started",
         title: "Başlangıç",
         body: "Kurulum, ilk route, ilk island, dizin yapısı ve CLI.",
       },
       {
-        file: "02-mimari",
+        slug: "architecture",
         title: "Mimari",
         body: "Kararlar, gerekçeleri ve sözleşme sayılan middleware sırası.",
       },
       {
-        file: "03-routing",
+        slug: "routing",
         title: "Routing",
         body: "Route modülleri, controller sözleşmesi ve yükleme sırasının nasıl belirlendiği.",
       },
       {
-        file: "04-render-ve-sablonlar",
+        slug: "rendering",
         title: "Render ve şablonlar",
         body: "Layout, bileşenler, yardımcılar ve metadata şeması.",
       },
       {
-        file: "05-islands",
+        slug: "islands",
         title: "Island'lar",
         body: "Island sözleşmesi, hidrasyon stratejileri, paylaşılan durum ve DOM yardımcıları.",
       },
       {
-        file: "06-cache",
+        slug: "caching",
         title: "Cache",
         body: "TTL, stale-while-revalidate, cache anahtarı ve ısıtma.",
       },
       {
-        file: "07-yapilandirma",
-        title: "Yapılandırma",
-        body: "Alan alan, tam yapılandırma referansı.",
-      },
-      {
-        file: "08-build",
+        slug: "build",
         title: "Build",
         body: "Build hattı, manifest, Tailwind kaynakları ve ikon sprite'ı.",
       },
       {
-        file: "09-dev-araclari",
+        slug: "configuration",
+        title: "Yapılandırma",
+        body: "Alan alan, tam yapılandırma referansı.",
+      },
+      {
+        slug: "dev-tools",
         title: "Dev araçları",
         body: "Geliştirme akışı, overlay, rapor sayfası ve dev gate.",
       },
       {
-        file: "10-dagitim",
+        slug: "deployment",
         title: "Dağıtım",
         body: "Prod, Docker, ters proxy ve sağlık kontrolü.",
       },
       {
-        file: "11-tasima",
+        slug: "migration",
         title: "Taşıma",
         body: "Next.js'ten geçiş: karşılık tablosu ve aşamalı plan.",
       },

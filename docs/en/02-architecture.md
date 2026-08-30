@@ -214,7 +214,7 @@ missing build output produces a degraded but working page instead of an error.
   `headers()`/`redirects()`/`rewrites()`/`cache()` sections throws, only that
   section is ignored.
 - **If hooks throw**, the framework falls back to its own default and warns.
-- **If the build did not run**, `asset()` returns `/assets/<isim>`, `hasAsset()`
+- **If the build did not run**, `asset()` returns `/assets/<name>`, `hasAsset()`
   is false and the layout does not print the stylesheet/script tags at all. When
   `jskelet build` is forgotten you see an unstyled but working page instead of
   an error.

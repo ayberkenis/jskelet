@@ -29,11 +29,13 @@ don't have to import things one by one in every file:
 | Field | Equivalent |
 | --- | --- |
 | `route` | `jskelet` → `route` |
+| `fragment` | `jskelet` → `fragment` |
 | `renderView` | `jskelet` → `renderView` |
 | `renderPage` | `jskelet` → `renderPage` |
 | `notFound` | `jskelet` → `notFound` |
 | `redirect` | `jskelet` → `redirect` |
 | `permanentRedirect` | `jskelet` → `permanentRedirect` |
+| `seeOther` | `jskelet` → `seeOther` |
 
 You can also import directly if you prefer; `api` is only a convenience:
 
@@ -41,13 +43,13 @@ You can also import directly if you prefer; `api` is only a convenience:
 import { route, notFound } from "jskelet";
 
 export function register(app) {
-  app.get("/haber/:slug", route(async ({ params }) => { /* … */ }));
+  app.get("/news/:slug", route(async ({ params }) => { /* … */ }));
 }
 ```
 
 If a module does not expose a valid function, a warning is printed and it is
-skipped: `[router] <dosya> default ya da 'register' fonksiyonu dışa açmıyor,
-atlandı`.
+skipped: `[router] <file> exports neither a default nor a 'register' function,
+skipped`.
 
 ## Load order
 
@@ -78,9 +80,9 @@ routes/
 ```
 
 Making the order explicit is a design decision: if a single-segment catch-all
-such as `/:slug` is registered before the `/hakkinda` route, "hakkinda" is
-mistaken for a slug. Making the order visible instead of hiding it in file names
-makes diagnosis easier ([02-architecture.md](./02-architecture.md)).
+such as `/:slug` is registered before the `/about` route, "about" is mistaken
+for a slug. Making the order visible instead of hiding it in file names makes
+diagnosis easier ([02-architecture.md](./02-architecture.md)).
 
 If no route module is found at all, a warning is printed and the server comes up
 with static files + 404 only.
@@ -100,28 +102,59 @@ the following work:
 - Builds the `ctx` object and calls the controller.
 - Applies the HTML TTL cache (if `revalidate` is set and the method is `GET`).
 - Catches the `notFound()` / `redirect()` control flow.
-- Writes the response headers: `Content-Type`, `Cache-Control` on cacheable
-  responses, and always `X-JSkelet-Cache`.
+- Writes the response headers: `Content-Type` and, depending on the cache
+  decision, `Cache-Control` (plus `X-JSkelet-Cache` on cacheable responses).
 - Sends the response using the compressed body stored in the cache.
 
 ```js
 app.get(
-  "/hakkinda",
+  "/about",
   route(
     async () => ({
       view: "pages/about",
-      metadata: { title: "Hakkında", canonical: "/hakkinda" },
+      metadata: { title: "About", canonical: "/about" },
     }),
     { revalidate: 300 },
   ),
 );
 ```
 
-`options` accepts a single field:
+`options` accepts two fields:
 
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `revalidate` | `number` (seconds) | The HTML cache TTL. If it is not given, or is 0, this route is not cached. A matching rule in `jskelet.config.mjs` → `cache().html` **overrides** this value. |
+| `private` | `boolean` | The page depends on the visitor. The cache is disabled, a `cache().html` pattern **cannot** override that, and the response is sent with `private, no-store` and `Vary: Cookie`, without an ETag. |
+
+Every session-dependent page needs `private: true`; because identity is not part
+of the cache key, without the flag one user's HTML is served to another. The
+framework also catches this at runtime (a render that reads cookies is never
+stored), but the flag is the right place. Details in
+[12-dashboards-and-sessions.md](./12-dashboards-and-sessions.md).
+
+## `fragment()` — a partial without the layout
+
+For endpoints that refresh a region. No layout is printed, the response is sent
+with `private, no-store` and no ETag, and it never touches the HTML cache.
+
+```js
+app.get(
+  "/_fragment/rows",
+  fragment(async ({ query }) => ({
+    view: "partials/rows",
+    data: { rows: getRows(Number(query.page ?? 1)) },
+  })),
+);
+```
+
+The controller returns either `{ view, data?, status? }` or an HTML string. On
+failure it responds with a small alert partial
+(`<div role="alert" data-fragment-error>`) rather than a whole page, because the
+swapped region must not end up containing an entire error page.
+
+`fragment()` works for POST too: it is how you return an updated partial as the
+answer to a form submission, and it establishes the request context that
+`csrfField()` needs in the template.
 
 ## `ctx` — the controller context
 
@@ -140,7 +173,7 @@ The controller takes a single argument:
 the `source` syntax from the config:
 
 ```js
-app.get("/haber/:slug", route(async ({ params }) => {
+app.get("/news/:slug", route(async ({ params }) => {
   const article = await getArticle(params.slug);
   if (!article) notFound();
   return { view: "pages/article", data: { article } };
@@ -174,17 +207,17 @@ An example with everything together:
 import { headHints } from "jskelet";
 
 app.get(
-  "/piyasalar",
+  "/markets",
   route(
     async ({ query }) => {
-      const data = await getMarkets(query.tab ?? "hisse");
+      const data = await getMarkets(query.tab ?? "stocks");
 
       return {
         view: "pages/markets",
-        data: { markets: data.items, tab: query.tab ?? "hisse" },
+        data: { markets: data.items, tab: query.tab ?? "stocks" },
         metadata: {
-          title: "Piyasalar",
-          canonical: "/piyasalar",
+          title: "Markets",
+          canonical: "/markets",
           openGraph: { image: data.cover },
         },
         head: headHints({ href: data.cover }),
@@ -204,25 +237,31 @@ does a `throw`, the framework catches it. That way a function in the data layer
 can produce a 404 without having to carry a return value up to the controller.
 
 ```js
-import { notFound, redirect, permanentRedirect } from "jskelet";
+import { notFound, redirect, permanentRedirect, seeOther } from "jskelet";
 
 notFound();                    // 404 → the hooks.notFound() page
-redirect("/yeni-adres");       // 307 (temporary)
-permanentRedirect("/yeni");    // 308 (permanent)
+redirect("/new-address");      // 307 (temporary, preserves the method)
+permanentRedirect("/new");     // 308 (permanent, preserves the method)
+seeOther("/dashboard");        // 303 (after a POST)
 ```
 
-All three return `never` (they always throw). In detail:
+All four return `never` (they always throw). In detail:
 
 - `notFound()` → `NotFoundError` (`statusCode: 404`)
 - `redirect(location)` → `RedirectError` (`statusCode: 307`)
 - `permanentRedirect(location)` → `RedirectError` (`statusCode: 308`)
+- `seeOther(location)` → `RedirectError` (`statusCode: 303`)
+
+In a POST handler use `seeOther()` rather than `redirect()`: 307 preserves the
+method, so the browser POSTs to the target again. The post/redirect/get flow —
+the one where the back button does not resubmit the form — needs 303.
 
 If you need a custom status code you can use the class directly:
 
 ```js
 import { RedirectError } from "jskelet";
 
-throw new RedirectError("/eski-kurulum-uyumu", 301);
+throw new RedirectError("/legacy-install-compat", 301);
 ```
 
 To tell them apart, `isNotFoundError(error)` and `isRedirectError(error)` are
@@ -249,7 +288,7 @@ export default {
     notFound() {
       return {
         view: "pages/not-found",
-        metadata: { title: "Sayfa bulunamadı", robots: { index: false } },
+        metadata: { title: "Page not found", robots: { index: false } },
       };
     },
   },
@@ -284,7 +323,7 @@ export default {
       return {
         view: "pages/error",
         data: { status },
-        metadata: { title: "Bir hata oluştu", robots: { index: false } },
+        metadata: { title: "Something went wrong", robots: { index: false } },
       };
     },
   },
@@ -316,7 +355,7 @@ islands fetch later:
 
 ```js
 export default function register(app, { renderView }) {
-  app.get("/_fragment/yorumlar/:id", async (req, res) => {
+  app.get("/_fragment/comments/:id", async (req, res) => {
     const comments = await getComments(req.params.id);
     res.type("html").send(await renderView("fragments/comments", { comments }));
   });
@@ -337,8 +376,8 @@ routes in the middleware chain (see
 export default {
   async redirects() {
     return [
-      { source: "/eski-blog/:slug", destination: "/blog/:slug", permanent: true },
-      { source: "/kampanya", destination: "/kampanyalar" },
+      { source: "/old-blog/:slug", destination: "/blog/:slug", permanent: true },
+      { source: "/campaign", destination: "/campaigns" },
       { source: "/legacy", destination: "/", statusCode: 301 },
     ];
   },
@@ -349,7 +388,7 @@ Behaviour:
 
 - **The first matching rule wins**, the rest are not tried. The ordering is the
   order written in the config.
-- **The query string is preserved:** `/eski-blog/x?utm=a` → `/blog/x?utm=a`. If
+- **The query string is preserved:** `/old-blog/x?utm=a` → `/blog/x?utm=a`. If
   a redirect drops the campaign parameters, the traffic source is lost.
 - **Status code:** `permanent: true` → 308, otherwise 307 (Next semantics).
   Anyone who wants a different code can give `statusCode`; for example 301 for
@@ -428,17 +467,17 @@ actually used in config was chosen deliberately.
 
 | Pattern | Meaning |
 | --- | --- |
-| `/haber/:slug` | Captures a single segment (`[^/]+`) |
+| `/news/:slug` | Captures a single segment (`[^/]+`) |
 | `/:path*` | Captures zero or more segments; the leading `/` is optional, so `/blog/:path*` also covers `/blog` |
 | `/:path*.svg` | Wildcard + fixed suffix; this is how extension rules are written |
-| `/etiket-:slug` | A parameter in the middle of a segment |
+| `/tag-:slug` | A parameter in the middle of a segment |
 
 The captured values are written into the `:param`s of the same name inside
 `destination`. A parameter name must match the pattern
 `[A-Za-z_][A-Za-z0-9_]*`.
 
 `source` must begin with `/`; if it does not, the rule is ignored and a warning
-is printed (`[config] geçersiz source (\`/\` ile başlamalı): …`). An
+is printed (``[config] invalid source (must start with `/`): …``). An
 unrecognized syntax is not silently accepted as a literal.
 
 The full pattern list and the config reference:

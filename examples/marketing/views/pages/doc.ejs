@@ -1,0 +1,120 @@
+<%#
+  Tek bir belge. Gövde `lib/markdown.js` içinde HTML'e çevrildi ve buraya hazır
+  geliyor; şablonun işi yalnızca kabuk. Üç kolon: solda bölüm listesi, ortada
+  metin, sağda "bu sayfada".
+
+  Gövde kaçışsız basılıyor. Güvenli olmasının gerekçesi çeviricide: kaynak
+  metnin hiçbir parçası HTML olarak geçmiyor, her etiket orada üretiliyor.
+-%>
+<div class="mx-auto grid max-w-[95rem] gap-x-10 px-5 lg:grid-cols-[15rem_minmax(0,1fr)] xl:grid-cols-[15rem_minmax(0,1fr)_14rem]">
+  <%#
+    Mobilde bölüm listesi `<details>` içinde. Açılır kapanır bir menü için
+    island yazmak, JS'siz de çalışan bir davranışı JS'e bağımlı kılmak olurdu.
+  -%>
+  <details class="mt-6 rounded-2xl border border-slate-200 bg-white lg:hidden dark:border-white/10 dark:bg-white/[0.035]">
+    <summary class="flex cursor-pointer items-center justify-between gap-3 px-4 py-3 text-sm font-semibold marker:content-['']">
+      <span class="flex items-center gap-2">
+        <%- icon({ name: "SidebarSimple", size: 16 }) %>
+        <%= t.docs.shell.browse %>
+      </span>
+      <span class="font-mono text-xs text-slate-500 dark:text-slate-400"><%= doc.index %></span>
+    </summary>
+    <div class="border-t border-slate-200 p-3 dark:border-white/10">
+      <%#
+        Mobil kopya aynı ağacı basıyor; aynı adı taşıyan iki `<nav>` ekran
+        okuyucuda ayırt edilemez olurdu, bu yüzden etiketi farklı.
+      -%>
+      <%- docsSidebar({
+        groups: docsNav,
+        pathname,
+        labels: { ...t.docs.shell, nav: t.docs.shell.browse },
+        release,
+        indexHref: paths.docs,
+        indexLabel: t.docs.shell.overview,
+      }) %>
+    </div>
+  </details>
+
+  <aside class="hidden lg:block">
+    <%# Sticky konum header'ın yüksekliği kadar aşağıda; üstüne binmemesi gerekiyor. %>
+    <div class="sticky top-[4.5rem] max-h-[calc(100vh-5.5rem)] overflow-y-auto py-10 pr-2">
+      <%- docsSidebar({
+        groups: docsNav,
+        pathname,
+        labels: t.docs.shell,
+        release,
+        indexHref: paths.docs,
+        indexLabel: t.docs.shell.overview,
+      }) %>
+    </div>
+  </aside>
+
+  <article class="min-w-0 py-10 lg:py-14">
+    <nav class="flex flex-wrap items-center gap-2 text-xs font-medium text-slate-500 dark:text-slate-400" aria-label="<%= t.docs.shell.breadcrumb %>">
+      <%- link({ href: paths.docs, text: t.docs.shell.docsLabel, class: "hover:text-cyan-700 dark:hover:text-cyan-300" }) %>
+      <span aria-hidden="true">/</span>
+      <span><%= t.docs.groups[doc.group] %></span>
+    </nav>
+
+    <h1 class="mt-4 text-4xl font-bold tracking-[-0.04em] text-balance"><%= doc.title %></h1>
+
+    <div class="mt-4 flex flex-wrap items-center gap-2 text-xs">
+      <span class="rounded-full border border-slate-200 px-2.5 py-1 font-mono text-slate-600 dark:border-white/10 dark:text-slate-400"><%= doc.index %></span>
+      <span class="rounded-full border border-slate-200 px-2.5 py-1 text-slate-600 dark:border-white/10 dark:text-slate-400"><%= format(t.docs.shell.version, release.version) %></span>
+    </div>
+
+    <%#
+      Bir bölüm henüz çevrilmediyse okuyucu bunu bozuk bir sayfa sanmamalı:
+      varsayılan dile düşüldüğü açıkça yazılıyor.
+    -%>
+    <% if (!doc.translated) { %>
+    <p class="mt-6 mb-0 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-200">
+      <%= t.docs.shell.untranslated %>
+    </p>
+    <% } %>
+
+    <%# Sağdaki liste geniş ekranda görünüyor; altındaki kopya mobil karşılığı. %>
+    <% if (doc.toc.length) { %>
+    <details class="mt-8 rounded-2xl border border-slate-200 bg-white xl:hidden dark:border-white/10 dark:bg-white/[0.035]">
+      <summary class="cursor-pointer px-4 py-3 text-sm font-semibold marker:content-['']">
+        <%= t.docs.shell.onThisPage %>
+      </summary>
+      <div class="border-t border-slate-200 px-2 py-3 dark:border-white/10">
+        <ul class="grid list-none gap-0.5 p-0 text-sm">
+          <% doc.toc.forEach(function (entry) { %>
+          <li>
+            <%- link({
+              href: `#${entry.id}`,
+              text: entry.text,
+              class: cn(
+                "block py-1 text-slate-600 hover:text-cyan-700 dark:text-slate-400 dark:hover:text-cyan-300",
+                entry.level === 3 ? "pl-6 text-[13px]" : "pl-3",
+              ),
+            }) %>
+          </li>
+          <% }); %>
+        </ul>
+      </div>
+    </details>
+    <% } %>
+
+    <div class="doc-prose mt-10"><%- doc.html %></div>
+
+    <%- docsPager({
+      previous: siblings.previous,
+      next: siblings.next,
+      labels: { previous: t.docs.shell.previous, next: t.docs.shell.next },
+    }) %>
+  </article>
+
+  <aside class="hidden xl:block">
+    <div class="sticky top-[4.5rem] max-h-[calc(100vh-5.5rem)] overflow-y-auto py-14 pl-2">
+      <%- docsToc({
+        toc: doc.toc,
+        title: t.docs.shell.onThisPage,
+        editUrl: doc.editUrl,
+        editLabel: t.docs.shell.edit,
+      }) %>
+    </div>
+  </aside>
+</div>

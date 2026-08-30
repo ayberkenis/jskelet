@@ -48,7 +48,7 @@ export default function register(app, { route, redirect }) {
       redirect("/iletisim");
     }
 
-    console.log(`[iletisim] yeni mesaj (${message.length} karakter)`);
+    console.log(`[iletisim] new message (${message.length} characters)`);
     res.redirect(303, "/iletisim?sent=1");
   });
 }

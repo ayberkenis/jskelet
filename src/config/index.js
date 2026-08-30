@@ -16,6 +16,9 @@
  *   redirects() → [{ source, destination, permanent?, statusCode? }]
  *   rewrites()  → [{ source, destination }] | { beforeFiles?, afterFiles? }
  *   cache()     → { html?: { [source]: saniye }, prewarm?: {...} }
+ *
+ * Fonksiyon olmayan bölümler (`brand`, `security`, `static`, `navigation`…)
+ * düz nesne olarak okunur.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -30,6 +33,7 @@ import {
   DEFAULT_NAVIGATION_EXCLUDE,
   DEFAULT_PREWARM,
   DEFAULT_PREWARM_SKIP,
+  DEFAULT_SECURITY,
   DEFAULT_STATIC,
 } from "./defaults.js";
 
@@ -68,6 +72,7 @@ const CONFIG_FILE = "jskelet.config.mjs";
  * @property {string[]} devGateBypass
  * @property {string[]} preconnect
  * @property {NavigationConfig} navigation
+ * @property {SecurityConfig} security
  * @property {string[]} prewarmSkip
  * @property {string[]} watch Dev sunucusunun izlediği ek dizinler.
  * @property {{ family: string, slug?: string, weights: number[] }[]} fonts
@@ -87,7 +92,7 @@ let config = null;
 function asArray(value, label) {
   if (value == null) return [];
   if (Array.isArray(value)) return value;
-  console.warn(`[config] ${label} bir dizi döndürmeli, yok sayıldı`);
+  console.warn(`[config] ${label} must return an array, ignoring it`);
   return [];
 }
 
@@ -201,7 +206,7 @@ function normalizeEagerness(value, fallback, label) {
   }
 
   console.warn(
-    `[config] navigation.${label} geçersiz (${String(value)}), varsayılana dönüldü`,
+    `[config] navigation.${label} is invalid (${String(value)}), falling back to the default`,
   );
   return fallback;
 }
@@ -237,6 +242,50 @@ function normalizeNavigation(raw, brand) {
         (entry) => typeof entry === "string",
       ),
     ].map(String),
+  };
+}
+
+/**
+ * @typedef {object} SecurityConfig
+ * @property {boolean} trustProxy
+ * @property {string | null} cookieSecret
+ * @property {{ enabled: boolean, token: boolean, allowedOrigins: string[],
+ *   exclude: CompiledPattern[], cookieName: string, fieldName: string,
+ *   headerName: string }} csrf
+ */
+
+/**
+ * Güvenlik bölümü. `csrf.exclude` desenleri burada derlenir: her istekte
+ * yeniden derlemek gereksiz, ve bozuk bir desen sunucuyu düşürmemeli.
+ *
+ * @param {unknown} raw
+ * @returns {SecurityConfig}
+ */
+function normalizeSecurity(raw) {
+  const source = /** @type {Record<string, any>} */ (raw ?? {});
+  const csrf = { ...DEFAULT_SECURITY.csrf, ...(source.csrf ?? {}) };
+
+  const exclude = asArray(csrf.exclude, "security.csrf.exclude")
+    .map((entry) => compilePattern(entry))
+    .filter((pattern) => pattern !== null);
+
+  return {
+    trustProxy: source.trustProxy !== false,
+    cookieSecret:
+      typeof source.cookieSecret === "string" && source.cookieSecret
+        ? source.cookieSecret
+        : null,
+    csrf: {
+      enabled: csrf.enabled !== false,
+      token: csrf.token === true,
+      allowedOrigins: asArray(csrf.allowedOrigins, "security.csrf.allowedOrigins")
+        .filter((entry) => typeof entry === "string")
+        .map(String),
+      exclude: /** @type {CompiledPattern[]} */ (exclude),
+      cookieName: String(csrf.cookieName ?? DEFAULT_SECURITY.csrf.cookieName),
+      fieldName: String(csrf.fieldName ?? DEFAULT_SECURITY.csrf.fieldName),
+      headerName: String(csrf.headerName ?? DEFAULT_SECURITY.csrf.headerName).toLowerCase(),
+    },
   };
 }
 
@@ -307,7 +356,7 @@ export async function loadConfig(options = {}) {
 
   if (!fs.existsSync(configPath)) {
     console.warn(
-      `[config] ${configFile} bulunamadı — yerleşik varsayılanlarla devam ediliyor.`,
+      `[config] ${configFile} not found — continuing with built-in defaults.`,
     );
   } else {
     try {
@@ -316,7 +365,7 @@ export async function loadConfig(options = {}) {
       source = module.default ?? module;
       loaded = true;
     } catch (error) {
-      console.warn(`[config] ${configFile} yüklenemedi, yok sayıldı`, error);
+      console.warn(`[config] ${configFile} failed to load, ignoring it`, error);
     }
   }
 
@@ -327,7 +376,7 @@ export async function loadConfig(options = {}) {
     try {
       return typeof value === "function" ? await value.call(source) : value;
     } catch (error) {
-      console.warn(`[config] ${name}() hata verdi, yok sayıldı`, error);
+      console.warn(`[config] ${name}() threw, ignoring it`, error);
       return null;
     }
   };
@@ -363,6 +412,7 @@ export async function loadConfig(options = {}) {
     devGateBypass: source.devGateBypass ?? DEFAULT_DEV_GATE_BYPASS,
     preconnect: source.preconnect ?? [],
     navigation: normalizeNavigation(source.navigation, brand),
+    security: normalizeSecurity(source.security),
     prewarmSkip: source.prewarmSkip ?? DEFAULT_PREWARM_SKIP,
     // `routes`, `views` ve `lib` zaten izlenir; buraya yalnızca ek dizinler.
     watch: source.watch ?? [],
@@ -377,15 +427,20 @@ export async function loadConfig(options = {}) {
   // Dev'de build ve sunucu ayrı alt süreçler; üçü de aynı özeti basınca satır
   // banner'ın ve build bloğunun arasına üç kez giriyor. Özeti dış süreç basar.
   if (loaded && !process.env.JSKELET_CHILD) {
+    /** @param {number} count @param {string} singular @param {string} plural */
+    const label = (count, singular, plural) =>
+      `${count} ${count === 1 ? singular : plural}`;
+
     const counts = [
-      config.headers.length && `${config.headers.length} header`,
-      config.redirects.length && `${config.redirects.length} redirect`,
-      config.rewrites.length && `${config.rewrites.length} rewrite`,
-      config.html.length && `${config.html.length} cache kuralı`,
+      config.headers.length && label(config.headers.length, "header", "headers"),
+      config.redirects.length &&
+        label(config.redirects.length, "redirect", "redirects"),
+      config.rewrites.length && label(config.rewrites.length, "rewrite", "rewrites"),
+      config.html.length && label(config.html.length, "cache rule", "cache rules"),
     ].filter(Boolean);
 
     if (counts.length) {
-      console.log(`[config] ${configFile} yüklendi — ${counts.join(", ")}`);
+      console.log(`[config] ${configFile} loaded — ${counts.join(", ")}`);
     }
   }
 
@@ -402,8 +457,8 @@ export async function loadConfig(options = {}) {
 export function getConfig() {
   if (!config) {
     throw new Error(
-      "[config] loadConfig() çağrılmadan getConfig() kullanıldı. " +
-        "Sunucuyu `jskelet` CLI ile ya da createApp() üzerinden başlatın.",
+      "[config] getConfig() was used before loadConfig(). " +
+        "Start the server with the `jskelet` CLI or through createApp().",
     );
   }
   return config;
@@ -427,7 +482,7 @@ export async function hook(name, fallback, ...args) {
   try {
     return await fn(...args);
   } catch (error) {
-    console.warn(`[config] hooks.${name}() hata verdi, varsayılan kullanıldı`, error);
+    console.warn(`[config] hooks.${name}() threw, using the default`, error);
     return fallback;
   }
 }

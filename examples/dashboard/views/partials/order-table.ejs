@@ -1,0 +1,49 @@
+<%#
+  Tablo hem sayfanın içinde hem fragment ucunda aynı şablondan basılıyor:
+  işaretlemenin tek kaynağı sunucuda kalıyor, istemci ikinci bir şablon
+  taşımıyor.
+
+  Sayfalama bağlantıları `data-swap="#siparisler"` taşıyor. `href` gerçek bir
+  URL: JS yoksa bağlantı normal gezinmeye düşer ve panel `?sayfa=` ile
+  yeniden render edilir.
+-%>
+<table class="w-full border-collapse overflow-hidden rounded-lg border border-slate-200 bg-white text-sm">
+  <caption class="sr-only">Siparişler, sayfa <%= siparisler.page %></caption>
+  <thead class="bg-slate-100 text-left">
+    <tr>
+      <th scope="col" class="px-3 py-2 font-medium">No</th>
+      <th scope="col" class="px-3 py-2 font-medium">Müşteri</th>
+      <th scope="col" class="px-3 py-2 font-medium">Tutar</th>
+      <th scope="col" class="px-3 py-2 font-medium">Durum</th>
+    </tr>
+  </thead>
+  <tbody>
+    <% for (const siparis of siparisler.rows) { %>
+    <tr class="border-t border-slate-100">
+      <td class="px-3 py-2 tabular-nums"><%= siparis.id %></td>
+      <td class="px-3 py-2"><%= siparis.musteri %></td>
+      <td class="px-3 py-2 tabular-nums"><%= formatTutar(siparis.tutar) %></td>
+      <td class="px-3 py-2"><%= siparis.durum %></td>
+    </tr>
+    <% } %>
+  </tbody>
+</table>
+
+<nav class="mt-3 flex items-center justify-between text-sm" aria-label="Sayfalama">
+  <span class="text-slate-500">
+    <%= siparisler.total %> kayıt · sayfa <%= siparisler.page %>/<%= siparisler.pageCount %>
+  </span>
+
+  <span class="flex gap-2">
+    <% if (siparisler.page > 1) { %>
+    <a href="/_fragment/siparisler?sayfa=<%= siparisler.page - 1 %>"
+      data-swap="#siparisler"
+      class="rounded-md border border-slate-300 bg-white px-2 py-1 hover:bg-slate-50">Önceki</a>
+    <% } %>
+    <% if (siparisler.page < siparisler.pageCount) { %>
+    <a href="/_fragment/siparisler?sayfa=<%= siparisler.page + 1 %>"
+      data-swap="#siparisler"
+      class="rounded-md border border-slate-300 bg-white px-2 py-1 hover:bg-slate-50">Sonraki</a>
+    <% } %>
+  </span>
+</nav>

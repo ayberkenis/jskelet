@@ -25,6 +25,32 @@ calls in the same render collapse into a single upstream request; **upstream
 tracking must be inside the HTML cache** so that output produced with missing
 data is not written to the cache.
 
+## Public versus per-visitor
+
+Everything in this document applies to HTML that **can go to everyone
+unchanged**. There is no identity in the cache key (only path + query), so a
+page in the cache is the answer for that path, not the answer for whoever asked
+for it first.
+
+A page that depends on the user therefore takes a separate path:
+
+```js
+app.get("/dashboard", route(async ({ req }) => { … }, { private: true }));
+```
+
+`private: true` does three things at once: the cache is disabled, a
+`cache.html` pattern **cannot** override that decision, and the response is
+sent with `private, no-store` and `Vary: Cookie`, without an ETag. The details
+and the session/CSRF side are in
+[12-dashboards-and-sessions.md](./12-dashboards-and-sessions.md).
+
+If you forget the flag, the framework does not stay quiet: as soon as the
+controller reads `Cookie`, `Authorization` or `req.session`/`req.user`, the
+render is marked and **not written** to the cache. In development the request
+fails with an explanation, in production it is served with `no-store` and
+logged. The guard is a last line of defence, not an excuse — the right place is
+`private: true`.
+
 ## `revalidate` — where the TTL comes from
 
 A route's TTL can come from two sources, and **the config wins**:
@@ -33,6 +59,9 @@ A route's TTL can come from two sources, and **the config wins**:
 2. The matching pattern inside `jskelet.config.mjs` → `cache().html`. If it
    exists it overrides the route's value.
 
+The one exception is `private: true`: a matching pattern is ignored. The lock is
+one-way, because a mistake in the other direction means a silent data leak.
+
 ```js
 // jskelet.config.mjs
 export default {
@@ -40,8 +69,8 @@ export default {
     return {
       html: {
         "/": 60,
-        "/haber/:slug": 300,
-        "/etiket/:slug": 120,
+        "/news/:slug": 300,
+        "/tag/:slug": 120,
       },
     };
   },
@@ -57,8 +86,13 @@ on every request. If there is no `cache().html` rule at all, the route's own
 value is used directly.
 
 If `revalidate` is not given, or is 0, the page is **not cached at all**: every
-request is rendered and no `Cache-Control` is written on the response (only
-`X-JSkelet-Cache: MISS`).
+request is rendered and the response is sent with
+`Cache-Control: private, no-store` and no ETag. No `X-JSkelet-Cache` header is
+written either — the cache path never ran, so `MISS` would be misleading.
+
+Sending `no-store` on a dynamic page is deliberate. HTTP treats a response with
+no directives as "heuristically cacheable", so an intermediate proxy or the
+browser's back button could store HTML produced for a single visitor.
 
 The cache also only kicks in for `GET` requests.
 
@@ -68,8 +102,8 @@ The cache also only kicks in for `GET` requests.
 `${req.path}?${new URLSearchParams(query).toString()}`
 ```
 
-So the path **and all query parameters** are part of the key. `/liste?sayfa=2`
-and `/liste?sayfa=3` are separate entries.
+So the path **and all query parameters** are part of the key. `/list?page=2`
+and `/list?page=3` are separate entries.
 
 The practical consequence: a page that does not depend on the query string
 produces a separate entry for every combination when it is called with
@@ -97,7 +131,7 @@ Read behaviour:
 
 A failure of the refresh inside the stale window does not affect the request:
 the old HTML stays valid for the whole window and the error is only logged
-(`[html-cache] arka plan tazelemesi başarısız: …`).
+(`[html-cache] background refresh failed: …`).
 
 Concurrent refreshes for the same key are collapsed into a single run (the
 `inflight` map): a hundred concurrent requests fall to one render.
@@ -225,8 +259,8 @@ export async function apiGet(path) {
 
 | State | Counts as | Result |
 | --- | --- | --- |
-| `0` (network error), `408`, `425`, `429`, `>= 500` | **Transient** | The page is not written to the cache, warning: `[render] <yol> eksik veriyle üretildi, önbelleğe alınmıyor (…)` |
-| Others (`400`, `403`, `404`, …) | **Permanent** | Only a warning: `[render] <yol> eksik veriyle üretildi, upstream kalıcı hata veriyor (…)`. The cache is not blocked. |
+| `0` (network error), `408`, `425`, `429`, `>= 500` | **Transient** | The page is not written to the cache, warning: `[render] <path> was produced with missing data, not caching it (…)` |
+| Others (`400`, `403`, `404`, …) | **Permanent** | Only a warning: `[render] <path> was produced with missing data, upstream is failing permanently (…)`. The cache is not blocked. |
 
 Permanent failures not blocking the cache is deliberate: deterministic answers
 do not get better by retrying. Turning the cache off because of them would mean
@@ -250,7 +284,7 @@ To write an admin endpoint:
 import { clearHtmlCache, getHtmlCacheEntries } from "jskelet";
 
 export default function register(app) {
-  app.post("/_admin/cache/temizle", (req, res) => {
+  app.post("/_admin/cache/clear", (req, res) => {
     if (req.headers["x-admin-token"] !== process.env.ADMIN_TOKEN) {
       res.status(404).end();
       return;
@@ -298,7 +332,7 @@ export default {
   hooks: {
     async prewarmPaths() {
       const slugs = await getAllArticleSlugs();
-      return ["/", "/piyasalar", ...slugs.map((slug) => `/haber/${slug}`)];
+      return ["/", "/markets", ...slugs.map((slug) => `/news/${slug}`)];
     },
   },
 };
@@ -329,7 +363,7 @@ Rules:
    retry round gets those pages into the cache; otherwise the visitor pays for
    the cold render.
 4. A summary is logged:
-   `[prewarm] 128/130 sayfa ısıtıldı, 2 hata, 5 sayfa tekrar turunda kurtarıldı (12.4s)`
+   `[prewarm] warmed 128/130 pages, 2 failed, 5 recovered on the retry pass (12.4s)`
 
 The requests go out with the headers `user-agent: jskelet-prewarm`
 (`brand.prewarmUserAgent`) and `accept-encoding: br, gzip`; the second one so
@@ -377,7 +411,7 @@ silently falls through to the next layer.
 import { prewarm, prewarmProgress } from "jskelet";
 
 await prewarm({ origin: "http://127.0.0.1:3000" });          // paths from the hook
-await prewarm({ origin, paths: ["/", "/piyasalar"] });        // only these paths
+await prewarm({ origin, paths: ["/", "/markets"] });        // only these paths
 await prewarm({ origin, quiet: true });                       // without printing a summary
 ```
 
@@ -403,8 +437,8 @@ filled the cache.
   the pattern inside `cache().html` gives 0 seconds. Or the page returns a code
   other than `status: 200`.
 - **The page returns `MISS` but upstream is healthy.** A transient upstream
-  failure may have been reported; look for the line `eksik veriyle üretildi,
-  önbelleğe alınmıyor` in the log.
+  failure may have been reported; look for the line `was produced with missing
+  data, not caching it` in the log.
 - **Stale data all the time.** `revalidate` is too high; remember that the real
   lag is at most `revalidate` + one refresh round.
 - **The cache is bloating.** Because query parameters go into the key, campaign

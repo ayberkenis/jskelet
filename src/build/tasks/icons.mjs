@@ -184,7 +184,7 @@ function readIconBody(coreAssets, name, weight) {
 export async function buildIconSprite(config) {
   const coreAssets = resolveIconAssets(config.root);
   if (!coreAssets) {
-    log.detail("@phosphor-icons/core kurulu değil, atlandı");
+    log.detail("@phosphor-icons/core not installed, skipped");
     return {};
   }
 

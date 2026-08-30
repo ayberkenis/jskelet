@@ -1,0 +1,70 @@
+<%#
+  Panelin ana sayfası. Kişiye özel: `route(fn, { private: true })` ile
+  kaydedildi, yanıt `private, no-store` ile gidiyor.
+
+  Üç bölge üç ayrı deseni gösteriyor:
+    - özet kartları: sunucuda render, hiç tazelenmiyor
+    - sipariş tablosu: `data-swap` ile fragment ucundan tazeleniyor
+    - not formu: `data-enhance` ile fetch üzerinden gönderiliyor
+-%>
+<div class="wrapper">
+  <div class="flex flex-wrap items-center justify-between gap-4">
+    <div>
+      <h1 class="text-2xl font-semibold tracking-tight">Merhaba <%= user.name %></h1>
+      <p class="text-sm text-slate-500"><%= user.role %> · <%= user.username %></p>
+    </div>
+
+    <div class="flex items-center gap-3">
+      <%# Çıkış POST: GET olsaydı bir önden getirme ya da görsel etiketi
+          kullanıcıyı sessizce oturumdan atabilirdi. %>
+      <form method="post" action="/cikis">
+        <%- csrfField() %>
+        <button type="submit"
+          class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm hover:bg-slate-50">
+          Çıkış
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <dl class="mt-8 grid gap-4 sm:grid-cols-3">
+    <div class="rounded-lg border border-slate-200 bg-white p-4">
+      <dt class="text-sm text-slate-500">Sipariş</dt>
+      <dd class="mt-1 text-2xl font-semibold"><%= ozet.toplam %></dd>
+    </div>
+    <div class="rounded-lg border border-slate-200 bg-white p-4">
+      <dt class="text-sm text-slate-500">Ciro</dt>
+      <dd class="mt-1 text-2xl font-semibold"><%= formatTutar(ozet.ciro) %></dd>
+    </div>
+    <div class="rounded-lg border border-slate-200 bg-white p-4">
+      <dt class="text-sm text-slate-500">Bekleyen</dt>
+      <dd class="mt-1 text-2xl font-semibold"><%= ozet.bekleyen %></dd>
+    </div>
+  </dl>
+
+  <section class="mt-10">
+    <div class="flex items-center justify-between">
+      <h2 class="text-lg font-semibold">Siparişler</h2>
+      <%# Saat island'ı temizlik fonksiyonu döndürüyor; tablo takas
+          edildiğinde `unmount()` onu sökmezse her takas bir interval
+          daha bırakırdı. %>
+      <span data-island="live-clock" data-island-eager class="text-sm text-slate-500"></span>
+    </div>
+
+    <div id="siparisler" class="mt-4">
+      <%- await include('partials/order-table') %>
+    </div>
+  </section>
+
+  <section class="mt-10 max-w-xl">
+    <h2 class="text-lg font-semibold">Notlar</h2>
+
+    <div id="notlar" class="mt-4">
+      <%- await include('partials/note-list') %>
+    </div>
+
+    <div class="mt-4">
+      <%- await include('partials/note-form', { hata: notHatasi, metin: '' }) %>
+    </div>
+  </section>
+</div>

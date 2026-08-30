@@ -100,7 +100,7 @@ export async function buildImages(config, sharp) {
 
   const sources = collect(paths.public, skip);
   if (!sources.length) {
-    log.detail("görsel yok, atlandı");
+    log.detail("no images, skipped");
     return {};
   }
 
@@ -168,7 +168,7 @@ export async function buildImages(config, sharp) {
     } catch (error) {
       // Bozuk/okunamayan tek bir görsel build'i düşürmesin: manifest'te yer
       // almazsa orijinal dosya servis edilmeye devam eder.
-      log.warn(`${url} optimize edilemedi (${error.message})`);
+      log.warn(`${url} could not be optimized (${error.message})`);
     }
   }
 

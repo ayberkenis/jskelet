@@ -13,7 +13,7 @@ afterEach(() => {
 /** @param {number} ms */
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-test("ttl 0 verildiğinde hiç saklanmaz", async () => {
+test("a ttl of 0 is never stored", async () => {
   let calls = 0;
   const producer = async () => {
     calls += 1;
@@ -28,7 +28,7 @@ test("ttl 0 verildiğinde hiç saklanmaz", async () => {
   assert.equal(getHtmlCacheSize(), 0);
 });
 
-test("ikinci istek önbellekten gelir", async () => {
+test("the second request is served from the cache", async () => {
   let calls = 0;
   const producer = async () => {
     calls += 1;
@@ -45,7 +45,7 @@ test("ikinci istek önbellekten gelir", async () => {
   assert.equal(second.html, "render 1");
 });
 
-test("ttl dolduğunda eski html döner ve tazeleme arkada çalışır", async () => {
+test("an expired ttl serves stale html and revalidates in the background", async () => {
   let calls = 0;
   const producer = async () => {
     calls += 1;
@@ -68,7 +68,7 @@ test("ttl dolduğunda eski html döner ve tazeleme arkada çalışır", async ()
   assert.equal(calls, 2, "tazeleme arkada bir kez çalışmalı");
 });
 
-test("aynı anahtar için eşzamanlı istekler tek render paylaşır", async () => {
+test("concurrent requests for the same key share one render", async () => {
   let calls = 0;
   const producer = async () => {
     calls += 1;
@@ -85,7 +85,7 @@ test("aynı anahtar için eşzamanlı istekler tek render paylaşır", async () 
   assert.equal(calls, 1);
 });
 
-test("404 ve degraded sonuçlar saklanmaz", async () => {
+test("404 and degraded results are not stored", async () => {
   await withHtmlCache("/yok", 60, async () => ({ html: "404", status: 404 }));
   assert.equal(getHtmlCacheSize(), 0, "404 önbelleğe girmemeli");
 

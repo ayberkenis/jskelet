@@ -29,6 +29,18 @@ const loaders = new Map();
 const mounted = new WeakMap();
 
 /**
+ * `mount()` bir temizlik fonksiyonu döndürebiliyor; DOM'dan çıkan island'ın
+ * dinleyicilerini ve zamanlayıcılarını sökmek için saklanır.
+ *
+ * WeakMap: sökülmeden çöpe giden bir element (ör. tüm sayfa gezinmesi)
+ * burada referans bırakmasın. Alt ağacı gezme işi DOM üzerinden yapılıyor,
+ * bu yüzden ayrı bir element listesine gerek yok.
+ *
+ * @type {WeakMap<HTMLElement, (() => void)[]>}
+ */
+const cleanups = new WeakMap();
+
+/**
  * @param {string} name
  * @param {() => Promise<{ mount: MountFn }>} loader
  */
@@ -55,7 +67,7 @@ function readProps(element) {
     return JSON.parse(raw);
   } catch (error) {
     console.error(
-      `[island] ${element.dataset.island}: geçersiz data-island-props`,
+      `[island] ${element.dataset.island}: invalid data-island-props`,
       error,
     );
     return {};
@@ -92,7 +104,7 @@ async function mountIsland(element) {
 
   const loader = loaders.get(name);
   if (!loader) {
-    console.warn(`[island] kayıtlı değil: ${name}`);
+    console.warn(`[island] not registered: ${name}`);
     return;
   }
 
@@ -100,10 +112,72 @@ async function mountIsland(element) {
 
   try {
     const module = await loader();
-    module.mount(element, readProps(element));
+    const cleanup = module.mount(element, readProps(element));
+
+    if (typeof cleanup === "function") {
+      // Island bağlanırken DOM'dan çıkarılmış olabilir (hızlı bir fragment
+      // takası). Temizliği saklamak yerine hemen çalıştırmak gerekiyor;
+      // aksi hâlde artık görünmeyen bir elementin dinleyicileri hiç sökülmez.
+      if (element.isConnected) {
+        const list = cleanups.get(element) ?? [];
+        list.push(cleanup);
+        cleanups.set(element, list);
+      } else {
+        runCleanups(element, cleanup);
+      }
+    }
+
     element.dataset.islandReady = "true";
   } catch (error) {
-    console.error(`[island] ${name} yüklenemedi`, error);
+    console.error(`[island] ${name} failed to load`, error);
+  }
+}
+
+/**
+ * @param {HTMLElement} element
+ * @param {() => void} [extra] Henüz saklanmamış temizlik.
+ */
+function runCleanups(element, extra) {
+  const stored = cleanups.get(element) ?? [];
+  cleanups.delete(element);
+  mounted.delete(element);
+  delete element.dataset.islandReady;
+
+  for (const cleanup of extra ? [...stored, extra] : stored) {
+    try {
+      cleanup();
+    } catch (error) {
+      console.error(`[island] ${element.dataset.island} cleanup failed`, error);
+    }
+  }
+}
+
+/**
+ * Bir alt ağaçtaki island'ları söker.
+ *
+ * Fragment takasında çağrılması zorunlu: `innerHTML` ile değiştirilen bir
+ * bölgenin island'ları DOM'dan çıkar ama `document`/`window` üzerine
+ * kurdukları dinleyiciler ve `setInterval`'ları yaşamaya devam eder. Birkaç
+ * takastan sonra aynı olay birden fazla kez işlenmeye başlar.
+ *
+ * Sökülen element yeniden bağlanabilir hâle gelir: `mounted` kaydı da
+ * temizlenir, böylece aynı düğüm tekrar DOM'a girerse `hydrate()` onu
+ * yeniden görür.
+ *
+ * @param {ParentNode} [root] Kökün kendisi de island olabilir.
+ */
+export function unmount(root = document) {
+  const element = /** @type {HTMLElement} */ (root);
+
+  if (element.dataset?.island) {
+    lazyObserver?.unobserve(element);
+    runCleanups(element);
+  }
+
+  for (const node of root.querySelectorAll?.("[data-island]") ?? []) {
+    const child = /** @type {HTMLElement} */ (node);
+    lazyObserver?.unobserve(child);
+    runCleanups(child);
   }
 }
 

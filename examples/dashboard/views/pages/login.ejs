@@ -1,0 +1,55 @@
+<%#
+  Giriş formu.
+
+  `csrfField()` çağrısı iki iş yapıyor: token'ı üretip imzalı cookie olarak
+  yazıyor ve bu render'ı işaretliyor. İkincisi olmadan sayfa public
+  önbellekten dönebilir ve tüm ziyaretçiler aynı token'ı paylaşırdı — çift
+  gönderim kontrolü tam olarak o noktada anlamını yitirir.
+
+  Form JS'e bağlı değil: `data-enhance` yok, çünkü girişten sonra zaten tam
+  sayfa gezinmesi gerekiyor.
+-%>
+<div class="wrapper max-w-sm">
+  <h1 class="text-2xl font-semibold tracking-tight">Giriş</h1>
+
+  <% if (cikti) { %>
+  <p role="status" class="mt-4 rounded-md bg-slate-100 px-3 py-2 text-sm text-slate-700">
+    Oturumunuz kapatıldı.
+  </p>
+  <% } %>
+
+  <% if (hata) { %>
+  <p role="alert" class="mt-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+    <%= hata %>
+  </p>
+  <% } %>
+
+  <form method="post" action="/giris" class="mt-6 space-y-4">
+    <%- csrfField() %>
+    <% if (next) { %>
+    <input type="hidden" name="next" value="<%= next %>">
+    <% } %>
+
+    <div>
+      <label for="kullanici" class="block text-sm font-medium">Kullanıcı adı</label>
+      <input id="kullanici" name="kullanici" required autocomplete="username"
+        class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2">
+    </div>
+
+    <div>
+      <label for="parola" class="block text-sm font-medium">Parola</label>
+      <input id="parola" name="parola" type="password" required autocomplete="current-password"
+        class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2">
+    </div>
+
+    <button type="submit"
+      class="w-full rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700">
+      Giriş yap
+    </button>
+  </form>
+
+  <p class="mt-6 text-sm text-slate-500">
+    Örnek kullanıcılar: <strong>ayse</strong> ve <strong>mert</strong>, parola
+    <strong>panel123</strong>.
+  </p>
+</div>

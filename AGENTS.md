@@ -24,6 +24,11 @@ zaten tartışılmış:
 | `src/config/**` | [07-yapilandirma.md](./docs/07-yapilandirma.md) |
 | `src/dev-server.mjs`, `src/server/dev/**` | [09-dev-araclari.md](./docs/09-dev-araclari.md) |
 
+Belgeler iki dilde: Türkçesi `docs/`, İngilizcesi `docs/en/` altında ve
+dosyalar birebir eşlenik. Bir belgeyi değiştirdiysen karşılığını da güncelle;
+pazarlama sitesi (`examples/marketing`) bu dosyaları doğrudan `/docs` altında
+servis ettiği için eksik kalan çeviri kullanıcıya görünür.
+
 ## Doğrulama
 
 **Lint yeterli, tam build zorunlu değil.**

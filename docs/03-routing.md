@@ -28,11 +28,13 @@ gerekmez:
 | Alan | Karşılığı |
 | --- | --- |
 | `route` | `jskelet` → `route` |
+| `fragment` | `jskelet` → `fragment` |
 | `renderView` | `jskelet` → `renderView` |
 | `renderPage` | `jskelet` → `renderPage` |
 | `notFound` | `jskelet` → `notFound` |
 | `redirect` | `jskelet` → `redirect` |
 | `permanentRedirect` | `jskelet` → `permanentRedirect` |
+| `seeOther` | `jskelet` → `seeOther` |
 
 İstersen doğrudan import da edebilirsin; `api` yalnızca kolaylık:
 
@@ -45,7 +47,7 @@ export function register(app) {
 ```
 
 Modül geçerli bir fonksiyon açmazsa uyarı basılır ve atlanır:
-`[router] <dosya> default ya da 'register' fonksiyonu dışa açmıyor, atlandı`.
+`[router] <file> exports neither a default nor a 'register' function, skipped`.
 
 ## Yükleme sırası
 
@@ -97,8 +99,8 @@ Hiç route modülü bulunamazsa uyarı basılır ve sunucu yalnızca statik dosy
 - `ctx` nesnesini kurar ve controller'ı çağırır.
 - HTML TTL cache'ini uygular (`revalidate` varsa ve metot `GET` ise).
 - `notFound()` / `redirect()` kontrol akışını yakalar.
-- Yanıt başlıklarını yazar: `Content-Type`, cache'lenebilir yanıtlarda
-  `Cache-Control`, ve her zaman `X-JSkelet-Cache`.
+- Yanıt başlıklarını yazar: `Content-Type` ve cache durumuna göre
+  `Cache-Control` (+ önbelleklenebilir yanıtlarda `X-JSkelet-Cache`).
 - Önbellekte saklanan sıkıştırılmış gövdeyi kullanarak yanıtı gönderir.
 
 ```js
@@ -114,11 +116,42 @@ app.get(
 );
 ```
 
-`options` tek bir alan kabul eder:
+`options` iki alan kabul eder:
 
 | Alan | Tip | Anlamı |
 | --- | --- | --- |
 | `revalidate` | `number` (saniye) | HTML önbellek TTL'i. Verilmezse ya da 0 ise bu route önbelleklenmez. `jskelet.config.mjs` → `cache().html` içindeki eşleşen bir kural bu değeri **ezer**. |
+| `private` | `boolean` | Sayfa ziyaretçiye bağlı. Önbellek devre dışı kalır, `cache().html` deseni bunu **ezemez**, yanıt `private, no-store` ve `Vary: Cookie` ile ETag'siz gider. |
+
+Oturuma bağlı her sayfa `private: true` almalı; önbellek anahtarında kimlik
+olmadığı için bayrak olmadan bir kullanıcının HTML'i bir başkasına servis
+edilir. Framework bu hatayı çalışma zamanında da yakalıyor (controller cookie
+okuduğunda render önbelleğe yazılmaz), ama doğru yer bayrak. Ayrıntılar
+[12-panel-ve-oturum.md](./12-panel-ve-oturum.md)'de.
+
+## `fragment()` — layout'suz parça
+
+Bir bölgeyi tazeleyen uçlar için. Layout basılmaz, yanıt `private, no-store` ve
+ETag'siz gider, HTML önbelleğine hiç uğramaz.
+
+```js
+app.get(
+  "/_fragment/satirlar",
+  fragment(async ({ query }) => ({
+    view: "partials/rows",
+    data: { rows: getRows(Number(query.sayfa ?? 1)) },
+  })),
+);
+```
+
+Controller `{ view, data?, status? }` ya da doğrudan bir HTML string döner.
+Hata durumunda tüm sayfa yerine küçük bir uyarı parçası döner
+(`<div role="alert" data-fragment-error>`), çünkü takas edilen bölge bir hata
+sayfasının tamamını içine almamalı.
+
+`fragment()` POST için de kullanılabilir: form gönderiminin cevabı olarak
+güncellenmiş parçayı döndürmenin yolu bu, ve şablonda `csrfField()`
+çalışabilmesi için gereken istek bağlamını da kuruyor.
 
 ## `ctx` — controller bağlamı
 
@@ -200,18 +233,24 @@ fonksiyon `throw` eder, framework yakalar. Böylece veri katmanındaki bir
 fonksiyon, controller'a dönüş değeri taşımak zorunda kalmadan 404 üretebilir.
 
 ```js
-import { notFound, redirect, permanentRedirect } from "jskelet";
+import { notFound, redirect, permanentRedirect, seeOther } from "jskelet";
 
 notFound();                    // 404 → hooks.notFound() sayfası
-redirect("/yeni-adres");       // 307 (geçici)
-permanentRedirect("/yeni");    // 308 (kalıcı)
+redirect("/yeni-adres");       // 307 (geçici, metodu korur)
+permanentRedirect("/yeni");    // 308 (kalıcı, metodu korur)
+seeOther("/panel");            // 303 (POST sonrası)
 ```
 
-Üçü de `never` döner (her zaman fırlatır). Ayrıntı:
+Dördü de `never` döner (her zaman fırlatır). Ayrıntı:
 
 - `notFound()` → `NotFoundError` (`statusCode: 404`)
 - `redirect(location)` → `RedirectError` (`statusCode: 307`)
 - `permanentRedirect(location)` → `RedirectError` (`statusCode: 308`)
+- `seeOther(location)` → `RedirectError` (`statusCode: 303`)
+
+Bir POST handler'ında `redirect()` değil `seeOther()` kullanılır: 307 metodu
+koruyor, yani tarayıcı hedefe yeniden POST ediyor. "Post/redirect/get" akışı —
+geri tuşunun formu yeniden göndermediği akış — 303 gerektiriyor.
 
 Özel bir durum kodu gerekiyorsa sınıfı doğrudan kullanabilirsin:
 
@@ -424,7 +463,7 @@ Yakalanan değerler `destination` içindeki aynı adlı `:param`'lara yazılır.
 Parametre adı `[A-Za-z_][A-Za-z0-9_]*` kalıbına uymalıdır.
 
 `source` mutlaka `/` ile başlamalı; başlamazsa kural yok sayılır ve uyarı
-basılır (`[config] geçersiz source (\`/\` ile başlamalı): …`). Tanınmayan bir
+basılır (``[config] invalid source (must start with `/`): …``). Tanınmayan bir
 sözdizimi sessizce literal kabul edilmez.
 
 Tam desen listesi ve config referansı: [07-yapilandirma.md](./07-yapilandirma.md).

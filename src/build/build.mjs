@@ -76,7 +76,7 @@ if (fs.existsSync(config.dirs.styles)) {
   Object.assign(manifest, await task("CSS", () => buildCss(config, { watch })));
 } else {
   log.warn(
-    `stylesheet girişi yok: ${path.relative(config.root, config.dirs.styles)} — CSS adımı atlandı`,
+    `no stylesheet entry: ${path.relative(config.root, config.dirs.styles)} — CSS step skipped`,
   );
 }
 
