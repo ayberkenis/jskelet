@@ -397,6 +397,15 @@ let restarts = 0;
  * yenileme yapılır; overlay durumu sekme belleğinde durduğu için panel açık
  * kalmaya devam eder.
  */
+/**
+ * Hiç açılmadan üst üste bu kadar denemeden sonra kanal yerine yedek yola
+ * geçilir. Tek bir başarısızlık yetmiyor: sayfa, sunucunun yeniden başlama
+ * penceresinde açılmış olabilir ve o an soket kurulamaz.
+ */
+const SOCKET_ATTEMPTS = 4;
+
+let socketFailures = 0;
+
 function connectSocket() {
   let socket;
   try {
@@ -408,12 +417,11 @@ function connectSocket() {
     return;
   }
 
-  // Soket hiç açılamazsa (proxy WebSocket'i geçirmiyor olabilir) eski
-  // SSE + yoklama yoluna düşülür; dev akışı bir ara katman yüzünden körelmesin.
   let opened = false;
 
   socket.addEventListener("open", () => {
     opened = true;
+    socketFailures = 0;
   });
 
   socket.addEventListener("message", (event) => {
@@ -421,18 +429,31 @@ function connectSocket() {
   });
 
   socket.addEventListener("close", () => {
-    if (!opened) {
-      startFallback();
-      return;
-    }
-
-    // Sunucu yeniden başlıyor: gösterge "bağlantı yok"a döner ve kısa aralıkla
+    // Sunucu yeniden başlıyor olabilir: gösterge "bağlantı yok"a döner ve
     // yeniden denenir. Açılışta gelen `hello` yeniden başlatmayı bildirir.
     if (!offline) {
       offline = true;
       render();
     }
-    setTimeout(connectSocket, 500);
+
+    if (opened) {
+      socketFailures = 0;
+      setTimeout(connectSocket, 500);
+      return;
+    }
+
+    socketFailures += 1;
+
+    // Kanal hiç kurulamıyorsa araya giren bir katman WebSocket'i geçirmiyor
+    // demektir; dev akışı bunun yüzünden körelmesin diye eski yola düşülür.
+    if (socketFailures >= SOCKET_ATTEMPTS) {
+      startFallback();
+      return;
+    }
+
+    // Yeniden başlatma birkaç saniye sürebiliyor; aralık kademeli açılır ki
+    // tarayıcı konsolu başarısız bağlantı satırlarıyla dolmasın.
+    setTimeout(connectSocket, socketFailures * 700);
   });
 }
 

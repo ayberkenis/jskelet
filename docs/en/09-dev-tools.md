@@ -152,11 +152,13 @@ the middleware chain, so the channel is attached straight to the server after
 `ws`: all it needs is to write server-to-client text frames and to answer the
 client's ping/close frames.
 
-If the socket cannot be opened at all (a proxy in between may not pass WebSocket
-through), the overlay falls back to the old path: the `/events` SSE stream plus
-polling `/stats`. If the socket opens and later drops — that is, the server is
-restarting — it reconnects every half second and the indicator reads
-"server restarting…" in the meantime.
+If the socket opens and later drops — that is, the server is restarting — it
+reconnects every half second and the indicator reads "server restarting…" in the
+meantime. If it never opens, it is retried four times with a widening gap: the
+page may have been loaded during the server's restart window, and a single
+failure does not mean the channel is unavailable. If those attempts fail too (a
+proxy in between may not pass WebSocket through), the overlay falls back to the
+old path: the `/events` SSE stream plus polling `/stats`.
 
 ## Devtools overlay
 

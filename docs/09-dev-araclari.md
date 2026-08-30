@@ -149,10 +149,13 @@ uğramadığı için kanal `listen` sonrası doğrudan sunucuya bağlanır
 sunucu→istemci metin çerçevesi yazmak ve istemcinin ping/close çerçevelerini
 yanıtlamak gerekiyor.
 
-Soket hiç açılamazsa (araya giren bir proxy WebSocket'i geçirmiyor olabilir)
-overlay eski yola düşer: `/events` SSE akışı + `/stats` yoklaması. Soket kurulup
-sonra düşerse — yani sunucu yeniden başlıyorsa — yarım saniyede bir yeniden
-bağlanır ve gösterge bu sırada "bağlantı yok" der.
+Soket kurulup sonra düşerse — yani sunucu yeniden başlıyorsa — yarım saniyede
+bir yeniden bağlanır ve gösterge bu sırada "bağlantı yok" der. Hiç açılamazsa
+aralığı kademeli açarak dört kez denenir; sayfa, sunucunun yeniden başlama
+penceresinde açılmış olabilir ve tek bir başarısızlık kanalın çalışmadığı
+anlamına gelmez. Denemeler de tutmazsa (araya giren bir proxy WebSocket'i
+geçirmiyor olabilir) overlay eski yola düşer: `/events` SSE akışı + `/stats`
+yoklaması.
 
 ## Devtools overlay
 
