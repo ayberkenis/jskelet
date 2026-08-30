@@ -106,6 +106,13 @@ one is listed under a **Breaking** heading.
   `node_modules` can still serve the docs. In development the local file wins
   and nothing is cached. The branch is overridable with `DOCS_REF`.
 
+### Fixed
+
+- The dev panel's WebSocket handshake was answered with a `Sec-WebSocket-Accept`
+  value derived from a mistyped protocol constant. Browsers verify that value and
+  closed the connection immediately with "Incorrect 'Sec-WebSocket-Accept' header
+  value", so the panel silently fell back to polling.
+
 ## [0.1.2] - 2026-08-30
 
 ### Added

@@ -14,7 +14,7 @@
 import { createHash } from "node:crypto";
 
 /** RFC 6455'te sabitlenmiş el sıkışma tuzu. */
-const GUID = "258EAFA5-E914-47DA-95CA-5AB0DC85B39A";
+const GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
 /** @type {Set<import('node:net').Socket>} */
 const sockets = new Set();
