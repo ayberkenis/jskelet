@@ -4,8 +4,9 @@ Bu belge JSkelet'in ISR ikamesini bütün ayrıntılarıyla anlatır: HTML TTL
 önbelleği ve stale-while-revalidate davranışı, `revalidate`'in nereden geldiği,
 cache anahtarının nasıl kurulduğu, `X-JSkelet-Cache` başlığının değerleri,
 sıkıştırılmış gövdenin neden önbellekte durduğu, istek içi memoizasyon
-(`withRequestCache` / `cache()`), upstream hatalarının önbelleği nasıl
-etkilediği (`reportUpstreamFailure`) ve sunucu açılışındaki ısıtma turu.
+(`withRequestCache` / `cache()`), veri önbelleği (`withDataCache`), upstream
+hatalarının önbelleği nasıl etkilediği (`reportUpstreamFailure`) ve sunucu
+açılışındaki ısıtma turu.
 Kararların arkasındaki ölçüm gerekçeleri [02-mimari.md](./02-mimari.md)'de,
 config alanlarının tam referansı [07-yapilandirma.md](./07-yapilandirma.md)'de.
 
@@ -17,11 +18,27 @@ route(controller, { revalidate })
      └─ withUpstreamTracking(...)              ← eksik veri tespiti
          └─ withRequestCache(...)              ← istek içi memoizasyon
              └─ produce() → controller + renderPage
+                              └─ withDataCache(...)  ← upstream veri önbelleği
 ```
 
 Sıra önemli: **istek içi cache en içte** olmalı ki aynı render'daki iki çağrı
 tek upstream isteğine düşsün; **upstream takibi HTML cache'in içinde** olmalı ki
 eksik veriyle üretilen çıktı önbelleğe yazılmasın.
+
+İki önbelleğin iş bölümü:
+
+| | HTML önbelleği | Veri önbelleği |
+| --- | --- | --- |
+| Ne tutar | Sayfanın tamamı (+ sıkıştırılmış gövdesi) | Upstream'den gelen JSON |
+| Girdi boyutu | ~100-200 kB | ~1-20 kB |
+| Girdi sınırı | 500 (`cache().maxEntries`) | 10.000 (`cache().data.maxEntries`) |
+| Kime yarar | Trafiği olan sayfalar: render bile edilmez | Uzun kuyruk: render edilir ama API'ye gidilmez |
+
+Bu ayrım pratikte şuna karşılık gelir: on binlerce yollu bir sitede sayfaların
+tamamını HTML olarak sıcak tutmak mümkün değil — 500 girdiyi aşan ısıtma kendi
+ısıttığını siler. Uzun kuyruk için hedef "HTML hazır olsun" değil, **"sayfayı
+üretecek veri API'ye gitmeden bulunsun"** olmalı. O zaman hiç ısıtılmamış bir
+sayfa da ilk ziyaretçide milisaniyeler içinde üretilir ve kota harcamaz.
 
 ## Public ve kişiye özel ayrımı
 
@@ -102,8 +119,8 @@ ile `/liste?sayfa=3` ayrı girdilerdir.
 Bunun pratik sonucu: query string'e bağlı olmayan bir sayfa, farklı kampanya
 parametreleriyle (`?utm_source=…`) çağrıldığında her kombinasyon için ayrı bir
 girdi üretir. Bu tür parametreleri ters proxy katmanında temizlemek ya da
-önbelleği kapatmak (`revalidate` vermemek) makul bir önlemdir; store en fazla
-500 girdi tutar ve LRU ile en eskiyi düşürür.
+önbelleği kapatmak (`revalidate` vermemek) makul bir önlemdir; store varsayılan
+olarak en fazla 500 girdi tutar ve LRU ile en eskiyi düşürür.
 
 ## Stale-while-revalidate
 
@@ -134,8 +151,8 @@ veri en fazla `revalidate + bir tazeleme turu` kadar geride olabilir. Bu bedel
 kabul edilebilir, çünkü fiyat gibi canlı alanlar istemcide WebSocket'ten
 güncelleniyor.
 
-Store LRU'dur: erişilen girdi sona taşınır, `MAX_ENTRIES = 500` aşılınca en
-eski düşürülür.
+Store LRU'dur: erişilen girdi sona taşınır, sınır (`cache().maxEntries`,
+varsayılan 500) aşılınca en eski düşürülür.
 
 ## Ne önbelleğe yazılır
 
@@ -216,6 +233,82 @@ Ayrıntılar:
 - `withRequestCache(run)` dışa açıktır; `route()` dışında (ör. kendi yazdığınız
   bir Express handler'ında) aynı kapsamı kurmak için kullanılabilir.
 
+## İstekler arası veri önbelleği: `withDataCache`
+
+`cache()` yalnızca **tek bir istek** boyunca yaşar. Uzun kuyruğu API kotasından
+korumak için gereken şey istekler arasında yaşayan, TTL'li ve kendi kendini
+tazeleyen bir veri katmanı:
+
+```js
+// lib/api/articles.js
+import { withDataCache, reportUpstreamFailure } from "jskelet";
+
+export async function getArticle(slug) {
+  return withDataCache(`haber:${slug}`, 600, async () => {
+    const response = await fetch(`${process.env.API_ORIGIN}/articles/${slug}`);
+
+    if (!response.ok) {
+      reportUpstreamFailure({ status: response.status, path: `/articles/${slug}` });
+      return null;
+    }
+
+    return response.json();
+  });
+}
+```
+
+Aynı kalıbın sarmalayıcı biçimi — anahtar argümanlardan üretilir:
+
+```js
+import { dataCache } from "jskelet";
+
+export const getArticle = dataCache(
+  async (slug) => apiGet(`/articles/${slug}`),
+  { key: "haber", revalidate: 600 },
+);
+```
+
+Davranış:
+
+| Durum | Sonuç |
+| --- | --- |
+| Taze girdi | Anında döner, `producer` çalışmaz |
+| TTL geçmiş, bayat pencere sürüyor | Bayat değer **anında** döner, tazeleme arkada yürür |
+| Girdi yok | `producer` beklenir |
+| `producer` hata verdi, bayat girdi var | Bayat değer döner, uyarı: `[data-cache] producer failed, serving stale value: …` |
+| `producer` hata verdi, girdi yok | Hata çağırana gider |
+
+Ayrıntılar:
+
+- **Aynı anahtarı eşzamanlı isteyen çağrılar tek upstream isteğine düşer.**
+  Isıtma turlarında kotayı en çok kurtaran davranış bu: 50 sayfa aynı endeks
+  verisini istiyorsa API bir kez çağrılır.
+- **`null` ve `undefined` saklanmaz.** Uygulamaların HTTP istemcisi hatada
+  genellikle `null` döner; bunu saklamak geçici bir 429'u TTL boyunca "veri yok"
+  hâline dondurmak olurdu. Boş cevabı bilinçli olarak saklamak isteyen
+  `{ storeEmpty: true }` verir.
+- **Bayat pencere HTML'dekinden uzun**: `staleFactor` varsayılanı 10, yani girdi
+  TTL'inin 11 katı boyunca acil durum yedeği olarak kalır. Bayat veri, eksik
+  sayfadan iyidir. Anahtar başına `{ staleFactor: 0 }` ile kapatılabilir.
+- Anahtar tamamen uygulamanın: dil, sürüm, sayfa numarası gibi ayrımlar anahtara
+  yazılır (`haber:tr:v2:${slug}`).
+- TTL `0` verildiğinde önbellek devre dışı kalır ve `producer` her çağrıda
+  çalışır — bir ayarı geçici olarak kapatmak için yeterli.
+
+Yönetim yüzeyi:
+
+| Fonksiyon | Ne yapar |
+| --- | --- |
+| `withDataCache(key, ttlSeconds, producer, options?)` | Ana giriş noktası |
+| `dataCache(fn, { key, revalidate, … })` | Fonksiyon sarmalayıcısı |
+| `clearDataCache(prefix?)` | Önek eşleşen girdileri (ya da tümünü) düşürür, silinen sayısını döner |
+| `getDataCacheSize()` | Girdi sayısı |
+| `getDataCacheEntries()` | Döküm: `{ key, stale, expiresIn }`. Değerin kendisi dönmez. |
+
+`clearDataCache("haber:")`, "bu içerik güncellendi" webhook'unun karşılığıdır:
+tek bir bölümün verisini düşürüp HTML'in bir sonraki tazelemesinde yeni içeriği
+almasını sağlar.
+
 ## Degraded render: `reportUpstreamFailure`
 
 Render sırasında upstream düştüyse çıktı eksik veri içeriyor demektir. Böyle bir
@@ -259,6 +352,32 @@ Kalıcı hataların önbelleği engellememesi bilinçli: deterministik cevaplar 
 denemekle düzelmez. Onlar yüzünden önbelleği kapatmak sayfayı her ziyarette
 baştan render etmek olur — içerik yine aynı eksik hâliyle döner, ziyaretçi
 sadece render süresini öder.
+
+Eksik veriyle üretilen çıktı **paylaşılan önbelleklere de sunulmaz**: `degraded`
+bir yanıt `public, s-maxage=…` değil `private, no-store` alır. Süreç içi
+önbelleğe yazmama kararını CDN'de geri almak, aynı hatayı bir katman yukarıda
+tekrarlamak olurdu. Teşhis başlığı (`X-JSkelet-Cache: MISS`) yine yazılır.
+
+### `notFound()` geçici hataya denk gelirse
+
+Veri gelmediği için `notFound()` çağıran bir controller, upstream rate limit'e
+girdiğinde tüm siteyi 404'e çevirebilir — ve bu 404'ler önbelleğe girdiği için
+geçici bir kota sorunu TTL boyunca "bu sayfa yok" cevabına dönüşür. Arama motoru
+için bu kalıcı bir kayıp.
+
+Framework bu durumu ayırır: render sırasında **geçici** bir upstream hatası
+bildirilmişse `notFound()` 404 olarak servis edilmez.
+
+| Render sırasında | `notFound()` sonucu |
+| --- | --- |
+| Geçici hata var (`429`, `5xx`, ağ hatası) | `503`, `Retry-After: 30`, `no-store` — önbelleğe **girmez**, sonraki istek gerçek içeriği üretir |
+| Kalıcı hata var (`404`, `403`…) ya da hata yok | Normal `404` |
+
+Log satırı:
+`[render] /haber/x returned notFound() while upstream is failing (429 /api/...), serving an uncached 503 instead`
+
+Yani upstream'in kotası dolduğunda sayfa dinamik olarak, önbelleğe yazılmadan
+üretilir; hiçbir şey "yok" olarak dondurulmaz.
 
 ## Önbelleği yönetmek
 
@@ -335,23 +454,74 @@ Kurallar:
 - Yalnızca `/` ile başlayan string'ler alınır.
 - `prewarmSkip` öneklerinden biriyle başlayanlar atlanır. Varsayılan liste:
   `/api/`, `/_fragment/`, `/__jskelet/`. Oturuma bağlı sayfalar ısıtılmamalı.
-- Tekilleştirme **sırayı korur**: liste `PREWARM_MAX` ile budandığı için
-  uygulamanın verdiği öncelik sırası anlamlıdır — en önemli sayfaları başa
-  koyun.
+- Tekilleştirme **sırayı korur**: `priority` verilmediğinde uygulamanın verdiği
+  sıra anlamlıdır — en önemli sayfaları başa koyun.
 - Bu hook tanımlı değilse ısıtma hiç kurulmaz; zamanlayıcı bile açılmaz.
 
 ### Tur mantığı
 
-1. Liste toplanır, `PREWARM_MAX` (varsayılan 400) ile budanır.
-2. `PREWARM_CONCURRENCY` işçi paralel olarak istek atar (prod'da 4, dev'de 2).
-   Dev'de daha az paralellik: tarama, o an tarayıcıda açtığın sayfanın
-   render'ıyla CPU için yarışmasın.
-3. Başarısız yollar için **tek seri tekrar turu** yapılır (`concurrency: 1`).
-   Hatalar çoğunlukla upstream rate limit'i (429): ilk tur yüzlerce sayfayı aynı
-   anda çekerken API'yi zorluyor. Tekrar turu bu sayfaların önbelleğe girmesini
-   sağlıyor; aksi hâlde ziyaretçi soğuk render'ı öder.
-4. Özet loglanır:
+1. Liste toplanır. `max`'tan (varsayılan 400) uzunsa bir dilim seçilir:
+   `priority` eşleşenler **her turda** başa alınır, kalan yerler kuyruktan
+   doldurulur.
+2. `concurrency` işçi paralel olarak istek atar (prod'da 4, dev'de 2). Dev'de
+   daha az paralellik: tarama, o an tarayıcıda açtığın sayfanın render'ıyla CPU
+   için yarışmasın.
+3. `rps` verilmişse tur bu hızın üstüne çıkmaz — paralellik ne olursa olsun.
+4. Başarısız yollar için, `retryDelayMs` bekledikten sonra **tek seri tekrar
+   turu** yapılır (`concurrency: 1`). Bekleme bilinçli: rate limit pencereleri
+   saniye mertebesinde, hemen tekrar denemek aynı 429'u almak demek.
+5. Özet loglanır:
    `[prewarm] warmed 128/130 pages, 2 failed, 5 recovered on the retry pass (12.4s)`
+
+### Isıtma sırası: `priority`
+
+```js
+// jskelet.config.mjs
+cache: () => ({
+  prewarm: {
+    priority: [
+      "/",
+      "/piyasalar/:path*",
+      /-yorumlar$/,
+    ],
+  },
+}),
+```
+
+Desen sözdizimi (`/haber/:slug`) ve doğrudan `RegExp` birlikte kullanılabilir;
+ikincisi "sonu `-yorumlar` ile bitenler" gibi desen sözdiziminin karşılamadığı
+kurallar için. Önce yazılan önce ısınır, hiçbirine uymayan yollar kuyruğa gider
+ve kendi aralarındaki sırayı korur.
+
+### Damla damla ısıtma: `rotate` + `rps` + `intervalSeconds`
+
+10.000 yolluk bir sitede tek turda her şeyi ısıtmak ne mümkün (HTML önbelleği
+500 girdi tutar) ne de doğru (API kotası dolar). Doğru davranış listeyi zamana
+yaymak:
+
+```js
+prewarm: {
+  max: 300,               // her turda 300 sayfa
+  rps: 4,                 // saniyede en fazla 4 istek
+  intervalSeconds: 300,   // 5 dakikada bir tur
+  rotate: true,           // kuyruk kaldığı yerden devam eder
+  priority: ["/", "/piyasalar/:path*"],
+}
+```
+
+Bu kurulumda öncelikli sayfalar her turda tazelenir, geri kalan kuyruk turlar
+boyunca baştan sona dolaşılır ve upstream saniyede dört isteğin üstünü hiç
+görmez. Veri önbelleği ile birlikte kullanıldığında ikinci turdan sonra ısıtma
+API'ye neredeyse hiç gitmez: veri katmanından okur.
+
+Rotasyon açıkken sınırın dışında kalan yollar kaybolmuyor, bir sonraki tura
+kalıyor; log bunu ayırt eder:
+`… , 700 deferred to the next pass`. `rotate: false` ile klasik davranışa
+dönülür — her tur listenin aynı ilk dilimini ısıtır ve gerisi hiç ısınmaz
+(`… , 700 over the limit`).
+
+Bir tur `intervalSeconds`'tan uzun sürerse yeni tur başlatılmaz; üst üste binen
+turlar upstream'e iki kat yük bindirirdi.
 
 İstekler `user-agent: jskelet-prewarm` (`brand.prewarmUserAgent`) ve
 `accept-encoding: br, gzip` başlıklarıyla gider; ikincisi sıkıştırılmış gövdenin
@@ -385,10 +555,14 @@ tek seferlik deneyler config'i düzenlemeden yapılabilsin.
 | Ayar | Env | `cache().prewarm` | Varsayılan |
 | --- | --- | --- | --- |
 | Açık/kapalı | `PREWARM=0` kapatır, `PREWARM=1` config'i ezip açar | `enabled` | `true` |
-| En fazla yol | `PREWARM_MAX` | `max` | `400` |
+| Tur başına en fazla yol | `PREWARM_MAX` | `max` | `400` |
 | Paralellik | `PREWARM_CONCURRENCY` | `concurrency` | prod 4, dev 2 |
+| Saniyedeki istek | `PREWARM_RPS` | `rps` | `0` (sınırsız) |
 | Başlangıç gecikmesi (ms) | `PREWARM_DELAY_MS` | `delayMs` | prod 500, dev 3000 |
+| Tekrar turu gecikmesi (ms) | `PREWARM_RETRY_DELAY_MS` | `retryDelayMs` | `2000` |
 | Periyot (saniye) | `PREWARM_INTERVAL_SECONDS` | `intervalSeconds` | `0` (kapalı) |
+| Kuyruk rotasyonu | — | `rotate` | `true` |
+| Isıtma sırası | — | `priority` | `[]` |
 
 Sayısal ayarlar yalnızca **pozitif ve sonlu** değer kabul eder; geçersiz bir
 değer sessizce bir sonraki katmana düşer.
@@ -432,6 +606,14 @@ turunun gerçekten `MISS` → önbellek doldurup doldurmadığını buradan gör
   parametreleri girdi çoğaltıyor olabilir.
 - **Isıtma hiç çalışmıyor.** `hooks.prewarmPaths` tanımlı değil, `PREWARM=0`
   ayarlı ya da `cache().prewarm.enabled === false`.
+- **Isıtma turu API'yi 429'a sokuyor.** `rps` verilmemiş. `concurrency`
+  düşürmek yeterli değil; kotayı koruyan ayar toplam hız. Kalıcı çözüm veri
+  önbelleği: ikinci turdan sonra ısıtma upstream'e gitmez.
+- **Isıtma listesi `max`'tan uzun ve sonu hiç ısınmıyor.** `rotate: false`
+  olabilir; logdaki `over the limit` ifadesi bunu gösterir.
+- **Bir bölümün tamamı 404 dönüyor.** Upstream düşmüş olabilir. Artık bu durumda
+  404 değil önbelleğe girmeyen 503 dönüyor; logda `returned notFound() while
+  upstream is failing` satırını arayın.
 
 ## Sırada ne var
 

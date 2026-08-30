@@ -45,6 +45,13 @@ export {
   getHtmlCacheSize,
   withHtmlCache,
 } from "./server/html-cache.js";
+export {
+  clearDataCache,
+  dataCache,
+  getDataCacheEntries,
+  getDataCacheSize,
+  withDataCache,
+} from "./server/data-cache.js";
 export { prewarm, prewarmProgress } from "./server/prewarm.js";
 export { createProxy } from "./server/middleware/upstream-proxy.js";
 export { getConfig, loadConfig } from "./config/index.js";

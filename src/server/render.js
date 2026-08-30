@@ -226,19 +226,34 @@ export function route(controller, options = {}) {
         );
       }
 
-      const publicCache = cacheable && !leaked;
+      // Eksik veriyle üretilen çıktı süreç içi önbelleğe yazılmıyor; aynı
+      // çıktıya CDN'de `s-maxage` vermek o kararı bir katman yukarıda geri
+      // almak olurdu. Geçici bir 429 yüzünden üretilen 503, ters proxy'de
+      // dakikalarca yaşamamalı.
+      const publicCache = cacheable && !leaked && !result.degraded;
 
       res.status(result.status);
       res.setHeader("Content-Type", "text/html; charset=utf-8");
+
+      // Geçici upstream hatası: istemciye ve bota "bu kalıcı değil, sonra gel"
+      // demenin standart yolu.
+      if (result.retryAfter) {
+        res.setHeader("Retry-After", String(result.retryAfter));
+      }
+
+      // Teşhis başlığı `degraded` yanıtta da yazılır: "MISS" görmek, sayfanın
+      // önbellek yolundan geçtiğini ama saklanmadığını anlatan tek ipucu.
+      if (cacheable && !leaked) {
+        res.setHeader(
+          getConfig().brand.cacheHeader,
+          result.cached ? (result.stale ? "STALE" : "HIT") : "MISS",
+        );
+      }
 
       if (publicCache) {
         res.setHeader(
           "Cache-Control",
           `public, max-age=0, s-maxage=${revalidate}, stale-while-revalidate=60`,
-        );
-        res.setHeader(
-          getConfig().brand.cacheHeader,
-          result.cached ? (result.stale ? "STALE" : "HIT") : "MISS",
         );
       } else {
         res.setHeader("Cache-Control", PRIVATE_CACHE);
@@ -459,7 +474,7 @@ async function sendHtml(req, res, body, encoded, options = {}) {
  * @param {Function} controller
  * @param {{ pathname: string }} ctx
  * @returns {Promise<{ html: string, status: number, degraded?: boolean,
- *   storable?: boolean }>}
+ *   storable?: boolean, retryAfter?: number }>}
  */
 async function produce(controller, ctx) {
   try {
@@ -475,11 +490,38 @@ async function produce(controller, ctx) {
     };
   } catch (error) {
     if (isNotFoundError(error)) {
+      // Veri gelmediği için `notFound()` çağrılmış olabilir: geçici bir
+      // upstream hatası (429, 5xx, ağ) varken bunu 404 olarak servis etmek iki
+      // kere yanlış. Önbelleğe girip TTL boyunca "bu sayfa yok" cevabını
+      // sabitler ve arama motoru geçici bir rate limit'i kalıcı 404 sanar.
+      // Doğrusu 503: cache'lenmez, `Retry-After` ile gider, sonraki istek
+      // gerçek içeriği üretir.
+      const transient = transientUpstreamFailures();
+      if (transient.length) {
+        console.warn(
+          `[render] ${ctx.pathname} returned notFound() while upstream is failing ` +
+            `(${summarizeFailures(transient)}), serving an uncached 503 instead`,
+        );
+        return {
+          html: await renderStatusPage(503),
+          status: 503,
+          degraded: true,
+          retryAfter: RETRY_AFTER_SECONDS,
+        };
+      }
+
       return { html: await renderNotFound(), status: 404 };
     }
     throw error;
   }
 }
+
+/**
+ * Geçici bir upstream hatası yüzünden üretilemeyen sayfanın `Retry-After`
+ * değeri. Kısa tutuluyor: ziyaretçi de bot da birkaç saniye sonra gerçek
+ * içeriği bulabilsin.
+ */
+const RETRY_AFTER_SECONDS = 30;
 
 /** Ağ hatası (0) ve geçici olduğu varsayılan durumlar. */
 const TRANSIENT_STATUSES = new Set([0, 408, 425, 429]);
@@ -506,26 +548,37 @@ function hasUpstreamFailures(pathname) {
   const failures = getUpstreamFailures();
   if (!failures.length) return false;
 
-  /** @param {typeof failures} list */
-  const summarize = (list) =>
-    list.map((failure) => `${failure.status} ${failure.path}`).join(", ");
-
   const transient = failures.filter((failure) => isTransient(failure.status));
   const permanent = failures.filter((failure) => !isTransient(failure.status));
 
   if (permanent.length) {
     console.warn(
-      `[render] ${pathname} was produced with missing data, upstream is failing permanently (${summarize(permanent)})`,
+      `[render] ${pathname} was produced with missing data, upstream is failing permanently (${summarizeFailures(permanent)})`,
     );
   }
 
   if (!transient.length) return false;
 
   console.warn(
-    `[render] ${pathname} was produced with missing data, not caching it (${summarize(transient)})`,
+    `[render] ${pathname} was produced with missing data, not caching it (${summarizeFailures(transient)})`,
   );
 
   return true;
+}
+
+/**
+ * @returns {import('./upstream-tracking.js').UpstreamFailure[]}
+ */
+function transientUpstreamFailures() {
+  return getUpstreamFailures().filter((failure) => isTransient(failure.status));
+}
+
+/**
+ * @param {import('./upstream-tracking.js').UpstreamFailure[]} failures
+ * @returns {string}
+ */
+function summarizeFailures(failures) {
+  return failures.map((failure) => `${failure.status} ${failure.path}`).join(", ");
 }
 
 /**

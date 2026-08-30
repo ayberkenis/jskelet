@@ -84,6 +84,16 @@ export default {
         max: 200,
         concurrency: 4,
         intervalSeconds: 0,
+        /**
+         * Isıtma sırası. Liste `max`'ı aştığında bu desenlere uyanlar her
+         * turda başa alınır, geri kalanı kuyrukta sırasını bekler. Desen
+         * sözdizimi ve `RegExp` birlikte kullanılabilir.
+         *
+         * Bu örnekte liste kısa olduğu için sıra görünmez; on binlerce yollu
+         * bir sitede `rps` ve `intervalSeconds` ile birlikte "damla damla"
+         * ısıtmanın çekirdeği bu alan.
+         */
+        priority: ["/", "/blog", "/blog/:slug"],
       },
     };
   },

@@ -55,7 +55,7 @@ export default {
   navigation: {
     prefetch: "moderate",
     prerender: "conservative",
-    viewTransition: true,
+    viewTransition: false,
   },
 
   async headers() {

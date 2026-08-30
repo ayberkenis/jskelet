@@ -4,8 +4,9 @@ This document explains JSkelet's ISR substitute in full detail: the HTML TTL
 cache and its stale-while-revalidate behaviour, where `revalidate` comes from,
 how the cache key is built, the values of the `X-JSkelet-Cache` header, why the
 compressed body is kept in the cache, per-request memoization
-(`withRequestCache` / `cache()`), how upstream failures affect the cache
-(`reportUpstreamFailure`) and the prewarm round at server startup. The
+(`withRequestCache` / `cache()`), the data cache (`withDataCache`), how upstream
+failures affect the cache (`reportUpstreamFailure`) and the prewarm round at
+server startup. The
 measurement rationale behind the decisions is in
 [02-architecture.md](./02-architecture.md), and the full reference of config
 fields is in [07-configuration.md](./07-configuration.md).
@@ -18,12 +19,29 @@ route(controller, { revalidate })
      └─ withUpstreamTracking(...)              ← missing data detection
          └─ withRequestCache(...)              ← per-request memoization
              └─ produce() → controller + renderPage
+                              └─ withDataCache(...)  ← upstream data cache
 ```
 
 The order matters: the **per-request cache must be innermost** so that two
 calls in the same render collapse into a single upstream request; **upstream
 tracking must be inside the HTML cache** so that output produced with missing
 data is not written to the cache.
+
+How the two caches divide the work:
+
+| | HTML cache | Data cache |
+| --- | --- | --- |
+| What it holds | The whole page (+ its compressed body) | The JSON that came from upstream |
+| Entry size | ~100-200 kB | ~1-20 kB |
+| Entry limit | 500 (`cache().maxEntries`) | 10,000 (`cache().data.maxEntries`) |
+| Who benefits | Pages with traffic: not even rendered | The long tail: rendered, but without going to the API |
+
+In practice this distinction means: on a site with tens of thousands of paths it
+is impossible to keep every page hot as HTML — a warm-up that goes past 500
+entries deletes what it just warmed. For the long tail the goal is not "have the
+HTML ready" but **"have the data that produces the page available without going
+to the API"**. Then a page that was never warmed is also produced within
+milliseconds on the first visit, and spends no quota.
 
 ## Public versus per-visitor
 
@@ -109,8 +127,8 @@ The practical consequence: a page that does not depend on the query string
 produces a separate entry for every combination when it is called with
 different campaign parameters (`?utm_source=…`). Stripping such parameters at
 the reverse proxy layer, or turning off the cache (by not supplying
-`revalidate`), is a reasonable precaution; the store holds at most 500 entries
-and evicts the oldest with LRU.
+`revalidate`), is a reasonable precaution; by default the store holds at most
+500 entries and evicts the oldest with LRU.
 
 ## Stale-while-revalidate
 
@@ -141,8 +159,8 @@ data in the HTML can be at most `revalidate + one refresh round` behind. That
 price is acceptable, because live fields such as prices are updated on the
 client over WebSocket.
 
-The store is an LRU: an accessed entry is moved to the end, and once
-`MAX_ENTRIES = 500` is exceeded the oldest is evicted.
+The store is an LRU: an accessed entry is moved to the end, and once the limit
+(`cache().maxEntries`, 500 by default) is exceeded the oldest is evicted.
 
 ## What gets written to the cache
 
@@ -223,6 +241,83 @@ Details:
 - `withRequestCache(run)` is exported; it can be used to set up the same scope
   outside `route()` (for example in an Express handler you wrote yourself).
 
+## Cross-request data cache: `withDataCache`
+
+`cache()` only lives for the duration of **a single request**. What it takes to
+protect the long tail from the API quota is a data layer that lives across
+requests, has a TTL and refreshes itself:
+
+```js
+// lib/api/articles.js
+import { withDataCache, reportUpstreamFailure } from "jskelet";
+
+export async function getArticle(slug) {
+  return withDataCache(`news:${slug}`, 600, async () => {
+    const response = await fetch(`${process.env.API_ORIGIN}/articles/${slug}`);
+
+    if (!response.ok) {
+      reportUpstreamFailure({ status: response.status, path: `/articles/${slug}` });
+      return null;
+    }
+
+    return response.json();
+  });
+}
+```
+
+The wrapper form of the same pattern — the key is derived from the arguments:
+
+```js
+import { dataCache } from "jskelet";
+
+export const getArticle = dataCache(
+  async (slug) => apiGet(`/articles/${slug}`),
+  { key: "news", revalidate: 600 },
+);
+```
+
+Behaviour:
+
+| State | Result |
+| --- | --- |
+| Fresh entry | Returns immediately, the `producer` does not run |
+| TTL expired, still inside the stale window | The stale value returns **immediately**, the refresh runs in the background |
+| No entry | The `producer` is awaited |
+| The `producer` failed, a stale entry exists | The stale value returns, warning: `[data-cache] producer failed, serving stale value: …` |
+| The `producer` failed, there is no entry | The error goes to the caller |
+
+Details:
+
+- **Concurrent calls for the same key collapse into one upstream request.** This
+  is the behaviour that saves the most quota during warm-up rounds: if 50 pages
+  want the same index data, the API is called once.
+- **`null` and `undefined` are not stored.** An application's HTTP client
+  usually returns `null` on failure; storing that would freeze a transient 429
+  into "no data" for the whole TTL. Pass `{ storeEmpty: true }` if you want the
+  empty answer stored deliberately.
+- **The stale window is longer than the HTML one**: `staleFactor` defaults to 10,
+  so an entry stays as an emergency fallback for 11 times its TTL. Stale data is
+  better than an incomplete page. It can be turned off per key with
+  `{ staleFactor: 0 }`.
+- The key belongs entirely to the application: distinctions such as language,
+  version or page number go into the key (`news:en:v2:${slug}`).
+- When the TTL is `0` the cache is disabled and the `producer` runs on every
+  call — enough to switch a setting off temporarily.
+
+The management surface:
+
+| Function | What it does |
+| --- | --- |
+| `withDataCache(key, ttlSeconds, producer, options?)` | The main entry point |
+| `dataCache(fn, { key, revalidate, … })` | The function wrapper |
+| `clearDataCache(prefix?)` | Drops the entries matching the prefix (or all of them), returns how many were removed |
+| `getDataCacheSize()` | The number of entries |
+| `getDataCacheEntries()` | A dump: `{ key, stale, expiresIn }`. The value itself is not returned. |
+
+`clearDataCache("news:")` is the counterpart of a "this content was updated"
+webhook: it drops one section's data so the next HTML refresh picks up the new
+content.
+
 ## Degraded render: `reportUpstreamFailure`
 
 If upstream went down during the render, the output contains missing data.
@@ -266,6 +361,32 @@ Permanent failures not blocking the cache is deliberate: deterministic answers
 do not get better by retrying. Turning the cache off because of them would mean
 rendering the page from scratch on every visit — the content comes back just as
 incomplete, and the visitor only pays the render time.
+
+Output produced with missing data is **not offered to shared caches** either: a
+`degraded` response gets `private, no-store` instead of `public, s-maxage=…`.
+Taking back the "do not store" decision at the CDN would repeat the same mistake
+one layer up. The diagnostic header (`X-JSkelet-Cache: MISS`) is still written.
+
+### When `notFound()` coincides with a transient failure
+
+A controller that calls `notFound()` because no data arrived can turn the whole
+site into 404s when upstream is rate limited — and because those 404s enter the
+cache, a temporary quota problem becomes a "this page does not exist" answer for
+the whole TTL. For a search engine that is a permanent loss.
+
+The framework separates the two cases: if a **transient** upstream failure was
+reported during the render, `notFound()` is not served as a 404.
+
+| During the render | Result of `notFound()` |
+| --- | --- |
+| A transient failure exists (`429`, `5xx`, network error) | `503`, `Retry-After: 30`, `no-store` — **not** written to the cache, the next request produces the real content |
+| A permanent failure (`404`, `403`…) or no failure | A normal `404` |
+
+The log line:
+`[render] /news/x returned notFound() while upstream is failing (429 /api/...), serving an uncached 503 instead`
+
+So when upstream runs out of quota the page is produced dynamically, without
+being written to the cache; nothing is frozen as "missing".
 
 ## Managing the cache
 
@@ -345,25 +466,77 @@ Rules:
 - Ones starting with one of the `prewarmSkip` prefixes are skipped. The default
   list: `/api/`, `/_fragment/`, `/__jskelet/`. Session-dependent pages should
   not be warmed.
-- Deduplication **preserves order**: since the list is trimmed with
-  `PREWARM_MAX`, the priority order the application gives is meaningful — put
-  the most important pages first.
+- Deduplication **preserves order**: when no `priority` is given, the order the
+  application provides is meaningful — put the most important pages first.
 - If this hook is not defined the warm-up is never set up; not even the timer
   is started.
 
 ### Round logic
 
-1. The list is collected and trimmed with `PREWARM_MAX` (400 by default).
-2. `PREWARM_CONCURRENCY` workers send requests in parallel (4 in prod, 2 in
-   dev). Less parallelism in dev: so the scan does not compete for CPU with the
-   render of the page you currently have open in the browser.
-3. **A single serial retry round** is performed for the failed paths
-   (`concurrency: 1`). The errors are mostly upstream rate limiting (429): the
-   first round strains the API while fetching hundreds of pages at once. The
-   retry round gets those pages into the cache; otherwise the visitor pays for
-   the cold render.
-4. A summary is logged:
+1. The list is collected. If it is longer than `max` (400 by default) a slice is
+   selected: the paths matching `priority` are taken first **on every round**,
+   and the remaining slots are filled from the queue.
+2. `concurrency` workers send requests in parallel (4 in prod, 2 in dev). Less
+   parallelism in dev: so the scan does not compete for CPU with the render of
+   the page you currently have open in the browser.
+3. If `rps` is given, the round never goes above that rate — no matter the
+   parallelism.
+4. **A single serial retry round** is performed for the failed paths after
+   waiting `retryDelayMs` (`concurrency: 1`). The wait is deliberate: rate limit
+   windows are on the order of seconds, so retrying immediately just earns the
+   same 429.
+5. A summary is logged:
    `[prewarm] warmed 128/130 pages, 2 failed, 5 recovered on the retry pass (12.4s)`
+
+### Warm-up order: `priority`
+
+```js
+// jskelet.config.mjs
+cache: () => ({
+  prewarm: {
+    priority: [
+      "/",
+      "/markets/:path*",
+      /-comments$/,
+    ],
+  },
+}),
+```
+
+The pattern syntax (`/news/:slug`) and a plain `RegExp` can be used together;
+the latter is for rules the pattern syntax does not cover, such as "everything
+ending in `-comments`". Whatever is written first is warmed first; paths that
+match nothing go to the queue and keep their relative order.
+
+### Drip warm-up: `rotate` + `rps` + `intervalSeconds`
+
+On a site with 10,000 paths, warming everything in a single round is neither
+possible (the HTML cache holds 500 entries) nor right (the API quota runs out).
+The correct behaviour is to spread the list over time:
+
+```js
+prewarm: {
+  max: 300,               // 300 pages per round
+  rps: 4,                 // at most 4 requests per second
+  intervalSeconds: 300,   // a round every 5 minutes
+  rotate: true,           // the queue continues where it left off
+  priority: ["/", "/markets/:path*"],
+}
+```
+
+In this setup the priority pages are refreshed on every round, the rest of the
+queue is walked end to end across rounds, and upstream never sees more than four
+requests per second. Used together with the data cache, the warm-up barely
+reaches the API after the second round: it reads from the data layer.
+
+With rotation on, the paths left outside the limit are not lost, they are left
+for the next round; the log distinguishes this:
+`… , 700 deferred to the next pass`. With `rotate: false` you get the classic
+behaviour — every round warms the same first slice of the list and the rest is
+never warmed (`… , 700 over the limit`).
+
+If a round takes longer than `intervalSeconds`, a new round is not started;
+overlapping rounds would put twice the load on upstream.
 
 The requests go out with the headers `user-agent: jskelet-prewarm`
 (`brand.prewarmUserAgent`) and `accept-encoding: br, gzip`; the second one so
@@ -397,10 +570,14 @@ comes first so that one-off experiments can be done without editing the config.
 | Setting | Env | `cache().prewarm` | Default |
 | --- | --- | --- | --- |
 | On/off | `PREWARM=0` disables it, `PREWARM=1` overrides the config and enables it | `enabled` | `true` |
-| Maximum paths | `PREWARM_MAX` | `max` | `400` |
+| Maximum paths per round | `PREWARM_MAX` | `max` | `400` |
 | Parallelism | `PREWARM_CONCURRENCY` | `concurrency` | prod 4, dev 2 |
+| Requests per second | `PREWARM_RPS` | `rps` | `0` (unlimited) |
 | Startup delay (ms) | `PREWARM_DELAY_MS` | `delayMs` | prod 500, dev 3000 |
+| Retry round delay (ms) | `PREWARM_RETRY_DELAY_MS` | `retryDelayMs` | `2000` |
 | Period (seconds) | `PREWARM_INTERVAL_SECONDS` | `intervalSeconds` | `0` (off) |
+| Queue rotation | — | `rotate` | `true` |
+| Warm-up order | — | `priority` | `[]` |
 
 Numeric settings only accept **positive and finite** values; an invalid value
 silently falls through to the next layer.
@@ -445,6 +622,15 @@ filled the cache.
   parameters may be multiplying entries.
 - **The warm-up never runs.** `hooks.prewarmPaths` is not defined, `PREWARM=0`
   is set, or `cache().prewarm.enabled === false`.
+- **The warm-up round pushes the API into 429.** No `rps` was given. Lowering
+  `concurrency` is not enough; the setting that protects the quota is the total
+  rate. The lasting fix is the data cache: after the second round the warm-up
+  does not reach upstream.
+- **The warm-up list is longer than `max` and its tail never warms.** `rotate`
+  may be `false`; the `over the limit` phrase in the log shows this.
+- **A whole section returns 404.** Upstream may be down. In that case a 503 that
+  does not enter the cache is now returned instead of a 404; look for the
+  `returned notFound() while upstream is failing` line in the log.
 
 ## What's next
 

@@ -55,6 +55,55 @@ export const DEFAULT_PREWARM = {
   concurrency: 4,
   /** İki tur arasında beklenen süre: upstream'e ani yük binmesin. */
   delayMs: 0,
+  /**
+   * Saniyedeki en fazla ısıtma isteği. 0 → sınırsız (yalnızca `concurrency`
+   * frenler). Upstream'i kota sınırının altında tutmanın en doğrudan yolu bu:
+   * paralellik ne kadar yükselse de tur bu hızın üstüne çıkmaz.
+   */
+  rps: 0,
+  /**
+   * Tekrar turundan önce beklenen süre. Rate limit pencereleri saniye
+   * mertebesinde; hemen tekrar denemek aynı 429'u almak demek.
+   */
+  retryDelayMs: 2000,
+  /**
+   * Liste `max`'tan uzunsa periyodik turlar kaldığı yerden devam eder.
+   * Böylece 10.000 yolluk bir site tek turda değil, turlar boyunca ısınır.
+   * `priority` eşleşen yollar her turda ısıtıldığı için rotasyon yalnızca
+   * kuyruğu dolaşır.
+   */
+  rotate: true,
+  /**
+   * Isıtma sırasını belirleyen desenler. String (`/haber/:slug`) ya da
+   * `RegExp` kabul eder; önce yazılan önce ısınır.
+   * @type {(string | RegExp)[]}
+   */
+  priority: [],
+};
+
+/**
+ * HTML önbelleğinin girdi sınırı. 500 girdi ortalama bir sayfa boyutunda
+ * yaklaşık 100-200 MB tutar; uzun kuyruklu siteler bunu yükseltmek yerine
+ * veri önbelleğine yaslanmalı (bkz. `DEFAULT_DATA_CACHE`).
+ */
+export const DEFAULT_HTML_CACHE_MAX_ENTRIES = 500;
+
+/**
+ * Upstream veri önbelleği.
+ *
+ * HTML önbelleğinden bilinçli olarak çok daha büyük: JSON, aynı sayfanın
+ * HTML'ine göre onlarca kat küçük. Uzun kuyruğu (on binlerce haber/etiket)
+ * HTML olarak tutmak imkânsız, verisini tutmak ise ucuz — ve API kotasını
+ * koruyan katman burası.
+ */
+export const DEFAULT_DATA_CACHE = {
+  maxEntries: 10000,
+  /**
+   * TTL dolduktan sonra girdinin kaç TTL boyunca daha kullanılabileceği.
+   * HTML'deki 1 katsayısından yüksek: bayat veri, eksik sayfadan iyidir ve
+   * upstream düştüğünde tek elde kalan şey budur.
+   */
+  staleFactor: 10,
 };
 
 /** Oturuma bağlı sayfalar ısıtılmaz; uygulama kendi listesini verebilir. */

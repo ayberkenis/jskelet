@@ -8,8 +8,43 @@ one is listed under a **Breaking** heading.
 
 ## [Unreleased]
 
+### Added
+
+- An upstream data cache: `withDataCache(key, ttlSeconds, producer)` and the
+  `dataCache(fn, { key, revalidate })` wrapper, with `clearDataCache(prefix?)`,
+  `getDataCacheSize()` and `getDataCacheEntries()` alongside them. It keeps JSON
+  rather than HTML, so its default limit is 10,000 entries: a long-tail page that
+  was never prewarmed still renders without touching the API. Concurrent reads of
+  the same key collapse into one upstream request, an expired entry is served
+  immediately while it refreshes in the background, a failing producer falls back
+  to the stale value, and empty answers (`null`/`undefined`) are not stored
+  unless `storeEmpty: true` is passed.
+- `cache().prewarm.priority` decides the warm-up order and accepts both the
+  config pattern syntax (`/news/:slug`) and plain regular expressions. Matching
+  paths are warmed on every pass.
+- Drip prewarming for large sites: `cache().prewarm.rps` (also `PREWARM_RPS`)
+  caps requests per second regardless of parallelism, and `rotate` (on by
+  default) makes periodic passes continue through the queue where the previous
+  one stopped instead of re-warming the same first slice. A pass is skipped while
+  the previous one is still running.
+- `cache().prewarm.retryDelayMs` (also `PREWARM_RETRY_DELAY_MS`) waits before the
+  retry pass, since rate limit windows are measured in seconds.
+- `cache().maxEntries` configures the HTML cache limit, which used to be a fixed
+  500.
+- The dev report now includes the data cache entry count under `cache.data`.
+
 ### Changed
 
+- `notFound()` is no longer served as a 404 when a transient upstream failure
+  (`429`, `5xx`, network error) was reported during the same render. Those pages
+  now respond with an uncached `503` and `Retry-After`, so a temporary rate limit
+  is not frozen into "this page does not exist" for the whole TTL.
+- Responses produced with missing data are no longer offered to shared caches:
+  a `degraded` render is sent with `private, no-store` instead of
+  `public, s-maxage=…`. The `X-JSkelet-Cache` diagnostic header is still written.
+- The prewarm summary distinguishes paths left for the next pass
+  (`700 deferred to the next pass`) from paths dropped entirely
+  (`700 over the limit`).
 - The changelog page of the marketing example is generated from the installed
   package's `CHANGELOG.md` instead of a hand-written list, and shows the version
   published on npm next to the installed one.

@@ -6,9 +6,17 @@
  * iki farklı bileşen aynı veriyi isterse yalnızca bir kez okunur — React'in
  * `cache()` fonksiyonuyla aynı sözleşme.
  *
- * Upstream'e giden gerçek bir istemcide ayrıca `reportUpstreamFailure()`
- * çağırın: framework böylece eksik veriyle üretilmiş HTML'i önbelleğe
- * yazmadığını bilir (bkz. docs/06-cache.md).
+ * Upstream'e giden gerçek bir istemcide iki şey daha gerekir (bkz.
+ * docs/06-cache.md):
+ *
+ *   - `reportUpstreamFailure()`: framework böylece eksik veriyle üretilmiş
+ *     HTML'i önbelleğe yazmadığını bilir.
+ *   - `withDataCache(key, ttl, producer)`: `cache()` yalnızca tek bir istek
+ *     boyunca yaşar, veri önbelleği istekler arasında. On binlerce yollu bir
+ *     sitede API kotasını koruyan katman bu — HTML önbelleği yalnızca trafiği
+ *     olan sayfaları tutabilir, verisi ise hepsi için bellekte durur.
+ *
+ * Bu örnekte veri süreç içinde sabit olduğu için ikisi de kullanılmıyor.
  */
 import { cache } from "jskelet";
 

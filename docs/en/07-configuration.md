@@ -119,7 +119,17 @@ export default {
   async cache() {
     return {
       html: { "/": 60, "/news/:slug": 300 },
-      prewarm: { enabled: true, max: 400, concurrency: 4, intervalSeconds: 0 },
+      maxEntries: 500,
+      data: { maxEntries: 10000, staleFactor: 10 },
+      prewarm: {
+        enabled: true,
+        max: 400,
+        concurrency: 4,
+        rps: 0,
+        intervalSeconds: 0,
+        rotate: true,
+        priority: ["/", "/news/:slug"],
+      },
     };
   },
 
@@ -561,8 +571,10 @@ Details: [03-routing.md](./03-routing.md).
 
 ## `cache()`
 
-**Type:** `() => { html?: Record<string, number>, prewarm?: object }` —
-**Default:** `{ html: {}, prewarm: { enabled: true, max: 400, intervalSeconds: 0 } }`
+**Type:**
+`() => { html?: Record<string, number>, maxEntries?: number, data?: object, prewarm?: object }` —
+**Default:**
+`{ html: {}, maxEntries: 500, data: { maxEntries: 10000, staleFactor: 10 }, prewarm: { enabled: true, max: 400, intervalSeconds: 0 } }`
 
 ### `cache().html`
 
@@ -582,18 +594,57 @@ html: {
 }
 ```
 
+### `cache().maxEntries`
+
+**Type:** `number` — **Default:** `500`
+
+The entry limit of the HTML cache. Because an entry costs a hundred kilobytes,
+raising this number burns through memory quickly; trying to solve a site with
+tens of thousands of paths from here is the wrong layer — the right place is
+`cache().data`.
+
+### `cache().data`
+
+The upstream data cache (`withDataCache`). Details:
+[06-caching.md](./06-caching.md).
+
+| Field | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `maxEntries` | `number` | `10000` | The LRU entry limit. The limit is high because JSON is tens of times smaller than HTML. |
+| `staleFactor` | `number` | `10` | For how many TTLs an entry stays usable after the TTL expired. `0` → no stale serving. |
+
 ### `cache().prewarm`
 
 | Field | Type | Default | Meaning |
 | --- | --- | --- | --- |
 | `enabled` | `boolean` | `true` | If `false`, no prewarming happens (can be overridden with `PREWARM=1`) |
-| `max` | `number` | `400` | At most how many paths are prewarmed |
+| `max` | `number` | `400` | At most how many paths are prewarmed per pass |
 | `concurrency` | `number` | prod 4, dev 2 | Number of parallel workers |
+| `rps` | `number` | `0` | At most how many prewarm requests per second; `0` is unlimited. This is the setting that protects the upstream quota. |
 | `delayMs` | `number` | prod 500, dev 3000 | Delay of the first pass after startup |
+| `retryDelayMs` | `number` | `2000` | How long to wait before the retry pass |
 | `intervalSeconds` | `number` | `0` | If greater than 0, the pass repeats periodically |
+| `rotate` | `boolean` | `true` | If the list is longer than `max`, periodic passes continue where they left off |
+| `priority` | `(string \| RegExp)[]` | `[]` | Warm-up order; matching paths are taken first on every pass |
 
-Each one can be overridden by an environment variable of the same name; env
-takes precedence. Details: [06-caching.md](./06-caching.md).
+`priority` accepts two forms: the pattern syntax used everywhere in the config,
+and a plain `RegExp`. Whatever is written first is warmed first.
+
+```js
+prewarm: {
+  max: 500,
+  rps: 4,
+  intervalSeconds: 300,
+  priority: [
+    "/",                     // the home page
+    "/markets/:path*",        // the whole markets section
+    /-comments$/,             // a rule the pattern syntax does not cover
+  ],
+}
+```
+
+Each numeric field can be overridden by an environment variable of the same
+name; env takes precedence. Details: [06-caching.md](./06-caching.md).
 
 ## `hooks`
 
@@ -689,7 +740,9 @@ and no warning is printed.
 | `PREWARM` | `startPrewarm` | — | `0` turns prewarming off; `1` overrides `enabled: false` in the config and turns it on |
 | `PREWARM_MAX` | `prewarm` | `400` | At most how many paths are prewarmed |
 | `PREWARM_CONCURRENCY` | `prewarm` | prod 4, dev 2 | Number of parallel workers |
+| `PREWARM_RPS` | `prewarm` | `0` | At most how many prewarm requests per second; `0` is unlimited |
 | `PREWARM_DELAY_MS` | `startPrewarm` | prod 500, dev 3000 | Delay of the first pass |
+| `PREWARM_RETRY_DELAY_MS` | `prewarm` | `2000` | The wait before the retry pass |
 | `PREWARM_INTERVAL_SECONDS` | `startPrewarm` | `0` | If greater than 0, a periodic pass |
 | `JSKELET_VERBOSE` | `jskelet dev` | — | If `1`, all of the changed files are listed on restart |
 | `JSKELET_COLOR` | `jskelet/log` | — | If `1`, colour is forced. Because child processes write to a pipe, colour detection turns off; `jskelet dev` sets this itself. |

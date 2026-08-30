@@ -115,7 +115,17 @@ export default {
   async cache() {
     return {
       html: { "/": 60, "/haber/:slug": 300 },
-      prewarm: { enabled: true, max: 400, concurrency: 4, intervalSeconds: 0 },
+      maxEntries: 500,
+      data: { maxEntries: 10000, staleFactor: 10 },
+      prewarm: {
+        enabled: true,
+        max: 400,
+        concurrency: 4,
+        rps: 0,
+        intervalSeconds: 0,
+        rotate: true,
+        priority: ["/", "/haber/:slug"],
+      },
     };
   },
 
@@ -549,8 +559,10 @@ Ayrıntı: [03-routing.md](./03-routing.md).
 
 ## `cache()`
 
-**Tip:** `() => { html?: Record<string, number>, prewarm?: object }` —
-**Varsayılan:** `{ html: {}, prewarm: { enabled: true, max: 400, intervalSeconds: 0 } }`
+**Tip:**
+`() => { html?: Record<string, number>, maxEntries?: number, data?: object, prewarm?: object }` —
+**Varsayılan:**
+`{ html: {}, maxEntries: 500, data: { maxEntries: 10000, staleFactor: 10 }, prewarm: { enabled: true, max: 400, intervalSeconds: 0 } }`
 
 ### `cache().html`
 
@@ -570,18 +582,55 @@ Tek istisna `route(fn, { private: true })`: bu route'ta desen eşleşse bile yok
 sayılır. Kilidin tek yönlü olması bilinçli — ters yönde bir hata, bir
 kullanıcının HTML'inin bir başkasına servis edilmesi anlamına geliyor.
 
+### `cache().maxEntries`
+
+**Tip:** `number` — **Varsayılan:** `500`
+
+HTML önbelleğinin girdi sınırı. Girdi başına yüz kilobayt düştüğü için bu sayıyı
+yükseltmek belleği hızla tüketir; on binlerce yollu bir siteyi buradan çözmeye
+çalışmak yanlış katman, doğru yer `cache().data`.
+
+### `cache().data`
+
+Upstream veri önbelleği (`withDataCache`). Ayrıntı: [06-cache.md](./06-cache.md).
+
+| Alan | Tip | Varsayılan | Anlamı |
+| --- | --- | --- | --- |
+| `maxEntries` | `number` | `10000` | LRU girdi sınırı. JSON, HTML'e göre onlarca kat küçük olduğu için sınır yüksek. |
+| `staleFactor` | `number` | `10` | TTL dolduktan sonra girdinin kaç TTL boyunca daha kullanılabileceği. `0` → bayat servis yok. |
+
 ### `cache().prewarm`
 
 | Alan | Tip | Varsayılan | Anlamı |
 | --- | --- | --- | --- |
 | `enabled` | `boolean` | `true` | `false` ise ısıtma yapılmaz (`PREWARM=1` ile ezilebilir) |
-| `max` | `number` | `400` | En fazla kaç yol ısıtılır |
+| `max` | `number` | `400` | Bir turda en fazla kaç yol ısıtılır |
 | `concurrency` | `number` | prod 4, dev 2 | Paralel işçi sayısı |
+| `rps` | `number` | `0` | Saniyedeki en fazla ısıtma isteği; `0` sınırsız. Upstream kotasını koruyan ayar bu. |
 | `delayMs` | `number` | prod 500, dev 3000 | Açılıştan sonra ilk turun gecikmesi |
+| `retryDelayMs` | `number` | `2000` | Tekrar turundan önce beklenen süre |
 | `intervalSeconds` | `number` | `0` | 0'dan büyükse tur periyodik tekrarlanır |
+| `rotate` | `boolean` | `true` | Liste `max`'tan uzunsa periyodik turlar kaldığı yerden devam eder |
+| `priority` | `(string \| RegExp)[]` | `[]` | Isıtma sırası; eşleşen yollar her turda başa alınır |
 
-Her biri aynı adı taşıyan ortam değişkeniyle ezilebilir; env önceliklidir.
-Ayrıntı: [06-cache.md](./06-cache.md).
+`priority` iki biçim kabul eder: config'in her yerinde geçerli olan desen
+sözdizimi ve doğrudan `RegExp`. Önce yazılan önce ısınır.
+
+```js
+prewarm: {
+  max: 500,
+  rps: 4,
+  intervalSeconds: 300,
+  priority: [
+    "/",                     // ana sayfa
+    "/piyasalar/:path*",      // tüm piyasa bölümü
+    /-yorumlar$/,             // desen sözdiziminin karşılamadığı kural
+  ],
+}
+```
+
+Sayısal alanların her biri aynı adı taşıyan ortam değişkeniyle ezilebilir; env
+önceliklidir. Ayrıntı: [06-cache.md](./06-cache.md).
 
 ## `hooks`
 
@@ -676,7 +725,9 @@ basılmaz.
 | `PREWARM` | `startPrewarm` | — | `0` ısıtmayı kapatır; `1` config'teki `enabled: false`'u ezip açar |
 | `PREWARM_MAX` | `prewarm` | `400` | En fazla kaç yol ısıtılır |
 | `PREWARM_CONCURRENCY` | `prewarm` | prod 4, dev 2 | Paralel işçi sayısı |
+| `PREWARM_RPS` | `prewarm` | `0` | Saniyedeki en fazla ısıtma isteği; `0` sınırsız |
 | `PREWARM_DELAY_MS` | `startPrewarm` | prod 500, dev 3000 | İlk turun gecikmesi |
+| `PREWARM_RETRY_DELAY_MS` | `prewarm` | `2000` | Tekrar turundan önceki bekleme |
 | `PREWARM_INTERVAL_SECONDS` | `startPrewarm` | `0` | 0'dan büyükse periyodik tur |
 | `JSKELET_VERBOSE` | `jskelet dev` | — | `1` ise restart'ta değişen dosyaların tamamı listelenir |
 | `JSKELET_COLOR` | `jskelet/log` | — | `1` ise renk zorlanır. Alt süreçler boruya yazdığı için renk algılaması kapanır; `jskelet dev` bunu kendisi ayarlar. |

@@ -13,6 +13,7 @@ import fs from "node:fs";
 import path from "node:path";
 import zlib from "node:zlib";
 import { getHtmlCacheEntries, getHtmlCacheSize } from "../html-cache.js";
+import { getDataCacheSize } from "../data-cache.js";
 import { prewarmProgress } from "../prewarm.js";
 import { getConfig } from "../../config/index.js";
 
@@ -343,7 +344,13 @@ export function buildReport(devtools) {
     pages: pageList.sort((a, b) => (b.visits - a.visits) || b.at - a.at),
     serverApi: serverApiCalls.slice().reverse(),
     build: { assets: assets(), ...chunks() },
-    cache: { size: getHtmlCacheSize(), entries: getHtmlCacheEntries() },
+    cache: {
+      size: getHtmlCacheSize(),
+      entries: getHtmlCacheEntries(),
+      // Veri önbelleğinden yalnızca sayaç: uzun kuyruklu bir sitede on
+      // binlerce anahtar oluyor ve dökümü rapora koymak faydasız bir yük.
+      data: getDataCacheSize(),
+    },
     prewarm: { ...prewarmProgress },
     requests: devtools.requests,
     errors: devtools.errors,

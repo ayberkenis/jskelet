@@ -11,6 +11,12 @@
  * middleware zinciri normal trafikle bire bir aynı olsun. Hangi yolların
  * ısıtılacağını uygulama `hooks.prewarmPaths()` ile bildirir; genelde
  * sitemap üreten fonksiyonun aynısıdır.
+ *
+ * On binlerce yolluk bir sitede tur bir "damla damla" tarayıcıya dönüşür:
+ * `priority` desenleri her turda başa alınır, geri kalan kuyruk turlar
+ * arasında kaldığı yerden devam eder (`rotate`) ve `rps` toplam hızı upstream
+ * kotasının altında tutar. Amaç, kimse gelmese bile hiçbir sayfanın soğuk
+ * kalmaması — ama bunu API'yi düşürmeden yapmak.
  */
 import process from "node:process";
 import { getConfig, hook } from "../config/index.js";
@@ -79,6 +85,100 @@ async function collectPaths() {
 }
 
 /**
+ * `cache().prewarm.priority` desenlerine göre sıralar. Eşleşmeyen yollar
+ * listenin sonuna, kendi aralarındaki sırayı koruyarak gider — uygulamanın
+ * verdiği sıra hâlâ anlamlı olsun.
+ *
+ * @param {string[]} paths
+ * @returns {{ head: string[], tail: string[] }}
+ *   `head` öncelikli yollar (her turda ısıtılır), `tail` geri kalan kuyruk
+ *   (turlar arasında dolaşılır).
+ */
+function byPriority(paths) {
+  const rules = getConfig().prewarmPriority;
+  if (!rules.length) return { head: [], tail: paths };
+
+  /** @type {string[][]} */
+  const buckets = rules.map(() => []);
+  /** @type {string[]} */
+  const tail = [];
+
+  for (const candidate of paths) {
+    const rank = rules.findIndex((rule) => rule.test(candidate));
+    if (rank === -1) tail.push(candidate);
+    else buckets[rank].push(candidate);
+  }
+
+  return { head: buckets.flat(), tail };
+}
+
+/**
+ * Kuyruğun kaldığı yer. Periyodik turlar listeyi baştan ısıtıp aynı ilk
+ * `max` yolu tekrar tekrar tazelemesin: her tur bir sonraki dilimi alır ve
+ * yeterli tur sonunda liste baştan sona ısınır.
+ */
+let queueCursor = 0;
+
+/**
+ * Bir turda ısıtılacak dilimi seçer: önce `priority` eşleşenler, sonra
+ * kuyruğun sırası gelen parçası. Dışa açık olması bilinçli — sıralama ve
+ * rotasyon, tur çalışmadan doğrulanabilen tek davranış.
+ *
+ * @param {string[]} all
+ * @param {number} limit
+ * @param {boolean} rotate
+ * @returns {string[]}
+ */
+export function selectPrewarmPaths(all, limit, rotate = true) {
+  if (all.length <= limit) return all;
+
+  const { head, tail } = byPriority(all);
+  const selected = head.slice(0, limit);
+  const room = limit - selected.length;
+  if (room <= 0 || !tail.length) return selected;
+
+  if (!rotate) return [...selected, ...tail.slice(0, room)];
+
+  // Dilim listenin sonunu aşarsa başa sarar: kuyruk halkasal dolaşılır.
+  const start = queueCursor % tail.length;
+  const slice = tail.slice(start, start + room);
+  if (slice.length < room) slice.push(...tail.slice(0, room - slice.length));
+  queueCursor = (start + room) % tail.length;
+
+  return [...selected, ...slice];
+}
+
+/** @param {number} ms */
+function sleep(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms).unref?.();
+  });
+}
+
+/**
+ * Saniyedeki istek sayısını sınırlar. Fren `concurrency`'den bağımsız
+ * olmalı: paralellik gecikmeyi kapatmak için var, kotayı koruyan şey toplam
+ * hız. İşçiler aynı sayacı paylaştığı için sıra kimde olursa olsun tur
+ * verilen hızın üstüne çıkmaz.
+ *
+ * @param {number} rps 0 → sınırsız
+ * @returns {() => Promise<void>}
+ */
+function createPacer(rps) {
+  if (!rps) return async () => {};
+
+  const gap = 1000 / rps;
+  let nextSlot = 0;
+
+  return async () => {
+    const now = Date.now();
+    const slot = Math.max(now, nextSlot);
+    nextSlot = slot + gap;
+    if (slot > now) await sleep(slot - now);
+  };
+}
+
+/**
  * `DEV_TOKEN` ayarlıyken `devGate` token taşımayan her isteğe 404 döner.
  * Isıtma kendi sunucusuna istek attığı için token'ı çerez olarak taşımalı;
  * yoksa tüm sayfalar 404 alır ve önbellek hiç dolmaz.
@@ -100,9 +200,10 @@ function devGateHeader() {
  * @param {(ok: number, failed: number) => void} [report]
  *   Tur ilerlemesini `prewarmProgress`'e yazar. Tekrar turunda sayaçların
  *   anlamı değiştiği için çağıran taraf kendi formülünü verir.
+ * @param {() => Promise<void>} [pace] İstek başına beklenen hız freni.
  * @returns {Promise<{ ok: number, failed: number, failedPaths: string[] }>}
  */
-async function crawl(origin, paths, concurrency, report = undefined) {
+async function crawl(origin, paths, concurrency, report = undefined, pace = undefined) {
   const { brand } = getConfig();
   const cacheHeader = brand.cacheHeader.toLowerCase();
 
@@ -116,6 +217,8 @@ async function crawl(origin, paths, concurrency, report = undefined) {
     while (index < paths.length) {
       const target = paths[index];
       index += 1;
+
+      if (pace) await pace();
 
       const startedAt = Date.now();
 
@@ -191,8 +294,15 @@ export async function prewarm({ origin, quiet = false, paths: only }) {
     process.env.NODE_ENV === "development" ? 2 : 4,
   );
 
+  const rps = num(process.env.PREWARM_RPS, num(getConfig().prewarm?.rps, 0));
+  const pace = createPacer(rps);
+
   const all = only?.length ? only : await collectPaths();
-  const paths = all.slice(0, limit);
+  // Elle verilen liste budanmaz ve sıralanmaz: çağıran tam olarak neyi
+  // istediğini biliyor (dev panelindeki "tekrar dene" bunu kullanır).
+  const paths = only?.length
+    ? all
+    : selectPrewarmPaths(all, limit, getConfig().prewarm?.rotate !== false);
 
   Object.assign(prewarmProgress, {
     active: true,
@@ -211,7 +321,13 @@ export async function prewarm({ origin, quiet = false, paths: only }) {
   try {
     /** @type {string[]} */
     let failedPaths;
-    ({ ok, failed, failedPaths } = await crawl(origin, paths, concurrency));
+    ({ ok, failed, failedPaths } = await crawl(
+      origin,
+      paths,
+      concurrency,
+      undefined,
+      pace,
+    ));
 
     // Hatalar çoğunlukla upstream rate limit'i (429): ilk tur yüzlerce sayfayı
     // aynı anda çekerken API'yi zorluyor. Tek seri tekrar turu bu sayfaların
@@ -219,11 +335,23 @@ export async function prewarm({ origin, quiet = false, paths: only }) {
     if (failedPaths.length) {
       const firstOk = ok;
       const firstFailed = failed;
-      const retry = await crawl(origin, failedPaths, 1, (retriedOk) => {
-        // Tekrar turunda her başarı bir hatayı başarıya çevirir.
-        prewarmProgress.ok = firstOk + retriedOk;
-        prewarmProgress.failed = firstFailed - retriedOk;
-      });
+
+      // Rate limit pencereleri saniye mertebesinde; hemen tekrar denemek aynı
+      // 429'u almak demek.
+      const retryDelay = setting("PREWARM_RETRY_DELAY_MS", "retryDelayMs", 2000);
+      await sleep(retryDelay);
+
+      const retry = await crawl(
+        origin,
+        failedPaths,
+        1,
+        (retriedOk) => {
+          // Tekrar turunda her başarı bir hatayı başarıya çevirir.
+          prewarmProgress.ok = firstOk + retriedOk;
+          prewarmProgress.failed = firstFailed - retriedOk;
+        },
+        pace,
+      );
       recovered = retry.ok;
       ok += retry.ok;
       failed -= retry.ok;
@@ -236,11 +364,15 @@ export async function prewarm({ origin, quiet = false, paths: only }) {
 
   if (!quiet && paths.length) {
     const skipped = all.length - paths.length;
+    // Rotasyon açıkken sınırın dışında kalan yollar kaybolmuyor, bir sonraki
+    // tura kalıyor; log bunu ayırt etmeli, yoksa "400 yol atlandı" satırı
+    // hatalı bir kurulum sanılıyor.
+    const rotate = !only?.length && getConfig().prewarm?.rotate !== false;
     console.log(
       `[prewarm] warmed ${ok}/${paths.length} pages` +
         `${failed ? `, ${failed} failed` : ""}` +
         `${recovered ? `, ${recovered} recovered on the retry pass` : ""}` +
-        `${skipped > 0 ? `, ${skipped} over the limit` : ""}` +
+        `${skipped > 0 ? `, ${skipped} ${rotate ? "deferred to the next pass" : "over the limit"}` : ""}` +
         ` (${(elapsed / 1000).toFixed(1)}s)`,
     );
   }
@@ -264,20 +396,33 @@ export function startPrewarm({ port }) {
 
   const isDev = process.env.NODE_ENV === "development";
   const origin = `http://127.0.0.1:${port}`;
-  const run = () =>
-    prewarm({ origin }).catch((error) => {
+
+  // Hız frenli bir tur `intervalSeconds`'tan uzun sürebilir; üst üste binen
+  // turlar `prewarmProgress`'i bozar ve upstream'e iki kat yük bindirir.
+  let running = false;
+  const run = async () => {
+    if (running) return;
+    running = true;
+    try {
+      await prewarm({ origin });
+    } catch (error) {
       console.error("[prewarm] failed", error);
-    });
+    } finally {
+      running = false;
+    }
+  };
 
   // Isıtma ilk isteklerle yarışmasın diye gecikmeyle başlar. Dev'de gecikme
   // daha uzun: dosya kaydı süreci yeniden başlattığı için zamanlayıcı da
   // ölür; yalnızca sunucu bir süre sakin kalınca ısınır.
   const delay = setting("PREWARM_DELAY_MS", "delayMs", isDev ? 3000 : 500);
-  setTimeout(run, delay).unref();
+  setTimeout(() => void run(), delay).unref();
 
   // Girdiler `revalidate` ile yaşlanır; stale-while-revalidate sayesinde
   // ziyaretçi beklemez. Periyodik tur, hiç ziyaret edilmeyen sayfaları da
   // sıcak tutmak isteyen kurulumlar için opsiyoneldir.
+  // `rotate` ile birlikte bu ayar "damla damla ısıtma"ya dönüşür: her tur
+  // kuyruğun bir dilimini alır, yeterli tur sonunda liste baştan sona ısınır.
   const interval = setting("PREWARM_INTERVAL_SECONDS", "intervalSeconds", 0);
-  if (interval > 0) setInterval(run, interval * 1000).unref();
+  if (interval > 0) setInterval(() => void run(), interval * 1000).unref();
 }

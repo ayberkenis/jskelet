@@ -8,12 +8,31 @@
  * WebSocket'ten güncellendiği için bu gecikme ekranda görünmez.
  */
 
+import { getConfig } from "../config/index.js";
+import { DEFAULT_HTML_CACHE_MAX_ENTRIES } from "../config/defaults.js";
+
 /**
  * @typedef {{ html: string, status: number, expiresAt: number,
  *   staleUntil: number, encoded: Map<string, Buffer> }} HtmlEntry
  */
 
-const MAX_ENTRIES = 500;
+/**
+ * Girdi sınırı `cache().maxEntries` ile yükseltilebilir ama uzun kuyruklu bir
+ * siteyi buradan çözmeye çalışmak yanlış katman: girdi başına yüz kilobayt
+ * düşüyor. On binlerce yol için `withDataCache` kullanılır.
+ *
+ * Config yüklenmemiş olabilir (testler bu modülü doğrudan çağırıyor); o
+ * durumda kod varsayılanı geçerli.
+ *
+ * @returns {number}
+ */
+function maxEntries() {
+  try {
+    return getConfig().htmlMaxEntries;
+  } catch {
+    return DEFAULT_HTML_CACHE_MAX_ENTRIES;
+  }
+}
 
 /**
  * TTL dolduktan sonra eski HTML'in kaç TTL boyunca daha servis edilebileceği.
@@ -73,7 +92,8 @@ function write(key, value, ttlSeconds) {
     staleUntil: now + ttlSeconds * 1000 * (1 + STALE_FACTOR),
   });
 
-  while (store.size > MAX_ENTRIES) {
+  const limit = maxEntries();
+  while (store.size > limit) {
     const oldest = store.keys().next().value;
     if (oldest === undefined) break;
     store.delete(oldest);

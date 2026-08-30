@@ -15,7 +15,8 @@
  *   headers()   → [{ source, headers: [{ key, value }] }]
  *   redirects() → [{ source, destination, permanent?, statusCode? }]
  *   rewrites()  → [{ source, destination }] | { beforeFiles?, afterFiles? }
- *   cache()     → { html?: { [source]: saniye }, prewarm?: {...} }
+ *   cache()     → { html?: { [source]: saniye }, maxEntries?: number,
+ *                   data?: {...}, prewarm?: {...} }
  *
  * Fonksiyon olmayan bölümler (`brand`, `security`, `static`, `navigation`…)
  * düz nesne olarak okunur.
@@ -24,11 +25,13 @@ import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
-import { compilePattern } from "./pattern.js";
+import { compilePattern, matchPattern } from "./pattern.js";
 import {
   DEFAULT_BRAND,
+  DEFAULT_DATA_CACHE,
   DEFAULT_DEV_GATE_BYPASS,
   DEFAULT_DIRS,
+  DEFAULT_HTML_CACHE_MAX_ENTRIES,
   DEFAULT_NAVIGATION,
   DEFAULT_NAVIGATION_EXCLUDE,
   DEFAULT_PREWARM,
@@ -63,7 +66,10 @@ const CONFIG_FILE = "jskelet.config.mjs";
  * @property {{ pattern: CompiledPattern, destination: string, statusCode: number }[]} redirects
  * @property {{ phase: "beforeFiles" | "afterFiles", pattern: CompiledPattern, destination: string }[]} rewrites
  * @property {{ pattern: CompiledPattern, seconds: number }[]} html
+ * @property {number} htmlMaxEntries HTML önbelleğinin girdi sınırı.
+ * @property {Record<string, unknown>} data Upstream veri önbelleği ayarları.
  * @property {Record<string, unknown>} prewarm
+ * @property {{ source: string, test: (pathname: string) => boolean }[]} prewarmPriority
  * @property {Record<string, unknown>} brand
  * @property {Record<string, Function>} hooks
  * @property {string} layout Layout `.ejs` dosyasının mutlak yolu.
@@ -168,8 +174,40 @@ function normalizeRewrites(raw) {
 }
 
 /**
+ * Isıtma sırası desenleri. İki biçim kabul edilir: config'in her yerinde
+ * geçerli olan `/haber/:slug` sözdizimi ve doğrudan `RegExp` — ikincisi
+ * "sonu `-yorumlar` ile bitenler" gibi desen sözdiziminin karşılamadığı
+ * kuralları yazabilmek için.
+ *
  * @param {unknown} raw
- * @returns {{ html: ResolvedConfig["html"], prewarm: Record<string, unknown> }}
+ * @returns {ResolvedConfig["prewarmPriority"]}
+ */
+function normalizePriority(raw) {
+  /** @type {ResolvedConfig["prewarmPriority"]} */
+  const out = [];
+
+  for (const entry of asArray(raw, "cache().prewarm.priority")) {
+    if (entry instanceof RegExp) {
+      out.push({ source: String(entry), test: (pathname) => entry.test(pathname) });
+      continue;
+    }
+
+    const pattern = compilePattern(entry);
+    if (!pattern) continue;
+    out.push({
+      source: pattern.source,
+      test: (pathname) => matchPattern(pattern, pathname) !== null,
+    });
+  }
+
+  return out;
+}
+
+/**
+ * @param {unknown} raw
+ * @returns {{ html: ResolvedConfig["html"], htmlMaxEntries: number,
+ *   data: Record<string, unknown>, prewarm: Record<string, unknown>,
+ *   prewarmPriority: ResolvedConfig["prewarmPriority"] }}
  */
 function normalizeCache(raw) {
   /** @type {ResolvedConfig["html"]} */
@@ -182,7 +220,21 @@ function normalizeCache(raw) {
     html.push({ pattern, seconds: value });
   }
 
-  return { html, prewarm: { ...DEFAULT_PREWARM, ...(raw?.prewarm ?? {}) } };
+  const prewarm = { ...DEFAULT_PREWARM, ...(raw?.prewarm ?? {}) };
+  const maxEntries = Number(raw?.maxEntries);
+
+  return {
+    html,
+    htmlMaxEntries:
+      Number.isFinite(maxEntries) && maxEntries > 0
+        ? Math.floor(maxEntries)
+        : DEFAULT_HTML_CACHE_MAX_ENTRIES,
+    data: { ...DEFAULT_DATA_CACHE, ...(raw?.data ?? {}) },
+    // Desenler derlenmiş hâlde ayrı alanda tutulur: `prewarm` sayısal
+    // ayarların düz torbası olarak kalsın, her turda yeniden derlenmesin.
+    prewarm,
+    prewarmPriority: normalizePriority(prewarm.priority),
+  };
 }
 
 /** Speculation Rules'un tanıdığı eagerness değerleri. */
@@ -388,7 +440,8 @@ export async function loadConfig(options = {}) {
     section("cache"),
   ]);
 
-  const { html, prewarm } = normalizeCache(cache);
+  const { html, htmlMaxEntries, data, prewarm, prewarmPriority } =
+    normalizeCache(cache);
   const dirs = resolveDirs(root, source.paths);
   const brand = { ...DEFAULT_BRAND, ...(source.brand ?? {}) };
 
@@ -400,7 +453,10 @@ export async function loadConfig(options = {}) {
     redirects: normalizeRedirects(redirects),
     rewrites: normalizeRewrites(rewrites),
     html,
+    htmlMaxEntries,
+    data,
     prewarm,
+    prewarmPriority,
     brand,
     hooks: source.hooks ?? {},
     layout: resolveLayout(dirs, source.layout),
