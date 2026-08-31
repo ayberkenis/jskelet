@@ -7,7 +7,11 @@
  *
  * Yenileme WebSocket değil, kısa aralıklı `fetch` ile: panel nadiren ve kısa
  * süre açık kalıyor, kalıcı bir kanal açmanın karşılığı yok.
+ *
+ * Bütün görünen metin `i18n.js` üzerinden geçiyor; sunucudan gelen cevaplar da
+ * metin değil `code` taşıyor, yani dil değişimi tek yerden hallediliyor.
  */
+import { applyTranslations, languageSelect, t } from "./i18n.js";
 
 const REFRESH_MS = 3000;
 
@@ -42,10 +46,14 @@ function formatBytes(bytes) {
  */
 function formatDuration(seconds) {
   const total = Math.max(0, Math.round(seconds));
-  if (total < 60) return `${total}s`;
-  if (total < 3600) return `${Math.floor(total / 60)}m ${total % 60}s`;
-  if (total < 86_400) return `${Math.floor(total / 3600)}h ${Math.floor((total % 3600) / 60)}m`;
-  return `${Math.floor(total / 86_400)}d ${Math.floor((total % 86_400) / 3600)}h`;
+  const [s, m, h, d] = [t("unit.second"), t("unit.minute"), t("unit.hour"), t("unit.day")];
+
+  if (total < 60) return `${total}${s}`;
+  if (total < 3600) return `${Math.floor(total / 60)}${m} ${total % 60}${s}`;
+  if (total < 86_400) {
+    return `${Math.floor(total / 3600)}${h} ${Math.floor((total % 3600) / 60)}${m}`;
+  }
+  return `${Math.floor(total / 86_400)}${d} ${Math.floor((total % 86_400) / 3600)}${h}`;
 }
 
 /**
@@ -117,12 +125,37 @@ async function act(body) {
 
   if (!alive(response)) return;
 
-  const result = await response.json().catch(() => ({ ok: false, message: "Failed" }));
-  toast(result.message ?? (result.ok ? "Done" : "Failed"), result.ok !== false);
+  const result = await response.json().catch(() => null);
+  toast(describe(result), result?.ok !== false);
   await load();
 
   // Cloudflare ayarları değişmiş olabilir; genel bakış önbelleği atlanır.
   if (String(body.type ?? "").startsWith("cf:")) await loadCloudflare(true);
+}
+
+/**
+ * Sunucu cevabını metne çevirir.
+ *
+ * `/action` dil taşımıyor: `{ ok, code, params }` dönüyor ve cümle burada
+ * kuruluyor. Redis sayımı gibi parçalı cevaplar `parts` ile geliyor, çünkü
+ * "veritabanında kaç anahtar var" bilgisi her zaman okunamıyor ve eksik parçayı
+ * cümleden düşürmek tek düzgün yol.
+ *
+ * @param {any} result
+ * @returns {string}
+ */
+function describe(result) {
+  if (!result) return t("toast.failed");
+
+  if (Array.isArray(result.parts)) {
+    const parts = result.parts
+      .map((/** @type {any} */ part) => t(`msg.${part.code}`, part.params))
+      .filter(Boolean);
+    if (parts.length) return parts.join(" · ");
+  }
+
+  if (result.code) return t(`msg.${result.code}`, result.params);
+  return t(result.ok ? "toast.done" : "toast.failed");
 }
 
 /* ------------------------------------------------------------------- çizim */
@@ -144,16 +177,19 @@ function render() {
 
   $("env").textContent = proc.env;
   $("pid").textContent = `pid ${proc.pid}`;
-  $("uptime").textContent = `up ${formatDuration(proc.uptime)}`;
+  $("uptime").textContent = t("chip.up", { value: formatDuration(proc.uptime) });
   $("memory").textContent = `rss ${formatBytes(proc.memory.rss)}`;
 
   $("html-size").textContent = html.size.toLocaleString();
-  $("html-sub").textContent = `limit ${html.maxEntries.toLocaleString()}`;
+  $("html-sub").textContent = t("card.limit", { count: html.maxEntries.toLocaleString() });
   $("html-bytes").textContent = formatBytes(html.bytes);
-  $("html-stale").textContent = `${html.stale} stale`;
+  $("html-stale").textContent = t("card.stale", { count: html.stale });
 
   $("data-size").textContent = data.size.toLocaleString();
-  $("data-sub").textContent = `${data.stale} stale · limit ${data.maxEntries.toLocaleString()}`;
+  $("data-sub").textContent = t("card.staleAndLimit", {
+    stale: data.stale,
+    limit: data.maxEntries.toLocaleString(),
+  });
 
   const redisState = !redis.enabled
     ? "off"
@@ -163,22 +199,22 @@ function render() {
         ? "connected"
         : "disconnected";
 
-  $("redis-state").textContent = redisState;
+  $("redis-state").textContent = t(`state.${redisState}`);
   $("redis-sub").textContent = redis.enabled
-    ? `${redis.address} · ${redis.errors} errors`
-    : "cache.redis.enabled is false";
+    ? t("redis.sub", { address: redis.address, errors: redis.errors })
+    : t("redis.disabled");
 
   renderRedis(redis, redisState);
   renderHost(host, proc, redis);
 
   const done = prewarm.done ?? 0;
   const total = prewarm.total ?? 0;
-  $("prewarm-state").textContent = prewarm.active ? `${done}/${total}` : "idle";
+  $("prewarm-state").textContent = prewarm.active ? `${done}/${total}` : t("state.idle");
   $("prewarm-sub").textContent = prewarm.active
-    ? "round in progress"
+    ? t("prewarm.inProgress")
     : total
-      ? `last round: ${done}/${total}`
-      : "no round yet";
+      ? t("prewarm.lastRound", { done, total })
+      : t("prewarm.never");
 
   renderTable();
 }
@@ -212,10 +248,10 @@ function renderCloudflare() {
   const zone = cloudflare.zone ?? null;
 
   $("cf-heading").textContent = ok
-    ? [zone?.name, zone?.plan].filter(Boolean).join(" · ") || "connected"
+    ? [zone?.name, zone?.plan].filter(Boolean).join(" · ") || t("state.connected")
     : status.configured
-      ? `error: ${cloudflare.error}`
-      : "not connected";
+      ? t("cf.error", { error: cloudflare.error })
+      : t("cf.notConnected");
 
   $("cf-tools").hidden = !ok;
   $("cf-suggest").hidden = ok || status.configured;
@@ -231,24 +267,28 @@ function renderCloudflare() {
 
   /** @type {[string, string, string?][]} */
   const rows = [
-    ["Zone", `${zone?.name ?? "—"} (${status.zoneId ?? "?"})`],
-    ["Plan", zone?.plan ?? "—"],
-    ["Token", status.tokenSource === "env" ? "from environment" : "from config", "on"],
+    [t("cf.zone"), `${zone?.name ?? "—"} (${status.zoneId ?? "?"})`],
+    [t("cf.plan"), zone?.plan ?? "—"],
     [
-      "Development mode",
+      t("cf.token"),
+      status.tokenSource === "env" ? t("cf.token.env") : t("cf.token.config"),
+      "on",
+    ],
+    [
+      t("cf.devModeLabel"),
       development
-        ? `on · ${formatDuration(settings.developmentModeRemaining)} left`
-        : "off",
+        ? t("cf.devMode.on", { time: formatDuration(settings.developmentModeRemaining) })
+        : t("state.off"),
       development ? "bad" : "on",
     ],
-    ["Cache level", String(settings.cacheLevel ?? "—")],
-    ["Browser cache TTL", ttl(settings.browserCacheTtl)],
-    ["Edge cache TTL", ttl(settings.edgeCacheTtl)],
-    ["Query string sorting", String(settings.sortQueryString ?? "—")],
-    ["Always Online", String(settings.alwaysOnline ?? "—")],
-    ...feature("Tiered Cache", settings.tieredCaching),
-    ...feature("Regional Tiered Cache", settings.regionalTieredCache),
-    ...feature("Cache Reserve", settings.cacheReserve),
+    [t("cf.cacheLevel"), String(settings.cacheLevel ?? "—")],
+    [t("cf.browserTtl"), ttl(settings.browserCacheTtl)],
+    [t("cf.edgeTtl"), ttl(settings.edgeCacheTtl)],
+    [t("cf.sortQuery"), String(settings.sortQueryString ?? "—")],
+    [t("cf.alwaysOnline"), String(settings.alwaysOnline ?? "—")],
+    ...feature(t("cf.tiered"), settings.tieredCaching),
+    ...feature(t("cf.regionalTiered"), settings.regionalTieredCache),
+    ...feature(t("cf.reserve"), settings.cacheReserve),
   ];
 
   $("cf-kv").replaceChildren(...rows.map(kvRow));
@@ -264,9 +304,10 @@ function renderCloudflare() {
  */
 function feature(label, value) {
   if (value === null || value === undefined) {
-    return [[label, "unavailable on this plan", "off"]];
+    return [[label, t("cf.unavailablePlan"), "off"]];
   }
-  return [[label, value, value === "on" ? "on" : "off"]];
+  const on = value === "on";
+  return [[label, on ? t("state.on") : t("state.off"), on ? "on" : "off"]];
 }
 
 /**
@@ -277,7 +318,7 @@ function ttl(seconds) {
   const value = Number(seconds);
   if (!Number.isFinite(value)) return "—";
   // Cloudflare 0'ı "Respect Existing Headers" olarak kullanıyor.
-  if (value === 0) return "respect origin headers";
+  if (value === 0) return t("cf.respectOrigin");
   return formatDuration(value);
 }
 
@@ -305,7 +346,7 @@ async function loadCloudflareAnalytics() {
   const target = $("cf-report");
 
   target.hidden = false;
-  target.textContent = "Querying Cloudflare…";
+  target.textContent = t("cf.querying");
 
   const response = await fetch("cloudflare/analytics", {
     method: "POST",
@@ -321,20 +362,35 @@ async function loadCloudflareAnalytics() {
   const result = await response.json().catch(() => null);
 
   if (!result?.ok) {
-    target.textContent = `Cloudflare: ${result?.error ?? "query failed"}`;
+    target.textContent = t("msg.cf.failed", { error: result?.error ?? t("cf.queryFailed") });
     return;
   }
 
-  target.replaceChildren(
+  // Son dökümü dil değişiminde yeniden kurmak için saklanır: tablo ağdan
+  // geliyor ve dil değişti diye Cloudflare'e yeniden gitmek gereksiz.
+  lastReport = result;
+  renderReport();
+}
+
+/** @type {any} */
+let lastReport = null;
+
+function renderReport() {
+  if (!lastReport) return;
+  const result = lastReport;
+
+  $("cf-report").replaceChildren(
     result.colos ? edgeTable(result) : statusTable(result),
     note(
       result.colos
-        ? `${result.colos.length} colos served \`${result.path}\` in the last ` +
-            `${result.hours}h — ${result.hits} from cache, ${result.misses} not. ` +
-            "Edges that received no request do not appear, even if they hold a copy."
-        : `Zone-wide cache status over the last ${result.hours}h. ` +
-            "Numbers come from Cloudflare's sampled dataset: ratios are reliable, " +
-            "absolute counts are estimates.",
+        ? t("cf.edgeNote", {
+            colos: result.colos.length,
+            path: result.path,
+            hours: result.hours,
+            hits: result.hits,
+            misses: result.misses,
+          })
+        : t("cf.zoneNote", { hours: result.hours }),
     ),
   );
 }
@@ -345,7 +401,7 @@ async function loadCloudflareAnalytics() {
  */
 function edgeTable(result) {
   return buildTable(
-    ["Colo", "From cache", "To origin"],
+    [t("cf.colo"), t("cf.fromCache"), t("cf.toOrigin")],
     result.colos.map((/** @type {any} */ row) => [
       row.colo,
       String(row.hits),
@@ -362,7 +418,7 @@ function statusTable(result) {
   const total = result.rows.reduce((sum, /** @type {any} */ row) => sum + row.requests, 0) || 1;
 
   return buildTable(
-    ["Cache status", "Requests", "Share", "Edge bytes"],
+    [t("cf.cacheStatus"), t("cf.requests"), t("cf.share"), t("cf.edgeBytes")],
     result.rows.map((/** @type {any} */ row) => [
       row.status,
       row.requests.toLocaleString(),
@@ -425,37 +481,53 @@ function note(text) {
  * @param {string} state
  */
 function renderRedis(redis, state) {
-  $("redis-heading").textContent = redis.enabled ? state : "not configured";
+  $("redis-heading").textContent = redis.enabled ? t(`state.${state}`) : t("state.notConfigured");
   $("redis-actions").hidden = !redis.enabled;
   $("redis-suggest").hidden = redis.enabled;
 
   /** @type {[string, string, string?][]} */
   const rows = redis.enabled
     ? [
-        ["Connection", state, redis.connected && !redis.bypassed ? "on" : "bad"],
-        ["Address", `${redis.address}${redis.secure ? " (TLS)" : ""}`],
-        ["Database", redis.db ?? "default"],
-        ["Key prefix", `${redis.keyPrefix}:${redis.namespace}`],
-        ["Build id", redis.buildId || "dev"],
-        ["Shares HTML", redis.html ? "yes" : "no", redis.html ? "on" : "off"],
-        ["Shares data", redis.data ? "yes" : "no", redis.data ? "on" : "off"],
         [
-          "Compressed bodies",
-          redis.storeEncoded ? "shared" : "local only",
+          t("redis.connection"),
+          t(`state.${state}`),
+          redis.connected && !redis.bypassed ? "on" : "bad",
+        ],
+        [t("redis.address"), `${redis.address}${redis.secure ? " (TLS)" : ""}`],
+        [t("redis.database"), redis.db ?? t("state.default")],
+        [t("redis.keyPrefix"), `${redis.keyPrefix}:${redis.namespace}`],
+        [t("redis.buildId"), redis.buildId || "dev"],
+        [
+          t("redis.sharesHtml"),
+          redis.html ? t("state.yes") : t("state.no"),
+          redis.html ? "on" : "off",
+        ],
+        [
+          t("redis.sharesData"),
+          redis.data ? t("state.yes") : t("state.no"),
+          redis.data ? "on" : "off",
+        ],
+        [
+          t("redis.compressed"),
+          redis.storeEncoded ? t("redis.compressed.shared") : t("redis.compressed.local"),
           redis.storeEncoded ? "on" : "off",
         ],
         [
-          "Purge broadcast",
-          redis.events ? (redis.subscribed ? "subscribed" : "publish only") : "off",
+          t("redis.broadcast"),
+          redis.events
+            ? redis.subscribed
+              ? t("redis.broadcast.subscribed")
+              : t("redis.broadcast.publish")
+            : t("state.off"),
           redis.events && redis.subscribed ? "on" : "off",
         ],
-        ["Command timeout", `${redis.commandTimeoutMs} ms`],
-        ["Command errors", String(redis.errors), redis.errors ? "bad" : "on"],
+        [t("redis.timeout"), `${redis.commandTimeoutMs} ${t("unit.ms")}`],
+        [t("redis.errors"), String(redis.errors), redis.errors ? "bad" : "on"],
       ]
     : [
-        ["Tier", "in-process only"],
-        ["Replicas sharing this cache", "none"],
-        ["Purge broadcast", "local only", "off"],
+        [t("redis.tier"), t("redis.tier.inProcess")],
+        [t("redis.replicas"), t("state.none")],
+        [t("redis.broadcast"), t("redis.broadcast.local"), "off"],
       ];
 
   $("redis-kv").replaceChildren(...rows.map(kvRow));
@@ -484,14 +556,16 @@ function renderHost(host, proc, redis) {
     `${formatBytes(host.memory.used)} / ${formatBytes(host.memory.total)}`;
   meter("ram-bar", ramUsed);
   $("ram-note").textContent = redis.connected
-    ? `This process: ${formatBytes(proc.memory.rss)} RSS.`
-    : `This process holds the whole cache: ${formatBytes(proc.memory.rss)} RSS, ` +
-      `${formatBytes(latest.html.bytes)} of it HTML.`;
+    ? t("host.ramShared", { rss: formatBytes(proc.memory.rss) })
+    : t("host.ramOnly", {
+        rss: formatBytes(proc.memory.rss),
+        html: formatBytes(latest.html.bytes),
+      });
 
   if (!host.disk) {
-    $("disk-text").textContent = "unavailable";
+    $("disk-text").textContent = t("state.unavailable");
     meter("disk-bar", 0);
-    $("disk-note").textContent = "This platform does not report filesystem stats.";
+    $("disk-note").textContent = t("host.noStats");
     return;
   }
 
@@ -500,8 +574,10 @@ function renderHost(host, proc, redis) {
     `${formatBytes(host.disk.total - host.disk.free)} / ${formatBytes(host.disk.total)}`;
   meter("disk-bar", diskUsed);
   // Önbellek diske yazılmıyor; disk build çıktısı ve log için önemli.
-  $("disk-note").textContent =
-    `${formatBytes(host.disk.free)} free on ${host.disk.path} — build output and logs live here.`;
+  $("disk-note").textContent = t("host.diskNote", {
+    free: formatBytes(host.disk.free),
+    path: host.disk.path,
+  });
 }
 
 /**
@@ -522,13 +598,31 @@ function renderTable() {
 
   $("listed").textContent =
     source.matched > source.entries.length
-      ? `${source.entries.length} of ${source.matched} shown`
-      : `${source.matched} shown`;
+      ? t("entries.shownPartial", { shown: source.entries.length, total: source.matched })
+      : t("entries.shown", { total: source.matched });
 
-  thead.innerHTML =
+  const columns =
     tab === "html"
-      ? `<tr><th>Key</th><th>State</th><th class="num">Size</th><th class="num">Status</th><th class="num">Expires</th><th class="num">Deps</th><th>Encodings</th><th></th></tr>`
-      : `<tr><th>Key</th><th>State</th><th class="num">Expires</th><th></th></tr>`;
+      ? [
+          ["entries.key"],
+          ["entries.state"],
+          ["entries.size", "num"],
+          ["entries.status", "num"],
+          ["entries.expires", "num"],
+          ["entries.deps", "num"],
+          ["entries.encodings"],
+          [null],
+        ]
+      : [["entries.key"], ["entries.state"], ["entries.expires", "num"], [null]];
+
+  const headRow = document.createElement("tr");
+  for (const [key, className] of columns) {
+    const th = document.createElement("th");
+    if (className) th.className = className;
+    if (key) th.textContent = t(key);
+    headRow.append(th);
+  }
+  thead.replaceChildren(headRow);
 
   tbody.replaceChildren(
     ...source.entries.map((/** @type {any} */ entry) => row(entry)),
@@ -563,7 +657,7 @@ function row(entry) {
     const copy = document.createElement("button");
     copy.className = "as-text";
     copy.type = "button";
-    copy.title = "Copy key";
+    copy.title = t("entries.copyKey");
     copy.textContent = entry.key;
     copy.addEventListener("click", () => void copyKey(entry.key));
     key.append(copy);
@@ -574,7 +668,7 @@ function row(entry) {
   const state = document.createElement("td");
   const tag = document.createElement("span");
   tag.className = entry.stale ? "tag stale" : "tag fresh";
-  tag.textContent = entry.stale ? "stale" : "fresh";
+  tag.textContent = entry.stale ? t("entries.stale") : t("entries.fresh");
   state.append(tag);
   tr.append(state);
 
@@ -598,8 +692,8 @@ function row(entry) {
   if (tab === "html" && cloudflare?.ok) {
     const purge = document.createElement("button");
     purge.className = "tiny";
-    purge.textContent = "cf purge";
-    purge.title = "Purge this URL at Cloudflare";
+    purge.textContent = t("cf.rowPurge");
+    purge.title = t("cf.rowPurgeTitle");
     purge.addEventListener("click", () => {
       void act({ type: "cf:purge-urls", paths: [entry.url] });
     });
@@ -608,7 +702,7 @@ function row(entry) {
 
   const drop = document.createElement("button");
   drop.className = "tiny danger";
-  drop.textContent = "drop";
+  drop.textContent = t("entries.drop");
   drop.addEventListener("click", () => {
     void act({ type: tab === "html" ? "html:drop" : "data:drop", key: entry.key });
   });
@@ -628,11 +722,11 @@ function row(entry) {
 async function copyKey(key) {
   try {
     await navigator.clipboard.writeText(key);
-    toast("Key copied");
+    toast(t("toast.keyCopied"));
   } catch {
     $("prefix").value = key;
     $("prefix").focus();
-    toast("Clipboard is unavailable — key moved to the prefix field", false);
+    toast(t("toast.clipboard"), false);
   }
 }
 
@@ -694,7 +788,7 @@ for (const name of /** @type {const} */ (["html", "data"])) {
 $("invalidate").addEventListener("click", () => {
   const target = $("target").value.trim();
   if (!target) {
-    toast("Enter a path or pattern first.", false);
+    toast(t("toast.needTarget"), false);
     return;
   }
 
@@ -702,13 +796,13 @@ $("invalidate").addEventListener("click", () => {
 });
 
 $("clear-html").addEventListener("click", () => {
-  if (!confirm("Clear the entire HTML cache? Every page goes cold.")) return;
+  if (!confirm(t("confirm.clearHtml"))) return;
   void act({ type: "html:clear" });
 });
 
 $("clear-data").addEventListener("click", () => {
   const prefix = $("prefix").value.trim();
-  if (!prefix && !confirm("Clear every data entry? Upstream traffic will spike.")) {
+  if (!prefix && !confirm(t("confirm.clearData"))) {
     return;
   }
 
@@ -734,7 +828,7 @@ $("redis-data").addEventListener("click", () =>
 $("cf-refresh").addEventListener("click", () => void loadCloudflare(true));
 
 $("cf-purge-all").addEventListener("click", () => {
-  if (!confirm("Purge the entire Cloudflare cache for this zone?")) return;
+  if (!confirm(t("confirm.purgeAll"))) return;
   void act({ type: "cf:purge-everything" });
 });
 
@@ -743,18 +837,18 @@ $("cf-purge-all").addEventListener("click", () => {
 $("cf-purge-cached").addEventListener("click", () => {
   const paths = (latest?.html.entries ?? []).map((/** @type {any} */ entry) => entry.url);
   if (!paths.length) {
-    toast("No cached pages to purge.", false);
+    toast(t("toast.noCachedPages"), false);
     return;
   }
 
-  if (!confirm(`Purge ${paths.length} URLs at Cloudflare?`)) return;
+  if (!confirm(t("confirm.purgeUrls", { count: paths.length }))) return;
   void act({ type: "cf:purge-urls", paths });
 });
 
 $("cf-purge-keys").addEventListener("click", () => {
   const values = $("cf-values").value.trim();
   if (!values) {
-    toast("Enter at least one value.", false);
+    toast(t("toast.needValue"), false);
     return;
   }
 
@@ -777,9 +871,7 @@ $("cf-reserve").addEventListener("click", () => {
 });
 
 $("cf-reserve-clear").addEventListener("click", () => {
-  if (!confirm("Clear Cache Reserve? Cloudflare will refetch everything from the origin.")) {
-    return;
-  }
+  if (!confirm(t("confirm.clearReserve"))) return;
   void act({ type: "cf:clear-reserve" });
 });
 
@@ -802,6 +894,21 @@ document.addEventListener("visibilitychange", () => {
     startPolling();
   }
 });
+
+/* -------------------------------------------------------------------- dil */
+
+// Dil değişimi hiçbir isteğe yol açmaz: statik metinler sözlükten yeniden
+// yazılır, dinamik olanlar elde duran son dökümle tekrar çizilir.
+$("language").append(
+  languageSelect(() => {
+    applyTranslations();
+    if (latest) render();
+    renderCloudflare();
+    renderReport();
+  }),
+);
+
+applyTranslations();
 
 void load();
 void loadCloudflare();

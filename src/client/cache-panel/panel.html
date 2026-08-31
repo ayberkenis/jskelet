@@ -18,7 +18,7 @@
       </div>
 
       <nav class="crumbs" aria-label="Panel">
-        <span aria-current="page">Cache</span>
+        <span aria-current="page" data-i18n="nav.cache">Cache</span>
       </nav>
 
       <span class="spacer"></span>
@@ -28,62 +28,67 @@
       <span class="chip" id="uptime">—</span>
       <span class="chip" id="memory">—</span>
 
+      <span id="language"></span>
+
       <label class="check">
         <input type="checkbox" id="auto" checked />
-        live
+        <span data-i18n="shell.live">live</span>
       </label>
-      <button id="refresh">Refresh</button>
-      <button id="logout">Sign out</button>
+      <button id="refresh" data-i18n="shell.refresh">Refresh</button>
+      <button id="logout" data-i18n="shell.signOut">Sign out</button>
     </header>
 
     <main>
       <div class="cards">
         <div class="card">
-          <div class="label">HTML entries</div>
+          <div class="label" data-i18n="card.htmlEntries">HTML entries</div>
           <div class="value" id="html-size">—</div>
           <div class="sub" id="html-sub">—</div>
         </div>
         <div class="card">
-          <div class="label">HTML in memory</div>
+          <div class="label" data-i18n="card.htmlMemory">HTML in memory</div>
           <div class="value" id="html-bytes">—</div>
           <div class="sub" id="html-stale">—</div>
         </div>
         <div class="card">
-          <div class="label">Data entries</div>
+          <div class="label" data-i18n="card.dataEntries">Data entries</div>
           <div class="value" id="data-size">—</div>
           <div class="sub" id="data-sub">—</div>
         </div>
         <div class="card">
-          <div class="label">Shared tier</div>
+          <div class="label" data-i18n="card.sharedTier">Shared tier</div>
           <div class="value" id="redis-state">—</div>
           <div class="sub" id="redis-sub">—</div>
         </div>
         <div class="card">
-          <div class="label">Prewarm</div>
+          <div class="label" data-i18n="card.prewarm">Prewarm</div>
           <div class="value" id="prewarm-state">—</div>
           <div class="sub" id="prewarm-sub">—</div>
         </div>
       </div>
 
       <section>
-        <h2>Shared tier <span class="count" id="redis-heading">—</span></h2>
+        <h2>
+          <span data-i18n="redis.section">Shared tier</span>
+          <span class="count" id="redis-heading">—</span>
+        </h2>
         <div class="body">
           <dl class="kv" id="redis-kv"></dl>
 
           <div class="row" id="redis-actions" hidden>
-            <button id="redis-inspect">Count keys in Redis</button>
-            <button class="danger" id="redis-html">Drop shared HTML keys</button>
-            <button class="danger" id="redis-data">Drop shared data keys</button>
+            <button id="redis-inspect" data-i18n="redis.inspect">Count keys in Redis</button>
+            <button class="danger" id="redis-html" data-i18n="redis.dropHtml">
+              Drop shared HTML keys
+            </button>
+            <button class="danger" id="redis-data" data-i18n="redis.dropData">
+              Drop shared data keys
+            </button>
           </div>
 
           <div class="suggest" id="redis-suggest" hidden>
             <p class="m0">
-              <strong>No shared tier.</strong> Every entry above lives in this
-              process only, so each replica warms up on its own and an
-              invalidation reaches whichever replica received the request.
-              Adding Redis keeps the in-process cache primary and only does what
-              a single process cannot: serve HTML another replica already
-              rendered, and broadcast purges to all of them.
+              <strong data-i18n="redis.suggest.title">No shared tier.</strong>
+              <span data-i18n="redis.suggest.body"></span>
             </p>
             <pre><code>npm install ioredis</code></pre>
             <pre><code>// jskelet.config.mjs
@@ -92,19 +97,17 @@ cache() {
     redis: { enabled: true, url: process.env.REDIS_URL },
   };
 }</code></pre>
-            <p class="hint m0">
-              Worth it from the second replica onwards. On a single instance the
-              gain is close to zero, which is why it is off by default.
-            </p>
+            <p class="hint m0" data-i18n="redis.suggest.hint"></p>
           </div>
         </div>
       </section>
 
       <section>
         <h2>
-          Cloudflare <span class="count" id="cf-heading">—</span>
+          <span data-i18n="cf.section">Cloudflare</span>
+          <span class="count" id="cf-heading">—</span>
           <span class="tabs">
-            <button id="cf-refresh">Refresh</button>
+            <button id="cf-refresh" data-i18n="cf.refresh">Refresh</button>
           </span>
         </h2>
         <div class="body">
@@ -112,34 +115,40 @@ cache() {
 
           <div id="cf-tools" hidden>
             <div class="row">
-              <button class="danger" id="cf-purge-all">Purge everything</button>
-              <button id="cf-purge-cached">Purge URLs cached here</button>
+              <button class="danger" id="cf-purge-all" data-i18n="cf.purgeAll">
+                Purge everything
+              </button>
+              <button id="cf-purge-cached" data-i18n="cf.purgeCached">
+                Purge URLs cached here
+              </button>
               <label class="check">
                 <input type="checkbox" id="cf-dev" />
-                development mode (bypass cache for 3h)
+                <span data-i18n="cf.devMode"></span>
               </label>
             </div>
 
             <div class="row">
               <select id="cf-kind">
-                <option value="prefixes">prefixes</option>
-                <option value="hosts">hosts</option>
-                <option value="tags">cache tags</option>
+                <option value="prefixes" data-i18n="cf.kind.prefixes">prefixes</option>
+                <option value="hosts" data-i18n="cf.kind.hosts">hosts</option>
+                <option value="tags" data-i18n="cf.kind.tags">cache tags</option>
               </select>
               <input
                 class="grow"
                 type="text"
                 id="cf-values"
                 spellcheck="false"
-                placeholder="example.com/news  ·  space or comma separated, 100 per request"
+                data-i18n-ph="cf.values.placeholder"
               />
-              <button class="primary" id="cf-purge-keys">Purge</button>
+              <button class="primary" id="cf-purge-keys" data-i18n="cf.purge">Purge</button>
             </div>
 
             <div class="row">
-              <button id="cf-tiered">Toggle Tiered Cache</button>
-              <button id="cf-reserve">Toggle Cache Reserve</button>
-              <button class="danger" id="cf-reserve-clear">Clear Cache Reserve</button>
+              <button id="cf-tiered" data-i18n="cf.toggleTiered">Toggle Tiered Cache</button>
+              <button id="cf-reserve" data-i18n="cf.toggleReserve">Toggle Cache Reserve</button>
+              <button class="danger" id="cf-reserve-clear" data-i18n="cf.clearReserve">
+                Clear Cache Reserve
+              </button>
             </div>
 
             <div class="row">
@@ -148,49 +157,37 @@ cache() {
                 type="text"
                 id="cf-path"
                 spellcheck="false"
-                placeholder="/news/some-post — which edges served this path (blank = whole zone)"
+                data-i18n-ph="cf.path.placeholder"
               />
-              <button id="cf-analytics">Query analytics</button>
+              <button id="cf-analytics" data-i18n="cf.queryAnalytics">Query analytics</button>
             </div>
 
             <div id="cf-report" class="report" hidden></div>
 
-            <p class="hint">
-              Cloudflare has no endpoint that lists which edges currently hold a
-              copy of a URL, and no way to warm a chosen edge from the origin —
-              an object only enters an edge cache through a real request routed
-              there. What you get above is observation: which colos served the
-              path from cache and which went to the origin. Warming is our
-              prewarm pass plus Tiered Cache or Cache Reserve behind it.
-            </p>
+            <p class="hint" data-i18n="cf.edgeHint"></p>
           </div>
 
           <div class="suggest" id="cf-suggest" hidden>
             <p class="m0">
-              <strong>Cloudflare is not connected.</strong> The cache above is
-              the origin cache; the copy your visitors actually get is at the
-              edge. Connecting a zone lets a purge here reach both, and shows
-              the cache hit ratio that decides whether the origin cache is even
-              being asked.
+              <strong data-i18n="cf.suggest.title">Cloudflare is not connected.</strong>
+              <span data-i18n="cf.suggest.body"></span>
             </p>
             <pre><code>JSKELET_CLOUDFLARE_KEY=your_api_token
 JSKELET_CLOUDFLARE_ZONE_ID=your_zone_id</code></pre>
-            <p class="hint m0">
-              Token permissions: <code>Zone.Cache Purge</code> to purge,
-              <code>Zone.Zone Settings</code> to change settings,
-              <code>Zone.Analytics</code> (read) for the hit ratio. The token is
-              read from the environment and never leaves the server.
-            </p>
+            <p class="hint m0" data-i18n-html="cf.suggest.hint"></p>
           </div>
         </div>
       </section>
 
       <section>
-        <h2>Host <span class="count" id="host-heading">—</span></h2>
+        <h2>
+          <span data-i18n="host.section">Host</span>
+          <span class="count" id="host-heading">—</span>
+        </h2>
         <div class="body">
           <div class="meter">
             <div class="meter-head">
-              <span>Memory</span>
+              <span data-i18n="host.memory">Memory</span>
               <span class="mono" id="ram-text">—</span>
             </div>
             <div class="bar"><span id="ram-bar"></span></div>
@@ -199,7 +196,7 @@ JSKELET_CLOUDFLARE_ZONE_ID=your_zone_id</code></pre>
 
           <div class="meter">
             <div class="meter-head">
-              <span>Disk</span>
+              <span data-i18n="host.disk">Disk</span>
               <span class="mono" id="disk-text">—</span>
             </div>
             <div class="bar"><span id="disk-bar"></span></div>
@@ -209,7 +206,7 @@ JSKELET_CLOUDFLARE_ZONE_ID=your_zone_id</code></pre>
       </section>
 
       <section>
-        <h2>Actions</h2>
+        <h2><span data-i18n="actions.section">Actions</span></h2>
         <div class="body">
           <div class="row">
             <input
@@ -217,13 +214,15 @@ JSKELET_CLOUDFLARE_ZONE_ID=your_zone_id</code></pre>
               type="text"
               id="target"
               spellcheck="false"
-              placeholder="/news/:slug  ·  /news/some-post  ·  invalidation target"
+              data-i18n-ph="actions.target.placeholder"
             />
             <label class="check">
               <input type="checkbox" id="hard" />
-              hard (delete instead of marking stale)
+              <span data-i18n="actions.hard"></span>
             </label>
-            <button class="primary" id="invalidate">Invalidate</button>
+            <button class="primary" id="invalidate" data-i18n="actions.invalidate">
+              Invalidate
+            </button>
           </div>
 
           <div class="row">
@@ -232,31 +231,33 @@ JSKELET_CLOUDFLARE_ZONE_ID=your_zone_id</code></pre>
               type="text"
               id="prefix"
               spellcheck="false"
-              placeholder="data key prefix — empty clears every data entry"
+              data-i18n-ph="actions.prefix.placeholder"
             />
-            <button class="danger" id="clear-data">Clear data cache</button>
-            <button class="danger" id="clear-html">Clear HTML cache</button>
+            <button class="danger" id="clear-data" data-i18n="actions.clearData">
+              Clear data cache
+            </button>
+            <button class="danger" id="clear-html" data-i18n="actions.clearHtml">
+              Clear HTML cache
+            </button>
           </div>
 
           <div class="row">
-            <button id="prewarm">Prewarm all paths</button>
+            <button id="prewarm" data-i18n="actions.prewarm">Prewarm all paths</button>
           </div>
 
-          <p class="hint">
-            Invalidation marks entries stale by default: visitors keep getting
-            the old HTML while a single background refresh runs. Hard mode
-            deletes them, so the next visitor waits for a cold render.
-          </p>
+          <p class="hint" data-i18n="actions.hint"></p>
         </div>
       </section>
 
       <section>
         <h2>
-          Entries
+          <span data-i18n="entries.section">Entries</span>
           <span class="count" id="listed">—</span>
           <span class="tabs" role="tablist">
             <button id="tab-html" role="tab" aria-selected="true">HTML</button>
-            <button id="tab-data" role="tab" aria-selected="false">Data</button>
+            <button id="tab-data" role="tab" aria-selected="false" data-i18n="tab.data">
+              Data
+            </button>
           </span>
         </h2>
         <div class="body">
@@ -266,7 +267,7 @@ JSKELET_CLOUDFLARE_ZONE_ID=your_zone_id</code></pre>
               type="search"
               id="search"
               spellcheck="false"
-              placeholder="Filter by key"
+              data-i18n-ph="entries.search"
             />
           </div>
         </div>
@@ -275,7 +276,7 @@ JSKELET_CLOUDFLARE_ZONE_ID=your_zone_id</code></pre>
             <thead id="thead"></thead>
             <tbody id="tbody"></tbody>
           </table>
-          <div class="empty" id="empty" hidden>No entries.</div>
+          <div class="empty" id="empty" data-i18n="entries.empty" hidden>No entries.</div>
         </div>
       </section>
     </main>
@@ -292,11 +293,11 @@ JSKELET_CLOUDFLARE_ZONE_ID=your_zone_id</code></pre>
           GitHub
         </a>
         <span class="dot" aria-hidden="true">·</span>
-        <span>Cache panel</span>
+        <span data-i18n="footer.panel">Cache panel</span>
         <span class="dot" aria-hidden="true">·</span>
         <span class="live">
           <span class="pulse"></span>
-          Password rotates on restart
+          <span data-i18n="footer.rotates">Password rotates on restart</span>
         </span>
       </div>
     </footer>

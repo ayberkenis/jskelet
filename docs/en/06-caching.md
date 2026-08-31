@@ -837,7 +837,7 @@ When the panel is on, the server log prints the password:
 
 | Area | Contents |
 | --- | --- |
-| Top bar | Version, environment, pid, uptime, RSS |
+| Top bar | Version, environment, pid, uptime, RSS and the language picker (Turkish / English) |
 | Cards | HTML entry count and limit, HTML bytes in memory, stale entry count, data entry count, Redis state (`connected` / `bypassed` / `off`), prewarm progress |
 | Shared tier | **Where** the connection points (address, TLS, database), the key prefix and `namespace`, the `buildId`, which kinds are shared, the state of compressed bodies and the purge broadcast, the command timeout and the error count. When it is off, a Redis recommendation with an install snippet takes its place. |
 | Cloudflare | Zone, plan, cache related zone settings, how long development mode has left, Tiered Cache / Cache Reserve state and the cache hit ratio. When no zone is connected, a setup snippet takes its place. |
@@ -867,6 +867,13 @@ export content.
 Each one propagates to the shared tier as well: clearing a single replica's
 cache is what produces the "I cleared it and it is still old" question in a
 clustered setup.
+
+The panel speaks two languages: the picker in the header switches between
+Turkish and English. The first visit follows the browser, the choice is kept in
+`localStorage` and applies to the login page too. Switching costs no request.
+The server never knows the interface language: an `/action` response returns a
+code rather than a sentence (`{ ok, code, params }`) and the panel builds the
+text — so the framework's log and API stay in one language.
 
 Dropping a single row is not the same as `invalidateHtmlCache()`: that one
 matches a path pattern and takes down **every** query variant of a path, while

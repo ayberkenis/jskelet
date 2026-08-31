@@ -33,6 +33,13 @@ one is listed under a **Breaking** heading.
   hours, and every banned or unauthorised response is a `404` rather than a 401
   that would confirm the panel exists. The panel is excluded from indexing,
   prewarming and navigation speculation.
+- A language picker in the cache panel header, Turkish and English. The first
+  visit follows the browser's language, the choice is kept in `localStorage` and
+  carries over to the login page, and switching costs no request. To keep this
+  from leaking UI concerns into the server, an `/action` response now returns
+  `{ ok, code, params }` instead of an English sentence and the panel builds the
+  text — the framework's log and API stay in one language while the panel
+  speaks two.
 - Cloudflare cache management, from the panel and from code. Set
   `JSKELET_CLOUDFLARE_KEY` and `JSKELET_CLOUDFLARE_ZONE_ID` (or
   `cache().cloudflare`) and the panel gains the CDN tier next to the origin one:

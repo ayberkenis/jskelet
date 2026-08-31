@@ -815,7 +815,7 @@ Panel açıldığında sunucu logu şifreyi basar:
 
 | Bölüm | Gösterdiği |
 | --- | --- |
-| Üst satır | Sürüm, ortam, pid, uptime, RSS |
+| Üst satır | Sürüm, ortam, pid, uptime, RSS ve dil seçimi (Türkçe / İngilizce) |
 | Kartlar | HTML girdi sayısı ve sınırı, bellekteki HTML boyutu, bayat girdi sayısı, veri girdisi sayısı, Redis durumu (`connected` / `bypassed` / `off`), ısıtma turunun ilerlemesi |
 | Paylaşımlı kademe | Bağlantının **nereye** kurulduğu (adres, TLS, veritabanı), anahtar öneki ve `namespace`, `buildId`, hangi türlerin paylaşıldığı, sıkıştırılmış gövde ve purge yayını durumu, komut zaman aşımı ve hata sayısı. Kapalıysa yerine Redis önerisi ve kurulum parçacığı çıkar. |
 | Cloudflare | Zone, plan, cache ile ilgili zone ayarları, development mode'un kalan süresi, Tiered Cache / Cache Reserve durumu ve cache isabet oranı. Bağlı değilse kurulum parçacığı çıkar. |
@@ -844,6 +844,13 @@ değil.
 
 Hepsi paylaşımlı kademeye de yayılır: tek kopyanın önbelleğini boşaltmak,
 kümede çalışan bir kurulumda "temizledim ama hâlâ eski" sorusunu üretir.
+
+Panel iki dilde: header'daki seçici Türkçe ile İngilizce arasında geçiş yapar.
+İlk açılışta tarayıcının diline bakılır, seçim `localStorage`'da tutulur ve
+giriş sayfasına da uygulanır. Dil değişimi hiçbir isteğe yol açmaz. Sunucu
+tarafı arayüz dilini hiç bilmez: `/action` cevabı metin değil bir kod döner
+(`{ ok, code, params }`) ve cümleyi panel kurar — framework'ün log'u ve API'si
+tek dilde kalır.
 
 Listedeki tek satırı silmek `invalidateHtmlCache()`ten farklıdır: o yol
 desenine bakar ve bir yolun **bütün** query varyantlarını düşürür,

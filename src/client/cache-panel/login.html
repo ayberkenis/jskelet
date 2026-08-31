@@ -14,12 +14,10 @@
       <div class="brand">
         <img src="logo.png" alt="" width="30" height="30" />
         <span class="wordmark">JSkelet</span>
+        <span id="language"></span>
       </div>
-      <h1>Cache panel</h1>
-      <p>
-        This run's password is printed in the server log
-        (<code>[cache-panel]</code>).
-      </p>
+      <h1 data-i18n="login.title">Cache panel</h1>
+      <p data-i18n-html="login.lead"></p>
       <input
         id="password"
         type="password"
@@ -27,20 +25,28 @@
         maxlength="64"
         spellcheck="false"
         autocomplete="off"
-        placeholder="32-character password"
+        data-i18n-ph="login.placeholder"
         autofocus
       />
-      <button class="primary" type="submit">Unlock</button>
+      <button class="primary" type="submit" data-i18n="login.submit">Unlock</button>
       <p class="error" id="error"></p>
-      <p class="hint m0">
-        Three failed attempts block this address for 24 hours.
-      </p>
+      <p class="hint m0" data-i18n="login.hint"></p>
     </form>
 
     <script type="module">
+      import { applyTranslations, languageSelect, t } from "./i18n.js";
+
       const form = document.getElementById("form");
       const input = document.getElementById("password");
       const error = document.getElementById("error");
+
+      // Giriş sayfasında da seçici var: panele girmeden önce dilini seçen biri
+      // içeride aynı dili bulmalı, tercih `localStorage`'da taşınıyor.
+      document
+        .getElementById("language")
+        .append(languageSelect(() => applyTranslations()));
+
+      applyTranslations();
 
       form.addEventListener("submit", async (event) => {
         event.preventDefault();
@@ -59,10 +65,7 @@
 
         // Yasaklandıysa sunucu artık 404 dönüyor; kalan deneme sayısı
         // bilinçli olarak bildirilmiyor.
-        error.textContent =
-          response.status === 404
-            ? "Too many attempts."
-            : "Invalid password.";
+        error.textContent = t(response.status === 404 ? "login.tooMany" : "login.invalid");
         input.value = "";
         input.focus();
       });

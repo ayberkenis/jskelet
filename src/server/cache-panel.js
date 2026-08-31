@@ -338,7 +338,11 @@ async function hostStatus() {
 /* --------------------------------------------------------------- aksiyonlar */
 
 /**
- * Panelden gelen işlemi uygular ve kullanıcıya gösterilecek özeti döner.
+ * Panelden gelen işlemi uygular ve sonucu **metin değil kod** olarak döner.
+ *
+ * Cümleyi panel kuruyor (`i18n.js`): panel iki dilde konuşuyor, sunucunun
+ * arayüz dilini bilmesi için bir sebep yok. `params` yer tutucuları besler,
+ * `parts` ise eksik kalabilen parçalı cevaplar için.
  *
  * Her işlem yerel kademeyi düşürüp paylaşımlı kademeye de yayılıyor (bkz.
  * `html-cache.js`, `data-cache.js`): tek node'un önbelleğini boşaltmak,
@@ -346,7 +350,9 @@ async function hostStatus() {
  *
  * @param {Record<string, any>} body
  * @param {import('express').Request} req
- * @returns {Promise<{ ok: boolean, message: string }>}
+ * @returns {Promise<{ ok: boolean, code?: string,
+ *   params?: Record<string, string | number>,
+ *   parts?: ({ code: string, params?: Record<string, string | number> } | null)[] }>}
  */
 async function runAction(body, req) {
   const type = String(body?.type ?? "");
@@ -355,89 +361,88 @@ async function runAction(body, req) {
     case "html:clear": {
       const size = getHtmlCacheSize();
       clearHtmlCache();
-      return { ok: true, message: `HTML cache cleared (${size} entries)` };
+      return { ok: true, code: "html.cleared", params: { count: size } };
     }
 
     case "data:clear": {
       const prefix = typeof body.prefix === "string" && body.prefix ? body.prefix : undefined;
       const removed = clearDataCache(prefix);
-      return {
-        ok: true,
-        message: prefix
-          ? `${removed} data entries dropped under \`${prefix}\``
-          : `Data cache cleared (${removed} entries)`,
-      };
+      return prefix
+        ? { ok: true, code: "data.clearedPrefix", params: { count: removed, prefix } }
+        : { ok: true, code: "data.cleared", params: { count: removed } };
     }
 
     case "html:invalidate": {
       const target = String(body.target ?? "");
       if (!target.startsWith("/")) {
-        return { ok: false, message: "Target must start with `/`" };
+        return { ok: false, code: "target.invalid" };
       }
 
       const hard = body.hard === true;
       const count = invalidateHtmlCache(target, { hard });
       return {
         ok: true,
-        message: `${count} entries ${hard ? "dropped" : "marked stale"} for \`${target}\``,
+        code: hard ? "html.dropped" : "html.marked",
+        params: { count, target },
       };
     }
 
     case "html:drop": {
       const key = String(body.key ?? "");
-      if (!key) return { ok: false, message: "Missing key" };
+      if (!key) return { ok: false, code: "key.missing" };
       const existed = dropHtmlCacheKey(key);
-      return {
-        ok: true,
-        message: existed ? `Dropped \`${key}\`` : `\`${key}\` was not cached`,
-      };
+      return { ok: true, code: existed ? "entry.dropped" : "entry.absent", params: { key } };
     }
 
     case "data:drop": {
       const key = String(body.key ?? "");
-      if (!key) return { ok: false, message: "Missing key" };
+      if (!key) return { ok: false, code: "key.missing" };
       const existed = dropDataCacheKey(key);
-      return {
-        ok: true,
-        message: existed ? `Dropped \`${key}\`` : `\`${key}\` was not cached`,
-      };
+      return { ok: true, code: existed ? "entry.dropped" : "entry.absent", params: { key } };
     }
 
     case "redis:inspect": {
       const result = await inspectRedis();
-      if (!result.ok) return { ok: false, message: "Redis is not reachable" };
+      if (!result.ok) return { ok: false, code: "redis.unreachable" };
 
-      const parts = [
-        `${result.html} html keys`,
-        `${result.data} data keys`,
-        result.totalKeys !== null ? `${result.totalKeys} keys in db` : null,
-        result.usedMemory ? `${result.usedMemory} used` : null,
-      ].filter(Boolean);
-
-      return { ok: true, message: parts.join(" · ") };
+      // Sayım tek cümle değil parçalar hâlinde dönüyor: `DBSIZE` ve
+      // `used_memory` komut kısıtlı bir Redis'te okunamıyor ve eksik parçayı
+      // cümleden düşürme kararı panelin.
+      return {
+        ok: true,
+        parts: [
+          { code: "redis.htmlKeys", params: { count: result.html } },
+          { code: "redis.dataKeys", params: { count: result.data } },
+          result.totalKeys !== null
+            ? { code: "redis.dbKeys", params: { count: result.totalKeys } }
+            : null,
+          result.usedMemory ? { code: "redis.memory", params: { value: result.usedMemory } } : null,
+        ].filter(Boolean),
+      };
     }
 
     case "redis:drop": {
       const kind = body.kind === "data" ? "data" : "html";
       const status = getRedisStatus();
       if (!status.connected) {
-        return { ok: false, message: "Redis is not connected" };
+        return { ok: false, code: "redis.notConnected" };
       }
 
       const dropped = await redisDropMatching(kind);
-      return { ok: true, message: `${dropped} shared ${kind} keys dropped` };
+      return {
+        ok: true,
+        code: kind === "data" ? "redis.droppedData" : "redis.droppedHtml",
+        params: { count: dropped },
+      };
     }
 
     /* ------------------------------------------------------- cloudflare */
 
     case "cf:purge-everything": {
       const result = await purgeCloudflare({ everything: true });
-      return {
-        ok: result.ok,
-        message: result.ok
-          ? "Cloudflare cache purged (everything)"
-          : `Cloudflare: ${result.error}`,
-      };
+      return result.ok
+        ? { ok: true, code: "cf.purgedEverything" }
+        : cloudflareFailure(result.error);
     }
 
     case "cf:purge-urls": {
@@ -445,23 +450,19 @@ async function runAction(body, req) {
       // Origin, isteğin geldiği host'tan türetilir ki tek zone'lu kurulumda
       // ayrıca ayar gerekmesin.
       const paths = Array.isArray(body.paths) ? body.paths.map(String) : [];
-      if (!paths.length) return { ok: false, message: "No paths given" };
+      if (!paths.length) return { ok: false, code: "cf.noPaths" };
 
       const urls = toCloudflareUrls(paths, originOf(req));
-      if (!urls.length) {
-        return {
-          ok: false,
-          message: "Could not build absolute URLs — set cache().cloudflare.hostname",
-        };
-      }
+      if (!urls.length) return { ok: false, code: "cf.noHostname" };
 
       const result = await purgeCloudflare({ files: urls });
-      return {
-        ok: result.ok,
-        message: result.ok
-          ? `Purged ${result.purged} URLs at Cloudflare in ${result.batches} request(s)`
-          : `Cloudflare: ${result.error}`,
-      };
+      return result.ok
+        ? {
+            ok: true,
+            code: "cf.purgedUrls",
+            params: { count: result.purged, batches: result.batches },
+          }
+        : cloudflareFailure(result.error);
     }
 
     case "cf:purge-keys": {
@@ -473,51 +474,47 @@ async function runAction(body, req) {
         .split(/[\s,]+/)
         .filter(Boolean);
 
-      if (!values.length) return { ok: false, message: "Nothing to purge" };
+      if (!values.length) return { ok: false, code: "cf.nothingToPurge" };
 
       const result = await purgeCloudflare({ [kind]: values });
-      return {
-        ok: result.ok,
-        message: result.ok
-          ? `Purged ${result.purged} ${kind} at Cloudflare`
-          : `Cloudflare: ${result.error}`,
-      };
+      return result.ok
+        ? { ok: true, code: "cf.purgedKeys", params: { count: result.purged, kind } }
+        : cloudflareFailure(result.error);
     }
 
     case "cf:setting": {
       const result = await setCloudflareSetting(body.id, body.value);
-      return {
-        ok: result.ok,
-        message: result.ok
-          ? `Cloudflare ${body.id} is now ${result.value}`
-          : `Cloudflare: ${result.error}`,
-      };
+      return result.ok
+        ? {
+            ok: true,
+            code: "cf.settingChanged",
+            params: { id: String(body.id), value: String(result.value) },
+          }
+        : cloudflareFailure(result.error);
     }
 
     case "cf:feature": {
       const value = body.value === "on" ? "on" : "off";
       const result = await setCloudflareFeature(body.feature, value);
-      return {
-        ok: result.ok,
-        message: result.ok
-          ? `Cloudflare ${body.feature} turned ${value}`
-          : `Cloudflare: ${result.error}`,
-      };
+      return result.ok
+        ? {
+            ok: true,
+            code: "cf.featureChanged",
+            params: { feature: String(body.feature), value },
+          }
+        : cloudflareFailure(result.error);
     }
 
     case "cf:clear-reserve": {
       const result = await clearCloudflareCacheReserve();
-      return {
-        ok: result.ok,
-        message: result.ok
-          ? "Cache Reserve clear started — it runs asynchronously at Cloudflare"
-          : `Cloudflare: ${result.error}`,
-      };
+      return result.ok
+        ? { ok: true, code: "cf.reserveClearing" }
+        : cloudflareFailure(result.error);
     }
 
     case "prewarm": {
       if (prewarmProgress.active) {
-        return { ok: false, message: "A prewarm round is already running" };
+        return { ok: false, code: "prewarm.busy" };
       }
 
       const requested = Array.isArray(body.paths) ? body.paths : [];
@@ -535,15 +532,25 @@ async function runAction(body, req) {
         console.error("[cache-panel] prewarm failed", error);
       });
 
-      return {
-        ok: true,
-        message: paths.length ? `Prewarming ${paths.length} paths` : "Prewarming all paths",
-      };
+      return paths.length
+        ? { ok: true, code: "prewarm.paths", params: { count: paths.length } }
+        : { ok: true, code: "prewarm.all" };
     }
 
     default:
-      return { ok: false, message: `Unknown action: ${type}` };
+      return { ok: false, code: "action.unknown", params: { type } };
   }
+}
+
+/**
+ * Cloudflare hatası tek bir kodla döner: hata metni Cloudflare'den geliyor ve
+ * çevrilemez, ama etrafındaki cümle çevrilebilir.
+ *
+ * @param {string | undefined} error
+ * @returns {{ ok: false, code: string, params: { error: string } }}
+ */
+function cloudflareFailure(error) {
+  return { ok: false, code: "cf.failed", params: { error: error ?? "unknown error" } };
 }
 
 /* ------------------------------------------------------------------ router */
@@ -591,6 +598,12 @@ function router() {
     sendFile(res, "panel.css");
   });
 
+  // Sözlük giriş sayfasında da gerekiyor: dil seçimi oturumdan önce yapılıyor.
+  api.get("/i18n.js", (req, res) => {
+    res.type("application/javascript");
+    sendFile(res, "i18n.js");
+  });
+
   api.get("/logo.png", (req, res) => {
     res.type("image/png");
     fs.createReadStream(path.join(FRAMEWORK_ROOT, "src", "logo.png")).pipe(res);
@@ -634,7 +647,15 @@ function router() {
   api.use((req, res, next) => {
     if (authenticated(req)) return next();
 
-    noteFailure(req, `unauthenticated ${req.method} ${req.path}`);
+    // Yetkisiz **okuma** sayaca yazılmaz. Süreç yeniden başladığında eski
+    // oturumlar ölüyor ve açık kalmış bir panel sekmesi yoklamaya devam
+    // ediyor: sayarsak operatör kendi IP'sini üç saniyede yasaklıyor. Okuma
+    // zaten `404` dönüyor, yani saymamanın bir bedeli yok — korunması gereken
+    // şey şifre denemesi ve durumu değiştiren istek.
+    if (req.method !== "GET" && req.method !== "HEAD") {
+      noteFailure(req, `unauthenticated ${req.method} ${req.path}`);
+    }
+
     notFound(res);
   });
 
