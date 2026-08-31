@@ -22,6 +22,9 @@ import process from "node:process";
 import { getConfig, hook } from "../config/index.js";
 import { getRequestContext } from "../http/request-context.js";
 import { takeInvalidatedPaths } from "./html-cache.js";
+import { getDataCacheStats } from "./data-cache.js";
+import { isTransientStatus } from "./upstream-tracking.js";
+import { upstreamCooldownMs } from "./upstream-limiter.js";
 
 /**
  * Isıtmanın canlı durumu. Dev araçları bunu okuyup ilerlemeyi gösterir;
@@ -266,7 +269,10 @@ function devGateHeader() {
  *   Tur ilerlemesini `prewarmProgress`'e yazar. Tekrar turunda sayaçların
  *   anlamı değiştiği için çağıran taraf kendi formülünü verir.
  * @param {() => Promise<void>} [pace] İstek başına beklenen hız freni.
- * @returns {Promise<{ ok: number, failed: number, failedPaths: string[] }>}
+ * @returns {Promise<{ ok: number, failed: number,
+ *   failures: { path: string, status: number }[] }>}
+ *   `failures` durum koduyla birlikte döner: tekrar turuna yalnızca geçici
+ *   hatalar alınıyor, kalıcı olanı yeniden denemek boşa çağrı.
  */
 async function crawl(origin, paths, concurrency, report = undefined, pace = undefined) {
   const { brand } = getConfig();
@@ -275,8 +281,8 @@ async function crawl(origin, paths, concurrency, report = undefined, pace = unde
   let index = 0;
   let ok = 0;
   let failed = 0;
-  /** @type {string[]} */
-  const failedPaths = [];
+  /** @type {{ path: string, status: number }[]} */
+  const failures = [];
 
   async function worker() {
     while (index < paths.length) {
@@ -301,7 +307,7 @@ async function crawl(origin, paths, concurrency, report = undefined, pace = unde
         if (response.ok) ok += 1;
         else {
           failed += 1;
-          failedPaths.push(target);
+          failures.push({ path: target, status: response.status });
         }
 
         prewarmProgress.entries.push({
@@ -314,7 +320,8 @@ async function crawl(origin, paths, concurrency, report = undefined, pace = unde
         });
       } catch (error) {
         failed += 1;
-        failedPaths.push(target);
+        // Yanıt hiç gelmedi: ağ hatası her zaman geçici, tekrar denenir.
+        failures.push({ path: target, status: 0 });
         prewarmProgress.entries.push({
           path: target,
           status: 0,
@@ -339,7 +346,66 @@ async function crawl(origin, paths, concurrency, report = undefined, pace = unde
     Array.from({ length: Math.min(concurrency, paths.length) }, worker),
   );
 
-  return { ok, failed, failedPaths };
+  return { ok, failed, failures };
+}
+
+/**
+ * Tekrar turuna girecek yollar. Yalnızca geçici hatalar: `400`/`403`/`404` gibi
+ * deterministik cevaplar tekrar denemekle düzelmez ve o çağrılar kotadan
+ * karşılıksız yiyor. Sınıflandırma render tarafıyla aynı listeden
+ * (`isTransientStatus`), yoksa iki yer birbirinden kayar.
+ *
+ * @param {{ path: string, status: number }[]} failures
+ * @returns {string[]}
+ */
+function retryablePaths(failures) {
+  return failures
+    .filter((failure) => isTransientStatus(failure.status))
+    .map((failure) => failure.path);
+}
+
+/**
+ * Tekrar turundan önce beklenecek süre.
+ *
+ * Sabit bekleme yanlış soruyu cevaplıyordu: doğru süreyi upstream biliyor.
+ * Hız freni açıkken `Retry-After` ya da devre kesicinin soğuma süresi zaten
+ * elimizde; 10 saniye kapalı kalacak bir kesiciden 2 saniye sonra tekrar
+ * denemek, aynı 429'u peşin peşin almak demek.
+ *
+ * @returns {number} ms
+ */
+function retryDelayMs() {
+  const configured = setting("PREWARM_RETRY_DELAY_MS", "retryDelayMs", 2000);
+  const cooldown = upstreamCooldownMs();
+
+  // Fren kapalıysa `cooldown` 0 olur ve davranış eskisi gibi kalır. Üst sınır
+  // turun sonsuza kadar açık kalmasını engelliyor.
+  return Math.min(Math.max(configured, cooldown), 60_000);
+}
+
+/**
+ * Turun veri önbelleği üzerinden upstream'e ne kadar dokunduğunu özetler.
+ *
+ * @param {ReturnType<typeof getDataCacheStats>} before Tur başındaki sayaçlar.
+ * @returns {string} Okunacak bir şey yoksa boş dize.
+ */
+function upstreamUsage(before) {
+  const after = getDataCacheStats();
+  const reads = after.reads - before.reads;
+  if (reads <= 0) return "";
+
+  const produced = after.produced - before.produced;
+  const coalesced = after.coalesced - before.coalesced;
+  const shared = after.shared - before.shared;
+  const served = reads - produced;
+  const ratio = Math.round((served / reads) * 100);
+
+  return (
+    `${produced} upstream call${produced === 1 ? "" : "s"} for ${reads} data read${reads === 1 ? "" : "s"} ` +
+    `(${ratio}% from the data cache` +
+    `${coalesced ? `, ${coalesced} coalesced` : ""}` +
+    `${shared ? `, ${shared} from the shared tier` : ""})`
+  );
 }
 
 /**
@@ -392,13 +458,18 @@ export async function prewarm({ origin, quiet = false, paths: only }) {
   });
   suppressed.clear();
 
+  // Kotanın gerçekten ne kadar harcandığı ancak veri önbelleğinden görülür:
+  // 400 sayfalık bir tur, ortak bir uç için tek çağrı da yapabilir dört yüz de.
+  const dataBefore = getDataCacheStats();
+
   let ok = 0;
   let failed = 0;
   let recovered = 0;
+  let skippedRetry = 0;
   try {
-    /** @type {string[]} */
-    let failedPaths;
-    ({ ok, failed, failedPaths } = await crawl(
+    /** @type {{ path: string, status: number }[]} */
+    let failures;
+    ({ ok, failed, failures } = await crawl(
       origin,
       paths,
       concurrency,
@@ -409,18 +480,18 @@ export async function prewarm({ origin, quiet = false, paths: only }) {
     // Hatalar çoğunlukla upstream rate limit'i (429): ilk tur yüzlerce sayfayı
     // aynı anda çekerken API'yi zorluyor. Tek seri tekrar turu bu sayfaların
     // önbelleğe girmesini sağlıyor; aksi hâlde ziyaretçi soğuk render'ı öder.
-    if (failedPaths.length) {
+    const retryPaths = retryablePaths(failures);
+    skippedRetry = failures.length - retryPaths.length;
+
+    if (retryPaths.length) {
       const firstOk = ok;
       const firstFailed = failed;
 
-      // Rate limit pencereleri saniye mertebesinde; hemen tekrar denemek aynı
-      // 429'u almak demek.
-      const retryDelay = setting("PREWARM_RETRY_DELAY_MS", "retryDelayMs", 2000);
-      await sleep(retryDelay);
+      await sleep(retryDelayMs());
 
       const retry = await crawl(
         origin,
-        failedPaths,
+        retryPaths,
         1,
         (retriedOk) => {
           // Tekrar turunda her başarı bir hatayı başarıya çevirir.
@@ -450,9 +521,17 @@ export async function prewarm({ origin, quiet = false, paths: only }) {
         `${pending.length ? `, ${pending.length} invalidated` : ""}` +
         `${failed ? `, ${failed} failed` : ""}` +
         `${recovered ? `, ${recovered} recovered on the retry pass` : ""}` +
+        `${skippedRetry ? `, ${skippedRetry} not retried (permanent)` : ""}` +
         `${skipped > 0 ? `, ${skipped} ${rotate ? "deferred to the next pass" : "over the limit"}` : ""}` +
         ` (${(elapsed / 1000).toFixed(1)}s)`,
     );
+
+    // Turun upstream'e ne kadar dokunduğu. Asıl karar bu satıra bakılarak
+    // veriliyor: oran düşükse çözüm hız freni değil, `withDataCache` TTL'ini
+    // tur aralığından uzun tutmak — fren çağrıları yavaşlatır, sayısını
+    // azaltmaz.
+    const upstreamCalls = upstreamUsage(dataBefore);
+    if (upstreamCalls) console.log(`[prewarm] ${upstreamCalls}`);
 
     // Tur boyunca bastırılan hatalar: en sık görülenler önce, liste uzarsa
     // kalanı tek satırda toplanır. Amaç, logu şişirmeden "ne bozuldu"yu

@@ -5,6 +5,7 @@ import {
   dataCache,
   getDataCacheEntries,
   getDataCacheSize,
+  getDataCacheStats,
   withDataCache,
 } from "../src/server/data-cache.js";
 
@@ -131,6 +132,41 @@ test("clearDataCache drops only the matching prefix", async () => {
     getDataCacheEntries().map((entry) => entry.key),
     ["etiket:1"],
   );
+});
+
+test("the counters separate real upstream calls from cache reads", async () => {
+  // Kotaya yazılan tek sayı `produced`: bir tur 400 sayfa ısıtsa da ortak bir
+  // uç için tek çağrı yapmış olabilir. Karar bu orana bakılarak veriliyor.
+  const before = getDataCacheStats();
+
+  await withDataCache("q", 60, async () => 1);
+  await withDataCache("q", 60, async () => 1);
+  await withDataCache("q", 60, async () => 1);
+
+  let release = () => {};
+  const slow = new Promise((resolve) => {
+    release = () => resolve(2);
+  });
+
+  const shared = [
+    withDataCache("s", 60, () => slow),
+    withDataCache("s", 60, () => slow),
+  ];
+  release();
+  await Promise.all(shared);
+
+  await withDataCache("nocache", 0, async () => 3);
+
+  const stats = getDataCacheStats();
+  assert.equal(stats.produced - before.produced, 2, "iki gerçek üretim");
+  assert.equal(stats.hits - before.hits, 2, "ikinci ve üçüncü okuma isabet");
+  // Üç ıskalama: `q`'nun ilk okuması ve `s`'yi eşzamanlı isteyen iki çağrı.
+  // İkincisi girdiyi bulamadı ama upstream'e de gitmedi — `coalesced` bu
+  // ayrımı taşıyor.
+  assert.equal(stats.misses - before.misses, 3);
+  assert.equal(stats.coalesced - before.coalesced, 1, "eşzamanlı istek birleşti");
+  assert.equal(stats.bypassed - before.bypassed, 1);
+  assert.ok(stats.hitRatio > 0 && stats.hitRatio < 1);
 });
 
 test("dataCache() derives the key from the arguments", async () => {

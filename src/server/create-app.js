@@ -11,6 +11,8 @@
  *   4. staticPrecompressed → express.static — build'de üretilmiş `.br`/`.gz`
  *      kopyalar varsa onlar servis edilir (kalite 11), yoksa istek altındaki
  *      static'e düşer ve middleware anında sıkıştırır (kalite 5).
+ *   4b. cache paneli (açıksa) — statikten sonra, route'lardan önce: kendi
+ *      gövde ayrıştırıcısını taşır ve uygulama yolunu gölgeleyemez.
  *   5. body parser'lar — statikten sonra: görsel isteklerinde gövde ayrıştırma
  *      maliyeti ödenmesin.
  *   6. csrf — body parser'lardan sonra olmalı: token form alanından okunuyor.
@@ -35,6 +37,7 @@ import { renderNotFound } from "./render.js";
 import { renderStatusPage, statusFromError } from "./status-page.js";
 import { isPrewarmRequest, notePrewarmError, startPrewarm } from "./prewarm.js";
 import { trackUpstreamFetch } from "./upstream-tracking.js";
+import { configureUpstreamLimiter } from "./upstream-limiter.js";
 import { connectRedis, disconnectRedis } from "./redis.js";
 import { isNotFoundError, isRedirectError } from "../http/control-flow.js";
 
@@ -51,6 +54,10 @@ export async function createApp(options = {}) {
   // yalnızca render bağlamı içindeki `fetch` çağrılarına bakar, ama bağlamın
   // ilk kurulduğu istek de kapsanmalı.
   if (config.trackUpstream) trackUpstreamFetch();
+
+  // Hız freni sarmalayıcının içinden okunuyor; ayarı ona vermek yeterli.
+  // `cache().upstream.rate` verilmedikçe hiçbir istek beklemez.
+  configureUpstreamLimiter(config.upstream);
 
   // Önbelleğin ikinci kademesi route'lardan önce kurulmalı: ilk istek de
   // paylaşımlı kopyayı görebilsin. Bağlanamazsa uyarı basılır ve uygulama
@@ -101,6 +108,15 @@ export async function createApp(options = {}) {
   if (process.env.NODE_ENV === "development") {
     const { mountDevtools } = await import("./dev/devtools.js");
     mountDevtools(app);
+  }
+
+  // Önbellek paneli ortama bakmaz, config'e bakar: açıkça etkinleştirilmedikçe
+  // modül hiç yüklenmez ve yol da yoktur. Kendi gövde ayrıştırıcısını
+  // taşıdığı için aşağıdaki parser'lardan önce durabiliyor; route'lardan
+  // önce olması gerekiyor ki uygulama aynı yolu gölgeleyemesin.
+  if (config.cachePanel.enabled) {
+    const { mountCachePanel } = await import("./cache-panel.js");
+    mountCachePanel(app);
   }
 
   app.use(express.urlencoded({ extended: false, limit: "64kb" }));

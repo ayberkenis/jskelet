@@ -20,8 +20,13 @@
  *        }
  *
  * İki yol aynı hatayı bildirirse tekilleştirilir.
+ *
+ * Sarmalayıcı aynı zamanda hız freninin durduğu yerdir
+ * (`upstream-limiter.js`): kotayı harcayan şey sayfa isteği değil, buradan
+ * geçen çağrı. Fren varsayılan olarak kapalı.
  */
 import { AsyncLocalStorage } from "node:async_hooks";
+import { limitUpstream, noteUpstreamResponse } from "./upstream-limiter.js";
 
 /**
  * @typedef {{ status: number, path: string }} UpstreamFailure
@@ -94,16 +99,36 @@ export function trackUpstreamFetch() {
     const url = requestUrl(input);
     if (isSelfRequest(url)) return original(input, init);
 
+    // Hız freni burada, çünkü kotayı harcayan şey sayfa değil bu çağrı.
+    // Kapalıysa (varsayılan) `null` döner ve tek maliyeti bir dal.
+    const permit = await limitUpstream(url);
+
+    if (permit?.blocked) {
+      // Devre kesici açık: 429 yiyeceğini bildiğimiz bir çağrıyı yapmıyoruz.
+      // Render tarafı bunu geçici hata olarak görür, yani sayfa önbelleğe
+      // yazılmaz ve bir sonraki istek yeniden dener.
+      reportUpstreamFailure({ status: 429, path: url });
+      return new Response(null, { status: 429, statusText: "Too Many Requests" });
+    }
+
     try {
       const response = await original(input, init);
+
+      if (permit) {
+        noteUpstreamResponse(permit.host, response.status, response.headers.get("retry-after"));
+      }
+
       if (!response.ok && isTransientStatus(response.status)) {
         reportUpstreamFailure({ status: response.status, path: url });
       }
       return response;
     } catch (error) {
       // Yanıt hiç gelmedi: ağ hatası her zaman geçicidir.
+      if (permit) noteUpstreamResponse(permit.host, 0, null);
       reportUpstreamFailure({ status: 0, path: url });
       throw error;
+    } finally {
+      permit?.release();
     }
   };
 

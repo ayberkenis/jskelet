@@ -560,9 +560,9 @@ Ayrıntı: [03-routing.md](./03-routing.md).
 ## `cache()`
 
 **Tip:**
-`() => { html?: Record<string, number>, maxEntries?: number, data?: object, trackUpstream?: boolean, trackDependencies?: boolean, transientRetry?: object | false, redis?: object, prewarm?: object }` —
+`() => { html?: Record<string, number>, maxEntries?: number, data?: object, trackUpstream?: boolean, trackDependencies?: boolean, transientRetry?: object | false, upstream?: object, redis?: object, prewarm?: object }` —
 **Varsayılan:**
-`{ html: {}, maxEntries: 500, data: { maxEntries: 10000, staleFactor: 10 }, trackUpstream: true, trackDependencies: true, transientRetry: { attempts: 1, delayMs: 300 }, redis: { enabled: false }, prewarm: { enabled: true, max: 400, intervalSeconds: 0 } }`
+`{ html: {}, maxEntries: 500, data: { maxEntries: 10000, staleFactor: 10 }, trackUpstream: true, trackDependencies: true, transientRetry: { attempts: 1, delayMs: 300 }, upstream: { rate: 0 }, redis: { enabled: false }, prewarm: { enabled: true, max: 400, intervalSeconds: 0 } }`
 
 ### `cache().html`
 
@@ -627,6 +627,39 @@ denenir. Amaç var olan bir sayfanın 404'e dönüşmemesi; denemeler tükenirse
 önbelleğe girmeyen bir 503 olur. `false` ya da `attempts: 0` tekrarı kapatır.
 Ayrıntı: [06-cache.md](./06-cache.md).
 
+### `cache().upstream`
+
+Upstream API'ye giden `fetch` çağrılarının host başına hız freni. Varsayılan
+**kapalı**: `rate` verilmedikçe hiçbir istek beklemez. `rate` bir tavandır;
+gerçek hız 429 cevaplarına göre kendini aşağı çeker ve temiz geçen pencerelerde
+kademe kademe geri çıkar.
+
+| Alan | Tip | Varsayılan | Anlamı |
+| --- | --- | --- | --- |
+| `rate` | `number` | `0` | Saniyedeki en fazla çağrı. `0` → fren kapalı |
+| `burst` | `number` | `0` | Kova boyu; `0` → bir saniyelik bütçe kadar patlama |
+| `concurrency` | `number` | `8` | Aynı anda uçabilecek çağrı |
+| `minRate` | `number` | `0.5` | Azalmanın dibi; hız buranın altına inmez |
+| `increaseStep` | `number` | `1` | Toplamsal artışın adımı (çağrı/saniye) |
+| `increaseIntervalMs` | `number` | `5000` | Artış periyodu |
+| `decreaseIntervalMs` | `number` | `1000` | İki azalma arasındaki en kısa süre |
+| `breakerFailures` | `number` | `5` | Art arda kaç 429'dan sonra host baypas edilir |
+| `breakerCooldownMs` | `number` | `10000` | Baypasın süresi |
+| `hosts` | `Record<string, object>` | `{}` | Host bazlı override; aynı alanlar geçerli |
+
+Yalnızca `429` ve `503` hızı cezalandırır: `400`/`404`/`500` bir kota sorunu
+değil. Durumu `getUpstreamLimiterStatus()` ile ya da dev panelinin **Server**
+sekmesinden okuyabilirsin. Ayrıntı ve freni açmadan önce bakılacak yer:
+[06-cache.md](./06-cache.md).
+
+```js
+upstream: {
+  rate: 10,
+  concurrency: 4,
+  hosts: { "api.example.com": { rate: 3 } },
+}
+```
+
 ### `cache().redis`
 
 Opsiyonel Redis ikinci kademesi (L2). Bellek içi önbellek birincil kalır; Redis
@@ -658,6 +691,40 @@ redis: {
   enabled: process.env.NODE_ENV === "production",
   url: process.env.REDIS_URL,
   namespace: "haber-sitesi",
+}
+```
+
+### `cache().panel`
+
+Önbellek yönetim paneli. Bellek içi kademenin ve Redis kademesinin durumunu
+gösterir; hedefli invalidation, tek girdi silme ve ısıtma tetikler.
+
+Ortama bakmaz: `enabled` verilmedikçe **hiç mount edilmez** ve yol da yoktur.
+Açıkken production'da da çalışır — asıl sorular ("bu sayfa neden bayat",
+"webhook purge'ü geçti mi") orada soruluyor.
+
+| Alan | Tip | Varsayılan | Anlamı |
+| --- | --- | --- | --- |
+| `enabled` | `boolean` | `false` | Yalnızca açıkça `true` verildiğinde açılır (`JSKELET_CACHE_PANEL` ezer) |
+| `basePath` | `string` | `"/_jskelet/cache"` | Panelin kökü |
+| `banAttempts` | `number` | `3` | Kaç başarısız denemeden sonra IP yasaklanır |
+| `banHours` | `number` | `24` | Yasağın süresi |
+| `sessionHours` | `number` | `12` | Oturum çerezinin ömrü |
+
+Şifre **her süreç başlangıcında** üretilir ve yalnızca sunucu logunda görünür:
+
+```
+[cache-panel] http://localhost:3000/_jskelet/cache — password for this run: 3f9c…
+```
+
+Kalıcı bir sır (config alanı ya da env) tutulmaz; sızması önbelleği boşaltma
+yetkisi demek ve her deploy eski erişimi kendiliğinden iptal etmeli. Yasaklı ve
+yetkisiz her cevap `404`'tür. Kullanım ve ekran ayrıntıları:
+[06-cache.md](./06-cache.md).
+
+```js
+panel: {
+  enabled: process.env.CACHE_PANEL === "1",
 }
 ```
 
@@ -784,6 +851,7 @@ basılmaz.
 | `HOST` | `startServer` | `::` | Bağlanılacak arayüz. Varsayılan çift yığın dinler (IPv6 + IPv4); IPv6 yoksa `0.0.0.0`'a düşer |
 | `JSKELET_SECRET` | `jskelet/cookies` | — | İmzalı cookie sırrı. `security.cookieSecret` verilmediğinde buradan okunur; ikisi de yoksa imzalı cookie API'si hata verir. [12](./12-panel-ve-oturum.md) |
 | `DEV_TOKEN` | `devGate`, `prewarm` | — | Ayarlıysa token taşımayan her isteğe 404 döner. Isıtma token'ı çerez olarak taşır. [09](./09-dev-araclari.md) |
+| `JSKELET_CACHE_PANEL` | `createApp` | — | Ayarlıysa önbellek panelini açar; `0` config'te açık olan paneli kapatır. Env config'i ezer, çünkü panel genelde bir arıza sırasında tek seferlik açılır. [06](./06-cache.md) |
 | `PREWARM` | `startPrewarm` | — | `0` ısıtmayı kapatır; `1` config'teki `enabled: false`'u ezip açar |
 | `PREWARM_MAX` | `prewarm` | `400` | En fazla kaç yol ısıtılır |
 | `PREWARM_CONCURRENCY` | `prewarm` | prod 4, dev 1 | Paralel işçi sayısı |

@@ -121,6 +121,42 @@ export const DEFAULT_DATA_CACHE = {
 };
 
 /**
+ * Upstream API'ye giden isteklerin host başına hız freni.
+ *
+ * Varsayılan **kapalı** (`rate: 0`): fren, kotasını bilen bir uygulamanın
+ * bilinçli kararı. Açıldığında `rate` bir tavan olur ve gerçek hız 429
+ * cevaplarına göre kendini aşağı çeker (bkz. `src/server/upstream-limiter.js`).
+ *
+ * `hosts` ile tek tek uçlar ayrılabilir; API'lerin kotası aynı olmak zorunda
+ * değil:
+ *
+ *   upstream: { rate: 10, hosts: { "api.example.com": { rate: 3 } } }
+ */
+export const DEFAULT_UPSTREAM_LIMIT = {
+  /** Saniyedeki en fazla çağrı. 0 → fren tamamen kapalı. */
+  rate: 0,
+  /** Kova boyu; verilmezse bir saniyelik bütçe kadar patlamaya izin verilir. */
+  burst: 0,
+  /** Aynı anda uçabilecek çağrı. Ortalama hızdan bağımsız: anlık baskıyı bağlar. */
+  concurrency: 8,
+  /** Azalmanın dibi: hız buranın altına inmez, yoksa site tamamen durur. */
+  minRate: 0.5,
+  /** Toplamsal artışın adımı (çağrı/saniye) ve periyodu. */
+  increaseStep: 1,
+  increaseIntervalMs: 5000,
+  /**
+   * İki azalma arasındaki en kısa süre. Aynı anda uçan on çağrının hepsi 429
+   * dönerse hız on kez yarılanıp dibe vurmasın.
+   */
+  decreaseIntervalMs: 1000,
+  /** Devre kesici: art arda kaç 429'dan sonra host'a hiç gidilmeyeceği. */
+  breakerFailures: 5,
+  breakerCooldownMs: 10_000,
+  /** @type {Record<string, Record<string, number>>} */
+  hosts: {},
+};
+
+/**
  * Opsiyonel Redis ikinci kademesi (L2).
  *
  * Redis **birincil store değil**: bellek içi önbellek (L1) aynen kalır, Redis
@@ -155,8 +191,37 @@ export const DEFAULT_REDIS = {
   commandTimeoutMs: 200,
 };
 
+/**
+ * Önbellek yönetim paneli.
+ *
+ * `enabled` varsayılan olarak **kapalı** ve ortama bakmaz: panel açıldığında
+ * production'da da çalışır, ama açılması bilinçli bir karar olmalı. Kapalıyken
+ * router hiç mount edilmez — yolun kendisi de yok, yani 404 dönen bir uç bile
+ * ortaya çıkmaz.
+ *
+ * Şifre her süreç başlangıcında yeniden üretilir (bkz.
+ * `src/server/cache-panel.js`): panelin ömrü sürecin ömrü kadardır ve bir
+ * deploy eski erişimi otomatik olarak iptal eder. Bu yüzden config'te şifre
+ * alanı yok.
+ */
+export const DEFAULT_CACHE_PANEL = {
+  enabled: false,
+  basePath: "/_jskelet/cache",
+  /** Kaç başarısız denemeden sonra IP yasaklanır. */
+  banAttempts: 3,
+  /** Yasağın süresi. */
+  banHours: 24,
+  /** Oturumun ömrü; süreç yeniden başladığında zaten sıfırlanır. */
+  sessionHours: 12,
+};
+
 /** Oturuma bağlı sayfalar ısıtılmaz; uygulama kendi listesini verebilir. */
-export const DEFAULT_PREWARM_SKIP = ["/api/", "/_fragment/", "/__jskelet/"];
+export const DEFAULT_PREWARM_SKIP = [
+  "/api/",
+  "/_fragment/",
+  "/__jskelet/",
+  "/_jskelet/",
+];
 
 /**
  * Site içi gezinme ipuçları (Speculation Rules + view transition).
@@ -182,7 +247,7 @@ export const DEFAULT_NAVIGATION = {
  * hedefi olmayan uçların spekülatif istekle tetiklenmesi gerçek bir hata
  * kaynağı; uygulama kendi listesini `navigation.exclude` ile ekler.
  */
-export const DEFAULT_NAVIGATION_EXCLUDE = ["/api/*", "/_fragment/*"];
+export const DEFAULT_NAVIGATION_EXCLUDE = ["/api/*", "/_fragment/*", "/_jskelet/*"];
 
 /**
  * Güvenlik ayarları.

@@ -10,6 +10,54 @@ one is listed under a **Breaking** heading.
 
 ### Added
 
+- A cache admin panel at `/_jskelet/cache`, turned on with
+  `cache().panel: { enabled: true }` or `JSKELET_CACHE_PANEL=1`. It lists what
+  the in-process tier holds (key, size, status, remaining TTL, dependency count,
+  precompressed bodies for HTML; key and TTL for data), reports whether the
+  Redis tier is connected or bypassed, and runs the operations you would
+  otherwise hand-write an admin route for: targeted invalidation with an
+  optional hard mode, dropping a single entry, clearing either cache, unlinking
+  the shared keys and triggering a prewarm pass. Unlike the dev overlay it does
+  not look at `NODE_ENV`, because "why is this page stale" is a production
+  question — but nothing is mounted until it is explicitly enabled, so the path
+  does not exist by default. Access is a 32-character password regenerated on
+  every process start and printed once to the server log; there is no persistent
+  secret to leak and a deploy revokes old access on its own. The password is
+  never accepted in a query string, three failed attempts ban the IP for 24
+  hours, and every banned or unauthorised response is a `404` rather than a 401
+  that would confirm the panel exists. The panel is excluded from indexing,
+  prewarming and navigation speculation.
+- `dropHtmlCacheKey()` and `dropDataCacheKey()` drop one exact cache key.
+  `invalidateHtmlCache()` matches a path pattern and takes down every query
+  variant of a path, which is the right default for a webhook but wrong when you
+  want `/list?page=2` gone and `/list?page=3` left hot.
+
+- An adaptive per-host rate limit for upstream calls, `cache().upstream`. It sits
+  in the `fetch` wrapper rather than in the prewarm pass, because what spends the
+  quota is the API call, not the page: one render may make one call or twenty, so
+  `prewarm.rps` could never bound the real thing. A token bucket caps the average
+  rate, a concurrency limit caps the calls in flight, and `rate` is treated as a
+  ceiling that the limiter pulls down on its own — a 429 or 503 halves the rate,
+  `Retry-After` stops the bucket for exactly as long as the upstream asked, and
+  clean windows climb back one step at a time. A host that returns
+  `breakerFailures` rate limits in a row is bypassed for `breakerCooldownMs`,
+  which stops the worst waste: because a 429 counts as transient, the HTML
+  produced by a throttled call is never stored, so a pass in that state spends
+  quota and keeps nothing. Only 429 and 503 penalise the rate; a 400 or 500 is
+  not a quota problem. Off by default — set `rate` to turn it on.
+- `getUpstreamLimiterStatus()` reports the current rate, calls in flight, 429
+  count and breaker state per host. The dev panel's Server tab shows the same.
+- `getDataCacheStats()` counts how the data cache was used: fresh hits, stale
+  hits, misses, coalesced concurrent reads, values promoted from the shared tier
+  and — the only number that reaches the quota — real producer runs. A prewarm
+  pass now prints its own share of that (`12 upstream calls for 430 data reads
+  (97% from the data cache)`), which is what tells you whether the fix is a
+  longer TTL or a rate limit. The dev report has a Data cache card for it.
+
+- The dev overlay header now shows the installed JSkelet version next to the
+  title, labelled `latest` when it matches npm and `outdated` with the newer
+  version when it does not, so you can tell at a glance which version the
+  project runs without opening the Server tab.
 - An optional Redis tier behind both caches, turned on with
   `cache().redis: { enabled: true, url }` and `npm install ioredis`. The
   in-process cache stays primary and every request still reads it; Redis only
@@ -87,6 +135,12 @@ one is listed under a **Breaking** heading.
 
 ### Changed
 
+- The prewarm retry pass no longer retries permanent failures. A `400`, `403` or
+  `404` does not get better on the second try, so those paths are dropped from
+  the retry round and counted as `N not retried (permanent)` in the summary. The
+  wait before the round now also honours the upstream rate limit: if a
+  `Retry-After` or an open circuit breaker is holding calls back, the pass waits
+  that out instead of retrying into the same 429.
 - Errors and warnings raised during a prewarm pass are no longer logged one per
   page. Request errors and the per-page render warnings (`was produced with
   missing data`, `returned notFound() while upstream is failing`, `could not be

@@ -228,6 +228,19 @@ function overview() {
         tone: apiErrors ? "bad" : "good",
         sub: apiErrors ? `${apiErrors} errors` : "no errors",
       },
+      // Upstream kotasının nasıl harcandığı: okumaların kaçı önbellekten
+      // döndü. Oran düşükse `withDataCache` TTL'i kısa demektir.
+      {
+        label: "Data cache",
+        value: data.cache?.dataStats?.reads
+          ? `${Math.round(data.cache.dataStats.hitRatio * 100)}%`
+          : "—",
+        ratio: data.cache?.dataStats?.hitRatio ?? null,
+        tone: "good",
+        sub: data.cache?.dataStats?.reads
+          ? `${data.cache.dataStats.produced} upstream / ${data.cache.dataStats.reads} reads`
+          : "no reads yet",
+      },
       {
         label: "Prewarm",
         value: data.prewarm?.total

@@ -686,6 +686,11 @@ onCacheEvent((event) => {
     return;
   }
 
+  if (event.type === "html:drop") {
+    if (typeof event.key === "string") dropLocalKey(event.key);
+    return;
+  }
+
   if (event.type !== "html:invalidate") return;
 
   const targets = /** @type {(string | RegExp)[]} */ (
@@ -740,6 +745,37 @@ export function invalidateHtmlByDependency(dataKeys) {
   }
 
   return keys.size;
+}
+
+/**
+ * Tek bir önbellek **anahtarını** düşürür.
+ *
+ * `invalidateHtmlCache()` yol deseniyle çalışıyor ve bir yolun bütün query
+ * varyantlarını birlikte düşürüyor. Yönetim paneli listedeki tek satırı
+ * silebilmek istiyor: `/liste?sayfa=2` düşerken `/liste?sayfa=3` sıcak
+ * kalmalı. Desen sözdiziminde `?` kaçırılamadığı için ayrı bir yüzey.
+ *
+ * @param {string} key `yol?query` biçiminde tam anahtar.
+ * @returns {boolean} Girdi var mıydı.
+ */
+export function dropHtmlCacheKey(key) {
+  const existed = dropLocalKey(key);
+
+  if (redisShares("html")) redisDrop([cacheKey("html", key)]);
+  publishCacheEvent({ type: "html:drop", key });
+
+  return existed;
+}
+
+/**
+ * @param {string} key
+ * @returns {boolean}
+ */
+function dropLocalKey(key) {
+  // Uçuştaki tazeleme de geçersiz: silinen girdiyi geri yazmamalı.
+  tokens.delete(key);
+  invalidated.delete(key);
+  return drop(key);
 }
 
 /**

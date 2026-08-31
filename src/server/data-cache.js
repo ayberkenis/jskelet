@@ -48,6 +48,31 @@ const store = new Map();
 const inflight = new Map();
 
 /**
+ * Süreç ömrü boyunca biriken sayaçlar.
+ *
+ * Isıtma turunun kotayı ne kadar harcadığı ancak buradan görülüyor: tur
+ * bittiğinde `produced` kaç gerçek upstream çağrısı yapıldığını, `hits` kaçının
+ * hiç gitmediğini söyler. Oran düşükse çözüm hız freni değil, TTL'i uzatmak —
+ * fren çağrıları yavaşlatır, sayısını azaltmaz.
+ */
+const stats = {
+  /** Taze girdiden servis edildi. */
+  hits: 0,
+  /** Bayat girdiden servis edildi; tazeleme arkada koştu. */
+  stale: 0,
+  /** Girdi yoktu, çağıran bekledi. */
+  misses: 0,
+  /** Aynı anahtarı eşzamanlı isteyen çağrılar tek üretime düştü. */
+  coalesced: 0,
+  /** Paylaşımlı kademeden geldi; upstream'e gitmedi. */
+  shared: 0,
+  /** `producer` gerçekten çalıştı — kotaya yazılan tek sayı. */
+  produced: 0,
+  /** `ttlSeconds: 0` ile önbellek tamamen atlandı. */
+  bypassed: 0,
+};
+
+/**
  * Ayarlar config'ten okunur ama config yüklenmemiş olabilir: bu modül
  * script'lerden ve testlerden de çağrılabiliyor. `getConfig()` fırlatırsa
  * kod varsayılanına düşülür.
@@ -171,7 +196,10 @@ function refresh(key, ttlSeconds, producer, options) {
   // Aynı anahtarı eşzamanlı isteyen yüz sayfa tek upstream isteğine düşer.
   // Isıtma turlarında bu tek başına kotanın büyük kısmını kurtarıyor.
   const pending = inflight.get(key);
-  if (pending) return pending;
+  if (pending) {
+    stats.coalesced += 1;
+    return pending;
+  }
 
   const staleFactor = options.staleFactor ?? settings().staleFactor;
 
@@ -196,10 +224,12 @@ async function produce(key, ttlSeconds, producer, options, staleFactor) {
   // Kotayı koruyan `inflight` birleştirmesinin küme çapındaki karşılığı bu.
   const shared = await readShared(key);
   if (shared) {
+    stats.shared += 1;
     promote(key, shared);
     return shared.value;
   }
 
+  stats.produced += 1;
   const value = await producer();
 
   const empty = value === undefined || value === null;
@@ -224,7 +254,10 @@ async function produce(key, ttlSeconds, producer, options, staleFactor) {
  * @template T
  */
 export async function withDataCache(key, ttlSeconds, producer, options = {}) {
-  if (!ttlSeconds) return producer();
+  if (!ttlSeconds) {
+    stats.bypassed += 1;
+    return producer();
+  }
 
   // Bu anahtarı okuyan render, `clearDataCache(key)` çağrıldığında etkilenen
   // sayfalar arasında sayılsın. Render bağlamı yoksa çağrı no-op.
@@ -233,6 +266,9 @@ export async function withDataCache(key, ttlSeconds, producer, options = {}) {
   const hit = read(key);
 
   if (hit) {
+    if (hit.stale) stats.stale += 1;
+    else stats.hits += 1;
+
     // Bayat girdi anında döner; tazeleme arkada yürür ve hatası bu isteği
     // etkilemez — çağıran taraf bir şey beklemediği için upstream'in yavaş
     // olması sayfaya yansımaz.
@@ -243,6 +279,8 @@ export async function withDataCache(key, ttlSeconds, producer, options = {}) {
     }
     return /** @type {T} */ (hit.value);
   }
+
+  stats.misses += 1;
 
   try {
     return /** @type {T} */ (await refresh(key, ttlSeconds, producer, options));
@@ -346,13 +384,65 @@ function clearLocal(prefix) {
 // Uzak bir node veri düşürdüğünde bu proses de kendi L1'ini temizler; zincir
 // `invalidateHtmlByDependency` üzerinden etkilenen sayfalara kadar gider.
 onCacheEvent((event) => {
+  if (event.type === "data:drop") {
+    if (typeof event.key !== "string") return;
+    store.delete(event.key);
+    invalidateHtmlByDependency([event.key]);
+    return;
+  }
+
   if (event.type !== "data:clear") return;
   clearLocal(typeof event.prefix === "string" ? event.prefix : undefined);
 });
 
+/**
+ * Tek bir veri anahtarını düşürür.
+ *
+ * `clearDataCache()` **önek** eşleştiriyor: `quote:v2:AAPL` verildiğinde
+ * `quote:v2:AAPLX` de düşer. Yönetim panelinde listeden seçilen satır tam
+ * olarak o anahtar olmalı, komşusu değil.
+ *
+ * @param {string} key
+ * @returns {boolean} Girdi var mıydı.
+ */
+export function dropDataCacheKey(key) {
+  const existed = store.delete(key);
+
+  // Silme, girdi bu node'da olmasa da yayılır: anahtar başka bir node'da ya da
+  // yalnızca Redis'te sıcak olabilir.
+  invalidateHtmlByDependency([key]);
+
+  if (redisShares("data")) {
+    void redisDropMatching("data", (candidate) => candidate === key);
+  }
+
+  publishCacheEvent({ type: "data:drop", key });
+
+  return existed;
+}
+
 /** @returns {number} */
 export function getDataCacheSize() {
   return store.size;
+}
+
+/**
+ * Süreç başından beri biriken sayaçlar. `produced` kotaya yazılan tek sayıdır:
+ * geri kalan her şey upstream'e hiç gitmemiş bir okuma.
+ *
+ * @returns {typeof stats & { reads: number, hitRatio: number }}
+ *   `reads` önbellekten geçen toplam okuma, `hitRatio` bunların kaçının
+ *   upstream'e gitmediği (0–1).
+ */
+export function getDataCacheStats() {
+  const reads = stats.hits + stats.stale + stats.misses;
+  const avoided = stats.hits + stats.stale;
+
+  return {
+    ...stats,
+    reads,
+    hitRatio: reads ? Number((avoided / reads).toFixed(3)) : 0,
+  };
 }
 
 /**

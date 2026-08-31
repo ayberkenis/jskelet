@@ -441,6 +441,98 @@ cache: {
 `transientRetry: false` (or `attempts: 0`) disables the retry and falls straight
 through to the 503.
 
+## Upstream rate limit: `cache().upstream`
+
+Everything above describes what happens **after** a 429 arrives. This section is
+about not getting one in the first place.
+
+The brake sits inside the `trackUpstreamFetch()` wrapper, that is, where the
+real `fetch` call goes out. The prewarm pass's `prewarm.rps` cannot do this job:
+it counts **page** requests to our own server, but one page render may make one
+API call or twenty. What binds the quota is the number of calls, not the number
+of pages — and with the brake here, prewarming and real traffic spend the same
+budget.
+
+Off by default: unless `rate` is given, no request ever waits and the cost is a
+single branch.
+
+```js
+// jskelet.config.mjs
+cache: () => ({
+  upstream: {
+    rate: 10, // ceiling in calls per second, per host
+    burst: 20, // tolerance for short bursts
+    concurrency: 8, // calls in flight at once
+    hosts: {
+      // Endpoints with a different quota get their own settings.
+      "api.example.com": { rate: 3, concurrency: 2 },
+    },
+  },
+}),
+```
+
+### Three mechanisms, three different limits
+
+| Mechanism | What it bounds | Settings |
+| --- | --- | --- |
+| Token bucket | Average rate (calls per second) | `rate`, `burst` |
+| Concurrency | Instantaneous pressure (calls in flight) | `concurrency` |
+| AIMD | What the right rate actually is | `minRate`, `increaseStep`, `increaseIntervalMs`, `decreaseIntervalMs` |
+
+The third one is the real idea. A fixed rate is always either too slow or too
+fast: nobody can write the true quota limit into a config file, and it changes
+during the day anyway. So `rate` is treated as a **ceiling** and the actual rate
+moves with what the upstream says:
+
+- **429 or 503** → the rate is halved (multiplicative decrease). If the response
+  carries `Retry-After`, the bucket stops entirely for that long — the upstream
+  is already telling you how long to wait.
+- **Every clean window** → the rate climbs by `increaseStep` (additive
+  increase), up to the `rate` ceiling.
+
+Decreasing multiplicatively and increasing additively is deliberate. The other
+way round would earn a fresh 429 every window.
+
+### Circuit breaker
+
+A host that returns `breakerFailures` (default 5) rate limits in a row is
+bypassed entirely for `breakerCooldownMs`: the call is not made at all and is
+reported straight away as a transient failure.
+
+It looks harsh, but the asymmetry demands it: because a 429 counts as transient,
+the HTML produced by that call is **not stored**. So a pass that hit the rate
+limit spends quota and stores nothing in return — and the next pass finds the
+same page cold and tries again. The breaker stops that burn.
+
+```
+[upstream] api.example.com: 5 consecutive rate limits — bypassing for 10000ms (rate is now 1.2/s)
+```
+
+Only 429 and 503 count. A `400`/`404` is not a quota problem and neither is a
+`500`: slowing down does not fix them, it only makes the site slower.
+
+### Seeing the state
+
+`getUpstreamLimiterStatus()` returns the current rate, calls in flight and
+counters per host; the dev panel's **Server** tab prints the same thing. During
+a 429 storm, tuning without knowing "what rate is it down to right now" is
+guesswork.
+
+```js
+import { getUpstreamLimiterStatus } from "jskelet";
+
+// [{ host: "api.example.com", rate: 2.5, maxRate: 10, concurrency: 8,
+//    active: 3, throttled: 12, rejected: 40, bypassed: false, blockedMs: 0 }]
+```
+
+### Before turning it on
+
+The rate limit is a last resort. If hundreds of pages fetch the same upstream
+response, the real fix is keeping the
+[`withDataCache`](#cross-request-data-cache-withdatacache) TTL longer than the
+pass interval: a 400-page pass then makes one call for a shared endpoint. The
+brake slows those calls down, it does not reduce their number.
+
 ## Managing the cache
 
 `jskelet` exports these functions:
@@ -666,6 +758,95 @@ The same summary is in the dev panel report
 
 The full list of settings: [07-configuration.md](./07-configuration.md).
 
+## The admin panel
+
+Instead of hand-writing the `getHtmlCacheEntries()` / `getRedisStatus()`
+endpoints above, the framework ships a panel. It is deliberately separate from
+the dev overlay: the overlay only exists while `NODE_ENV=development`, while the
+panel does not look at the environment — "why is this page stale", "did the
+webhook purge land", "is Redis actually connected" are production questions.
+
+```js
+// jskelet.config.mjs
+export default {
+  cache() {
+    return {
+      html: { "/news/:slug": 300 },
+      panel: { enabled: process.env.CACHE_PANEL === "1" },
+    };
+  },
+};
+```
+
+Without `enabled` **nothing is mounted**: the path does not exist, the module is
+never loaded and it costs the production process nothing. The environment
+variable (`JSKELET_CACHE_PANEL=1`) overrides the config, because the panel is
+usually opened once during an incident and editing the config file and
+redeploying is the last thing you want at that moment.
+
+When the panel is on, the server log prints the password:
+
+```
+[cache-panel] http://localhost:3000/_jskelet/cache — password for this run: 3f9c…
+```
+
+### Access and hardening
+
+- **The password is regenerated on every process start** (32 hex characters) and
+  only ever appears in the log. There is no persistent secret to leak: leaking
+  one means handing out the right to flush the cache, and a deploy should revoke
+  old access on its own.
+- **The password is not accepted in the query string,** so access logs, browser
+  history and the `Referer` header never carry it. Sign-in goes through the form.
+- **Three failed attempts ban the IP for 24 hours** (`banAttempts`, `banHours`).
+  Requests without a session count just like a wrong password; a successful
+  sign-in resets the counter.
+- **Banned and unauthorised requests get a `404`.** A 401 or 403 confirms the
+  panel exists; a 404 behaves as if it never did. The rest of the site is
+  untouched.
+- **Nothing is indexable:** every response carries `X-Robots-Tag: noindex,
+  nofollow, noarchive, nosnippet`, `Cache-Control: no-store` and
+  `Referrer-Policy: no-referrer`. The path is also exempt from prewarming and
+  from navigation speculation.
+- Actions require an `X-JSkelet-Cache-Panel` header — a header a cross-site form
+  cannot send, which is the panel's own CSRF brake.
+- Sessions and ban counters live in process memory; persisting them to disk
+  would be the wrong trade for a panel whose password changes on every restart.
+
+### What the panel shows
+
+| Area | Contents |
+| --- | --- |
+| Top bar | Environment, pid, uptime, RSS |
+| Cards | HTML entry count and limit, HTML bytes in memory, stale entry count, data entry count, Redis state (`connected` / `bypassed` / `off`), prewarm progress |
+| Entry list | HTML: key, fresh/stale, size, status code, remaining TTL, dependency count, precompressed bodies. Data: key, fresh/stale, remaining TTL |
+
+The list is **filtered by key** and the filter runs on the server: a data cache
+can hold tens of thousands of keys. At most 500 rows come back per request and
+the counter in the heading says how many matches were cut. HTML bodies and
+cached values are **never returned** — the panel's job is to show state, not to
+export content.
+
+### What you can do from it
+
+| Action | Equivalent call |
+| --- | --- |
+| Invalidate (target + `hard`) | `invalidateHtmlCache(target, { hard })` |
+| `drop` a single row | `dropHtmlCacheKey(key)` / `dropDataCacheKey(key)` |
+| Clear HTML cache | `clearHtmlCache()` |
+| Clear data cache (optional prefix) | `clearDataCache(prefix)` |
+| Drop shared keys | Scans and unlinks the `html` or `data` namespace in Redis |
+| Prewarm | `prewarm()` — the pass runs in the background, progress shows in the card |
+
+Each one propagates to the shared tier as well: clearing a single replica's
+cache is what produces the "I cleared it and it is still old" question in a
+clustered setup.
+
+Dropping a single row is not the same as `invalidateHtmlCache()`: that one
+matches a path pattern and takes down **every** query variant of a path, while
+`dropHtmlCacheKey()` takes the exact key — `/list?page=2` goes and
+`/list?page=3` stays hot.
+
 ## Prewarm — warming up at startup
 
 The equivalent of Next's build-time prerender, except the output is not written
@@ -720,12 +901,28 @@ Rules:
    parallelism. In dev, 4 requests per second apply by default: rendering runs
    on a single event loop, so an unpaced round leaves page requests and the dev
    panel's live channel waiting behind it.
-4. **A single serial retry round** is performed for the failed paths after
-   waiting `retryDelayMs` (`concurrency: 1`). The wait is deliberate: rate limit
-   windows are on the order of seconds, so retrying immediately just earns the
-   same 429.
-5. A summary is logged:
+4. **A single serial retry round** is performed for the paths that hit a
+   **transient** failure (`concurrency: 1`). Permanent answers like `400`, `403`
+   or `404` are not retried: a deterministic error does not get better on the
+   second try and those calls spend quota for nothing. The summary shows them as
+   `N not retried (permanent)`.
+5. The wait before the retry is `retryDelayMs`, but when the rate limit is on and
+   something is holding it back, that wins: retrying 2 seconds into a 10 second
+   circuit breaker would just earn the same 429 up front.
+6. A summary is logged:
    `[prewarm] warmed 128/130 pages, 2 failed, 5 recovered on the retry pass (12.4s)`
+
+Then comes how much the pass actually touched the upstream:
+
+```text
+[prewarm] 12 upstream calls for 430 data reads (97% from the data cache, 38 coalesced)
+```
+
+This is the one line that tells you which way to turn the knob. If the ratio is
+low the fix is not the rate limit but a longer `withDataCache` TTL — the brake
+slows calls down, it does not reduce their number. The same counters are
+available through `getDataCacheStats()` and on the dev report's **Data cache**
+card.
 
 Request errors and the per-page render warnings (`was produced with missing
 data`, `returned notFound() while upstream is failing`, `could not be

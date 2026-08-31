@@ -13,8 +13,9 @@ import fs from "node:fs";
 import path from "node:path";
 import zlib from "node:zlib";
 import { getHtmlCacheEntries, getHtmlCacheSize } from "../html-cache.js";
-import { getDataCacheSize } from "../data-cache.js";
+import { getDataCacheSize, getDataCacheStats } from "../data-cache.js";
 import { getRedisStatus } from "../redis.js";
+import { getUpstreamLimiterStatus } from "../upstream-limiter.js";
 import { prewarmProgress } from "../prewarm.js";
 import { getConfig } from "../../config/index.js";
 
@@ -351,10 +352,16 @@ export function buildReport(devtools) {
       // Veri önbelleğinden yalnızca sayaç: uzun kuyruklu bir sitede on
       // binlerce anahtar oluyor ve dökümü rapora koymak faydasız bir yük.
       data: getDataCacheSize(),
+      // Sayaçlar dökümün yerine geçmiyor, onu tamamlıyor: "kaç girdi var"
+      // sorusundan çok "kaç okuma upstream'e gitti" sorusu karar veriyor.
+      dataStats: getDataCacheStats(),
       // Paylaşımlı kademe kapalıyken de basılır: "Redis'i açtım ama neden
       // çalışmıyor" sorusunun cevabı en çok burada aranıyor.
       redis: getRedisStatus(),
     },
+    // Hız freninin o anki durumu. 429 fırtınasında "şu an saniyede kaça
+    // indi" bilgisi olmadan ayar yapmak körlemesine oluyor.
+    upstream: getUpstreamLimiterStatus(),
     prewarm: { ...prewarmProgress },
     requests: devtools.requests,
     errors: devtools.errors,

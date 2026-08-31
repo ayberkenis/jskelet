@@ -41,6 +41,7 @@ export { headHints } from "./server/head-hints.js";
 export { renderHeadMeta } from "./server/metadata.js";
 export {
   clearHtmlCache,
+  dropHtmlCacheKey,
   getHtmlCacheEntries,
   getHtmlCacheSize,
   invalidateHtmlCache,
@@ -49,13 +50,17 @@ export {
 export {
   clearDataCache,
   dataCache,
+  dropDataCacheKey,
   getDataCacheEntries,
   getDataCacheSize,
+  getDataCacheStats,
   withDataCache,
 } from "./server/data-cache.js";
 // Paylaşımlı önbellek kademesinin durumu. Bağlantı kurulmamışken de güvenle
 // çağrılır; healthcheck uçları bunu okuyor.
 export { getRedisStatus } from "./server/redis.js";
+// Upstream hız freninin host başına durumu: healthcheck ve teşhis uçları için.
+export { getUpstreamLimiterStatus } from "./server/upstream-limiter.js";
 export { prewarm, prewarmProgress } from "./server/prewarm.js";
 export { createProxy } from "./server/middleware/upstream-proxy.js";
 export { getConfig, loadConfig } from "./config/index.js";

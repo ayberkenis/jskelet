@@ -704,6 +704,21 @@ const CSS = `
   border-radius: 6px; padding: 1px 6px; font-family: ui-monospace, monospace;
 }
 
+/* Yüklü sürüm ve kayıt defterindeki son sürüm. */
+.ver {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 10.5px; font-weight: 600; color: var(--muted);
+  border: 1px solid var(--line); border-radius: 999px; padding: 2px 8px;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-variant-numeric: tabular-nums;
+}
+.ver .cur { color: #dbe2ea; }
+.ver .state { text-transform: uppercase; letter-spacing: .05em; font-size: 9.5px; }
+.ver.latest .state { color: var(--good); }
+.ver.outdated { border-color: rgba(251,191,36,.35); }
+.ver.outdated .state { color: var(--mid); }
+.ver .next { color: var(--mid); }
+
 .rail {
   display: flex; flex-direction: column; gap: 4px; padding: 14px 10px;
   border-inline-end: 1px solid var(--line); background: rgba(0,0,0,.22);
@@ -893,6 +908,7 @@ const SKELETON = `
         <div class="head">
           <img src="${BASE}/logo.png" alt="">
           <span class="title">JSkelet Dev</span>
+          <span class="ver" data-part="version" hidden></span>
           <span class="pill"><span class="dot"></span><span data-part="pill"></span></span>
           <span class="spacer"></span>
           <span class="kbd">Alt+D</span>
@@ -1291,6 +1307,7 @@ function serverTab() {
           ]
         : []),
     ])}
+    ${upstreamSection()}
     <h4>Recent requests</h4>
     ${
       requests.length
@@ -1306,6 +1323,39 @@ function serverTab() {
             .join("")}</div>`
         : `<div class="empty">No requests yet.</div>`
     }
+  `;
+}
+
+/**
+ * Upstream hız freninin durumu. Fren kapalıysa (varsayılan) hiçbir şey
+ * basılmaz; açıkken 429 fırtınasında hızın nereye indiğini görmek, ayarı
+ * körlemesine yapmamanın tek yolu.
+ *
+ * @returns {string}
+ */
+function upstreamSection() {
+  const hosts = serverStats?.upstream ?? [];
+  if (!hosts.length) return "";
+
+  return `
+    <h4>Upstream rate limit</h4>
+    <div class="rows">${hosts
+      .map((host) => {
+        const throttled = host.rate < host.maxRate;
+        const state = host.bypassed
+          ? "bypassed"
+          : host.blockedMs
+            ? `waiting ${Math.ceil(host.blockedMs / 1000)} s`
+            : `${host.active} in flight`;
+
+        return `<div class="row">
+          <span class="status ${host.bypassed ? "bad" : throttled ? "warn" : ""}">${host.rate}/s</span>
+          <span class="path">${escapeHtml(host.host)}</span>
+          <span class="hint">${escapeHtml(state)}</span>
+          <span class="${host.throttled ? "mid" : ""}">${host.throttled} × 429</span>
+        </div>`;
+      })
+      .join("")}</div>
   `;
 }
 
@@ -1647,6 +1697,40 @@ function paintPrewarm(root) {
   if (!warm.active) setTimeout(render, WARM_LINGER_MS);
 }
 
+/**
+ * Başlıktaki sürüm göstergesi: solda yüklü sürüm, sağda kayıt defterindeki
+ * durum. Kontrol kapalıysa ya da kayıt defterine ulaşılamadıysa (`latest`
+ * boş) yalnızca yüklü sürüm yazılır; "bilinmiyor" etiketi gürültü olurdu.
+ *
+ * @param {ShadowRoot} root
+ * @param {{ current: string, latest: string | null, outdated: boolean } | undefined} version
+ */
+function paintVersion(root, version) {
+  const node = root.querySelector("[data-part='version']");
+
+  if (!version?.current) {
+    node.hidden = true;
+    return;
+  }
+
+  const { current, latest, outdated } = version;
+  node.hidden = false;
+  node.className = `ver ${latest ? (outdated ? "outdated" : "latest") : ""}`;
+  node.title = latest
+    ? outdated
+      ? `Installed ${current}, npm has ${latest}. Run: npm install jskelet@latest`
+      : `Installed ${current} — up to date with npm`
+    : `Installed ${current}. The npm registry could not be reached.`;
+
+  node.innerHTML =
+    `<span class="cur">v${escapeHtml(current)}</span>` +
+    (latest
+      ? outdated
+        ? `<span class="state">outdated</span><span class="next">→ v${escapeHtml(latest)}</span>`
+        : `<span class="state">latest</span>`
+      : "");
+}
+
 function paint() {
   const root = ensureRoot();
 
@@ -1690,6 +1774,7 @@ function paint() {
   chip.textContent = String(errorCount);
 
   const version = serverStats?.version;
+  paintVersion(root, version);
   const versionChip = root.querySelector("[data-part='version-chip']");
   versionChip.hidden = !version?.outdated;
   if (version?.outdated) versionChip.title = `JSkelet ${version.latest} is available`;

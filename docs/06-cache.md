@@ -431,6 +431,97 @@ cache: {
 `transientRetry: false` (ya da `attempts: 0`) tekrarı kapatır ve doğrudan 503'e
 düşer.
 
+## Upstream hız freni: `cache().upstream`
+
+Buraya kadarki her şey 429 **geldikten sonra** ne olacağını anlatıyor. Bu bölüm
+429'u en baştan almamakla ilgili.
+
+Fren `trackUpstreamFetch()` sarmalayıcısının içinde, yani gerçek `fetch`
+çağrısının geçtiği yerde duruyor. Isıtma turundaki `prewarm.rps` bu işi
+yapamaz: o, kendi sunucumuza atılan **sayfa** isteklerini sayıyor, ama bir
+sayfa render'ı bir API çağrısı da yapabilir yirmi tane de. Kotayı bağlayan şey
+sayfa sayısı değil, çağrı sayısı — ve fren buraya konduğunda ısıtma da gerçek
+trafik de aynı bütçeden harcar.
+
+Varsayılan **kapalı**: `rate` verilmedikçe hiçbir istek beklemez ve maliyet bir
+daldan ibarettir.
+
+```js
+// jskelet.config.mjs
+cache: () => ({
+  upstream: {
+    rate: 10, // saniyedeki tavan (host başına)
+    burst: 20, // kısa patlama toleransı
+    concurrency: 8, // aynı anda uçan çağrı
+    hosts: {
+      // Kotası farklı olan uçlar ayrı ayarlanır.
+      "api.example.com": { rate: 3, concurrency: 2 },
+    },
+  },
+}),
+```
+
+### Üç mekanizma, üç farklı sınır
+
+| Mekanizma | Neyi sınırlar | Ayar |
+| --- | --- | --- |
+| Token bucket | Ortalama hız (çağrı/saniye) | `rate`, `burst` |
+| Eşzamanlılık | Anlık baskı (aynı anda uçan çağrı) | `concurrency` |
+| AIMD | Doğru hızın ne olduğu | `minRate`, `increaseStep`, `increaseIntervalMs`, `decreaseIntervalMs` |
+
+Üçüncüsü asıl fikir. Sabit bir hız her zaman ya çok yavaş ya çok hızlıdır:
+kotanın gerçek sınırını kimse config'e doğru yazamaz, üstelik gün içinde
+değişir. Bu yüzden `rate` bir **tavan** olarak alınır ve gerçek hız upstream'in
+cevabına göre oynar:
+
+- **429 ya da 503** → hız yarıya iner (çarpımsal azalma). Yanıt `Retry-After`
+  taşıyorsa kova o süre boyunca tamamen durur — upstream sana ne kadar
+  bekleyeceğini zaten söylüyor.
+- **Temiz geçen her pencere** → hız `increaseStep` kadar yukarı çıkar
+  (toplamsal artış), `rate` tavanına kadar.
+
+Azalmanın çarpımsal, artışın toplamsal olması bilinçli. Tersi olsaydı her
+pencerede yeniden 429 yenirdi.
+
+### Devre kesici
+
+Art arda `breakerFailures` (varsayılan 5) tane 429 alan bir host
+`breakerCooldownMs` süresince tamamen baypas edilir: çağrı hiç yapılmaz,
+doğrudan geçici hata olarak bildirilir.
+
+Sert görünüyor ama asimetri bunu gerektiriyor: 429 geçici sayıldığı için o
+çağrıyla üretilen HTML **önbelleğe yazılmaz**. Yani rate limit'e girmiş bir
+turda kota harcanır ve karşılığında hiçbir şey saklanmaz. Üstüne bir sonraki
+tur aynı sayfayı yine soğuk bulup yine dener. Kesici bu boşa yanmayı kesiyor.
+
+```
+[upstream] api.example.com: 5 consecutive rate limits — bypassing for 10000ms (rate is now 1.2/s)
+```
+
+Yalnızca 429 ve 503 sayılır. `400`/`404` bir kota sorunu değil, `500` de öyle:
+onlar için yavaşlamak arızayı düzeltmez, sadece siteyi yavaşlatır.
+
+### Durumu görmek
+
+`getUpstreamLimiterStatus()` host başına o anki hızı, uçuştaki çağrıyı ve
+sayaçları döner; dev panelinin **Server** sekmesi de aynı bilgiyi basıyor.
+429 fırtınasında "şu an saniyede kaça indi" bilgisi olmadan ayar yapmak
+körlemesine olur.
+
+```js
+import { getUpstreamLimiterStatus } from "jskelet";
+
+// [{ host: "api.example.com", rate: 2.5, maxRate: 10, concurrency: 8,
+//    active: 3, throttled: 12, rejected: 40, bypassed: false, blockedMs: 0 }]
+```
+
+### Freni açmadan önce
+
+Hız freni son çare. Aynı upstream yanıtını yüzlerce sayfa çekiyorsa asıl çözüm
+[`withDataCache`](#istekler-arası-veri-önbelleği-withdatacache) TTL'ini tur
+aralığından uzun tutmak: 400 sayfalık bir tur, ortak bir uç için tek çağrı
+yapar. Fren o çağrıları yavaşlatır, sayısını azaltmaz.
+
 ## Önbelleği yönetmek
 
 `jskelet` şu fonksiyonları dışa açar:
@@ -649,6 +740,90 @@ panelinin raporunda da var ([09-dev-araclari.md](./09-dev-araclari.md)).
 
 Ayarların tam listesi: [07-yapilandirma.md](./07-yapilandirma.md).
 
+## Yönetim paneli
+
+Yukarıdaki `getHtmlCacheEntries()` / `getRedisStatus()` uçlarını elle yazmak
+yerine framework hazır bir panel taşıyor. Dev overlay'den ayrı bir şey: overlay
+yalnızca `NODE_ENV=development` iken var, panel ise ortama bakmaz — "bu sayfa
+neden bayat", "webhook purge'ü geçti mi", "Redis gerçekten bağlı mı" soruları
+üretimde soruluyor.
+
+```js
+// jskelet.config.mjs
+export default {
+  cache() {
+    return {
+      html: { "/haber/:slug": 300 },
+      panel: { enabled: process.env.CACHE_PANEL === "1" },
+    };
+  },
+};
+```
+
+`enabled` verilmedikçe **hiçbir şey mount edilmez**: yol yoktur, modül
+yüklenmez, üretim sürecinde hiçbir maliyeti olmaz. Ortam değişkeni
+(`JSKELET_CACHE_PANEL=1`) config'i ezer; panel genelde bir arıza sırasında tek
+seferlik açılıyor ve o an config dosyasını değiştirip yeniden dağıtmak
+istenmiyor.
+
+Panel açıldığında sunucu logu şifreyi basar:
+
+```
+[cache-panel] http://localhost:3000/_jskelet/cache — password for this run: 3f9c…
+```
+
+### Erişim ve güvenlik
+
+- **Şifre her süreç başlangıcında yeniden üretilir** (32 haneli, onaltılık) ve
+  yalnızca logda görünür. Kalıcı bir sır tutulmuyor: sızması önbelleği boşaltma
+  yetkisi demek ve bir deploy eski erişimi kendiliğinden iptal etmeli.
+- **Şifre query string ile kabul edilmez.** Erişim logları, tarayıcı geçmişi ve
+  `Referer` başlığı sırrı taşımasın; giriş yalnızca form üzerinden.
+- **Üç başarısız denemede IP 24 saat yasaklanır** (`banAttempts`, `banHours`).
+  Yanlış şifre kadar oturumsuz istek de sayılır; başarılı giriş sayacı sıfırlar.
+- **Yasaklı ve yetkisiz her cevap `404`.** 401/403 panelin var olduğunu
+  doğrular, 404 hiç yokmuş gibi davranır. Panelin dışındaki site etkilenmez.
+- **Hiçbir yeri indekslenmez:** her cevapta `X-Robots-Tag: noindex, nofollow,
+  noarchive, nosnippet`, `Cache-Control: no-store` ve `Referrer-Policy:
+  no-referrer`. Yol ayrıca ısıtma listesinden ve gezinme ipuçlarından muaftır.
+- Aksiyonlar `X-JSkelet-Cache-Panel` başlığı ister — çapraz siteden
+  gönderilemeyen bir başlık, yani panelin kendi CSRF freni.
+- Oturumlar ve yasak sayaçları süreç belleğinde durur; şifresi zaten her
+  restart'ta değişen bir panel için diske yazmak yanlış takas olurdu.
+
+### Panelde ne var
+
+| Bölüm | Gösterdiği |
+| --- | --- |
+| Üst satır | Ortam, pid, uptime, RSS |
+| Kartlar | HTML girdi sayısı ve sınırı, bellekteki HTML boyutu, bayat girdi sayısı, veri girdisi sayısı, Redis durumu (`connected` / `bypassed` / `off`), ısıtma turunun ilerlemesi |
+| Girdi listesi | HTML: anahtar, taze/bayat, boyut, durum kodu, kalan TTL, bağımlılık sayısı, hazır sıkıştırılmış gövdeler. Veri: anahtar, taze/bayat, kalan TTL |
+
+Liste **anahtar bazında filtrelenir** ve filtre sunucuda uygulanır: veri
+önbelleğinde on binlerce anahtar olabiliyor. Her istekte en fazla 500 satır
+döner; başlıktaki sayaç kaç eşleşmenin kesildiğini söyler. HTML gövdesi ve veri
+değerleri **hiç dönmez** — panelin işi durumu göstermek, içeriği dışa vermek
+değil.
+
+### Panelden yapılabilenler
+
+| İşlem | Karşılığı |
+| --- | --- |
+| Invalidate (hedef + `hard`) | `invalidateHtmlCache(target, { hard })` |
+| Tek satırı `drop` | `dropHtmlCacheKey(key)` / `dropDataCacheKey(key)` |
+| Clear HTML cache | `clearHtmlCache()` |
+| Clear data cache (önek opsiyonel) | `clearDataCache(prefix)` |
+| Drop shared keys | Redis'teki `html` ya da `data` isim alanını tarar ve düşürür |
+| Prewarm | `prewarm()` — tur arkada koşar, ilerleme kartta görünür |
+
+Hepsi paylaşımlı kademeye de yayılır: tek kopyanın önbelleğini boşaltmak,
+kümede çalışan bir kurulumda "temizledim ama hâlâ eski" sorusunu üretir.
+
+Listedeki tek satırı silmek `invalidateHtmlCache()`ten farklıdır: o yol
+desenine bakar ve bir yolun **bütün** query varyantlarını düşürür,
+`dropHtmlCacheKey()` ise tam anahtarı alır — `/liste?sayfa=2` düşerken
+`/liste?sayfa=3` sıcak kalır.
+
 ## Prewarm — açılışta ısıtma
 
 Next'teki build-time prerender'ın karşılığı, ama çıktı diske yazılmaz: önbellek
@@ -700,11 +875,27 @@ Kurallar:
    Dev'de varsayılan olarak saniyede 4 istek uygulanır: render tek bir olay
    döngüsünde çalıştığı için aralıksız bir tur, sayfa isteklerini ve dev
    panelinin canlı kanalını arkasında bekletiyor.
-4. Başarısız yollar için, `retryDelayMs` bekledikten sonra **tek seri tekrar
-   turu** yapılır (`concurrency: 1`). Bekleme bilinçli: rate limit pencereleri
-   saniye mertebesinde, hemen tekrar denemek aynı 429'u almak demek.
-5. Özet loglanır:
+4. **Geçici** hata alan yollar için **tek seri tekrar turu** yapılır
+   (`concurrency: 1`). `400`/`403`/`404` gibi kalıcı cevaplar tekrar turuna
+   girmez: deterministik bir hata tekrar denemekle düzelmez ve o çağrılar
+   kotadan karşılıksız yer. Özette `N not retried (permanent)` olarak görünür.
+5. Bekleme süresi `retryDelayMs`, ama hız freni açıkken **freni bekleten süre**
+   varsa o kazanır: 10 saniye kapalı kalacak bir devre kesiciden 2 saniye sonra
+   tekrar denemek, aynı 429'u peşin peşin almak olurdu.
+6. Özet loglanır:
    `[prewarm] warmed 128/130 pages, 2 failed, 5 recovered on the retry pass (12.4s)`
+
+Ardından turun upstream'e ne kadar dokunduğu basılır:
+
+```text
+[prewarm] 12 upstream calls for 430 data reads (97% from the data cache, 38 coalesced)
+```
+
+Bu satır ayarın hangi yönde değişmesi gerektiğini söyleyen tek satır. Oran
+düşükse çözüm hız freni değil, `withDataCache` TTL'ini tur aralığından uzun
+tutmak: fren çağrıları yavaşlatır, sayısını azaltmaz. Aynı sayaçlara
+`getDataCacheStats()` ile ya da dev raporundaki **Data cache** kartından da
+bakılabilir.
 
 Tur sırasında oluşan istek hataları ve sayfa başına basılan render uyarıları
 (`was produced with missing data`, `returned notFound() while upstream is

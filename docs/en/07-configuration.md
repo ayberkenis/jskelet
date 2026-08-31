@@ -572,9 +572,9 @@ Details: [03-routing.md](./03-routing.md).
 ## `cache()`
 
 **Type:**
-`() => { html?: Record<string, number>, maxEntries?: number, data?: object, trackUpstream?: boolean, trackDependencies?: boolean, transientRetry?: object | false, redis?: object, prewarm?: object }` —
+`() => { html?: Record<string, number>, maxEntries?: number, data?: object, trackUpstream?: boolean, trackDependencies?: boolean, transientRetry?: object | false, upstream?: object, redis?: object, prewarm?: object }` —
 **Default:**
-`{ html: {}, maxEntries: 500, data: { maxEntries: 10000, staleFactor: 10 }, trackUpstream: true, trackDependencies: true, transientRetry: { attempts: 1, delayMs: 300 }, redis: { enabled: false }, prewarm: { enabled: true, max: 400, intervalSeconds: 0 } }`
+`{ html: {}, maxEntries: 500, data: { maxEntries: 10000, staleFactor: 10 }, trackUpstream: true, trackDependencies: true, transientRetry: { attempts: 1, delayMs: 300 }, upstream: { rate: 0 }, redis: { enabled: false }, prewarm: { enabled: true, max: 400, intervalSeconds: 0 } }`
 
 ### `cache().html`
 
@@ -643,6 +643,39 @@ transient upstream failure. The point is that an existing page never turns into
 a 404; if the retries are exhausted the response is an uncached 503. `false` or
 `attempts: 0` disables the retry. Details: [06-caching.md](./06-caching.md).
 
+### `cache().upstream`
+
+A per-host rate limit for the `fetch` calls that go to upstream APIs. Off by
+default: unless `rate` is given, no request ever waits. `rate` is a ceiling; the
+actual rate pulls itself down in response to 429s and climbs back step by step
+during clean windows.
+
+| Field | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `rate` | `number` | `0` | Maximum calls per second. `0` → brake disabled |
+| `burst` | `number` | `0` | Bucket size; `0` → one second's budget of burst |
+| `concurrency` | `number` | `8` | Calls allowed in flight at once |
+| `minRate` | `number` | `0.5` | Floor of the decrease; the rate never goes below it |
+| `increaseStep` | `number` | `1` | Step of the additive increase (calls/second) |
+| `increaseIntervalMs` | `number` | `5000` | Increase period |
+| `decreaseIntervalMs` | `number` | `1000` | Minimum time between two decreases |
+| `breakerFailures` | `number` | `5` | Consecutive 429s after which the host is bypassed |
+| `breakerCooldownMs` | `number` | `10000` | How long the bypass lasts |
+| `hosts` | `Record<string, object>` | `{}` | Per-host overrides; same fields apply |
+
+Only `429` and `503` penalise the rate: a `400`/`404`/`500` is not a quota
+problem. Read the state with `getUpstreamLimiterStatus()` or from the dev
+panel's **Server** tab. Details, and what to check before turning it on:
+[06-caching.md](./06-caching.md).
+
+```js
+upstream: {
+  rate: 10,
+  concurrency: 4,
+  hosts: { "api.example.com": { rate: 3 } },
+}
+```
+
 ### `cache().redis`
 
 An optional Redis second tier (L2). The in-process cache stays primary; Redis
@@ -674,6 +707,42 @@ redis: {
   enabled: process.env.NODE_ENV === "production",
   url: process.env.REDIS_URL,
   namespace: "news-site",
+}
+```
+
+### `cache().panel`
+
+The cache admin panel. It shows the state of the in-process tier and the Redis
+tier, and it triggers targeted invalidation, single-entry drops and prewarming.
+
+It does not look at the environment: without `enabled` **nothing is mounted**
+and the path does not exist. When it is on it also works in production — that is
+where the real questions ("why is this page stale", "did the webhook purge
+land") get asked.
+
+| Field | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `enabled` | `boolean` | `false` | Only turns on when explicitly `true` (`JSKELET_CACHE_PANEL` overrides it) |
+| `basePath` | `string` | `"/_jskelet/cache"` | Root of the panel |
+| `banAttempts` | `number` | `3` | How many failed attempts ban an IP |
+| `banHours` | `number` | `24` | How long the ban lasts |
+| `sessionHours` | `number` | `12` | Lifetime of the session cookie |
+
+The password is generated **on every process start** and only appears in the
+server log:
+
+```
+[cache-panel] http://localhost:3000/_jskelet/cache — password for this run: 3f9c…
+```
+
+There is no persistent secret (no config field, no environment variable):
+leaking one means handing out the right to flush the cache, and a deploy should
+revoke old access on its own. Banned and unauthorised requests all get a `404`.
+Usage and screens: [06-caching.md](./06-caching.md).
+
+```js
+panel: {
+  enabled: process.env.CACHE_PANEL === "1",
 }
 ```
 
@@ -801,6 +870,7 @@ and no warning is printed.
 | `HOST` | `startServer` | `::` | Interface to bind to. The default listens dual-stack (IPv6 + IPv4); it falls back to `0.0.0.0` where IPv6 is unavailable |
 | `JSKELET_SECRET` | `jskelet/cookies` | — | The signed cookie secret. Read when `security.cookieSecret` is not set; if neither exists, the signed cookie API throws. [12](./12-dashboards-and-sessions.md) |
 | `DEV_TOKEN` | `devGate`, `prewarm` | — | If set, every request without a token gets a 404. Prewarming carries the token as a cookie. [09](./09-dev-tools.md) |
+| `JSKELET_CACHE_PANEL` | `createApp` | — | When set, turns the cache panel on; `0` turns off a panel enabled in the config. The env wins because the panel is usually opened once during an incident. [06](./06-caching.md) |
 | `PREWARM` | `startPrewarm` | — | `0` turns prewarming off; `1` overrides `enabled: false` in the config and turns it on |
 | `PREWARM_MAX` | `prewarm` | `400` | At most how many paths are prewarmed |
 | `PREWARM_CONCURRENCY` | `prewarm` | prod 4, dev 1 | Number of parallel workers |

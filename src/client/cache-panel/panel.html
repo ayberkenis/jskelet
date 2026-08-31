@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow, noarchive, nosnippet" />
+    <meta name="referrer" content="no-referrer" />
+    <title>Cache</title>
+    <link rel="stylesheet" href="panel.css" />
+  </head>
+  <body>
+    <header>
+      <h1>Cache</h1>
+      <span class="chip" id="env">—</span>
+      <span class="chip" id="pid">—</span>
+      <span class="chip" id="uptime">—</span>
+      <span class="chip" id="memory">—</span>
+      <span class="spacer"></span>
+      <label class="check">
+        <input type="checkbox" id="auto" checked />
+        live
+      </label>
+      <button id="refresh">Refresh</button>
+      <button id="logout">Sign out</button>
+    </header>
+
+    <main>
+      <div class="cards">
+        <div class="card">
+          <div class="label">HTML entries</div>
+          <div class="value" id="html-size">—</div>
+          <div class="sub" id="html-sub">—</div>
+        </div>
+        <div class="card">
+          <div class="label">HTML in memory</div>
+          <div class="value" id="html-bytes">—</div>
+          <div class="sub" id="html-stale">—</div>
+        </div>
+        <div class="card">
+          <div class="label">Data entries</div>
+          <div class="value" id="data-size">—</div>
+          <div class="sub" id="data-sub">—</div>
+        </div>
+        <div class="card">
+          <div class="label">Shared tier</div>
+          <div class="value" id="redis-state">—</div>
+          <div class="sub" id="redis-sub">—</div>
+        </div>
+        <div class="card">
+          <div class="label">Prewarm</div>
+          <div class="value" id="prewarm-state">—</div>
+          <div class="sub" id="prewarm-sub">—</div>
+        </div>
+      </div>
+
+      <section>
+        <h2>Actions</h2>
+        <div class="body">
+          <div class="row">
+            <input
+              class="grow"
+              type="text"
+              id="target"
+              spellcheck="false"
+              placeholder="/news/:slug  ·  /news/some-post  ·  invalidation target"
+            />
+            <label class="check">
+              <input type="checkbox" id="hard" />
+              hard (delete instead of marking stale)
+            </label>
+            <button class="primary" id="invalidate">Invalidate</button>
+          </div>
+
+          <div class="row">
+            <input
+              class="grow"
+              type="text"
+              id="prefix"
+              spellcheck="false"
+              placeholder="data key prefix — empty clears every data entry"
+            />
+            <button class="danger" id="clear-data">Clear data cache</button>
+            <button class="danger" id="clear-html">Clear HTML cache</button>
+          </div>
+
+          <div class="row">
+            <button id="prewarm">Prewarm all paths</button>
+            <button id="redis-html">Drop shared HTML keys</button>
+            <button id="redis-data">Drop shared data keys</button>
+          </div>
+
+          <p class="hint">
+            Invalidation marks entries stale by default: visitors keep getting
+            the old HTML while a single background refresh runs. Hard mode
+            deletes them, so the next visitor waits for a cold render.
+          </p>
+        </div>
+      </section>
+
+      <section>
+        <h2>
+          Entries
+          <span class="count" id="listed">—</span>
+          <span class="tabs" role="tablist">
+            <button id="tab-html" role="tab" aria-selected="true">HTML</button>
+            <button id="tab-data" role="tab" aria-selected="false">Data</button>
+          </span>
+        </h2>
+        <div class="body">
+          <div class="row">
+            <input
+              class="grow"
+              type="search"
+              id="search"
+              spellcheck="false"
+              placeholder="Filter by key"
+            />
+          </div>
+        </div>
+        <div class="scroll">
+          <table>
+            <thead id="thead"></thead>
+            <tbody id="tbody"></tbody>
+          </table>
+          <div class="empty" id="empty" hidden>No entries.</div>
+        </div>
+      </section>
+    </main>
+
+    <div id="toast"></div>
+    <script type="module" src="panel.js"></script>
+  </body>
+</html>

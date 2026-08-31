@@ -16,7 +16,8 @@
  *   redirects() → [{ source, destination, permanent?, statusCode? }]
  *   rewrites()  → [{ source, destination }] | { beforeFiles?, afterFiles? }
  *   cache()     → { html?: { [source]: saniye }, maxEntries?: number,
- *                   data?: {...}, redis?: {...}, prewarm?: {...} }
+ *                   data?: {...}, redis?: {...}, prewarm?: {...},
+ *                   panel?: {...} }
  *
  * Fonksiyon olmayan bölümler (`brand`, `security`, `static`, `navigation`…)
  * düz nesne olarak okunur.
@@ -28,6 +29,7 @@ import { pathToFileURL } from "node:url";
 import { compilePattern, matchPattern } from "./pattern.js";
 import {
   DEFAULT_BRAND,
+  DEFAULT_CACHE_PANEL,
   DEFAULT_DATA_CACHE,
   DEFAULT_DEV_GATE_BYPASS,
   DEFAULT_DIRS,
@@ -40,6 +42,7 @@ import {
   DEFAULT_SECURITY,
   DEFAULT_STATIC,
   DEFAULT_TRANSIENT_RETRY,
+  DEFAULT_UPSTREAM_LIMIT,
 } from "./defaults.js";
 
 /** Framework paketinin kökü — kendi şablonlarına ve varlıklarına erişir. */
@@ -87,6 +90,8 @@ const CONFIG_FILE = "jskelet.config.mjs";
  * @property {boolean} trackDependencies Render'ın okuduğu veri anahtarları kaydedilsin mi.
  * @property {{ attempts: number, delayMs: number }} transientRetry
  * @property {RedisConfig} redis Opsiyonel Redis ikinci kademesi.
+ * @property {typeof DEFAULT_UPSTREAM_LIMIT} upstream Upstream hız freni.
+ * @property {typeof DEFAULT_CACHE_PANEL} cachePanel Önbellek yönetim paneli.
  * @property {Record<string, unknown>} prewarm
  * @property {{ source: string, test: (pathname: string) => boolean }[]} prewarmPriority
  * @property {Record<string, unknown>} brand
@@ -250,12 +255,98 @@ function normalizeRedis(raw) {
 }
 
 /**
+ * Upstream hız freni. Sayısal alanlar tipine zorlanır; bozuk bir değer freni
+ * yanlış ayarlamak yerine varsayılana döner.
+ *
+ * @param {unknown} raw
+ * @returns {typeof DEFAULT_UPSTREAM_LIMIT}
+ */
+function normalizeUpstream(raw) {
+  const source = /** @type {Record<string, any>} */ (raw ?? {});
+  const merged = { ...DEFAULT_UPSTREAM_LIMIT, ...source };
+
+  /** @param {string} key */
+  const positive = (key) => {
+    const value = Number(merged[key]);
+    return Number.isFinite(value) && value >= 0
+      ? value
+      : /** @type {any} */ (DEFAULT_UPSTREAM_LIMIT)[key];
+  };
+
+  /** @type {Record<string, Record<string, number>>} */
+  const hosts = {};
+  for (const [host, override] of Object.entries(merged.hosts ?? {})) {
+    if (override && typeof override === "object") hosts[host] = override;
+  }
+
+  return {
+    ...merged,
+    rate: positive("rate"),
+    burst: positive("burst"),
+    concurrency: Math.max(1, Math.floor(positive("concurrency"))),
+    minRate: positive("minRate"),
+    increaseStep: positive("increaseStep"),
+    increaseIntervalMs: positive("increaseIntervalMs"),
+    decreaseIntervalMs: positive("decreaseIntervalMs"),
+    breakerFailures: Math.floor(positive("breakerFailures")),
+    breakerCooldownMs: positive("breakerCooldownMs"),
+    hosts,
+  };
+}
+
+/**
+ * Önbellek panelinin bölümü.
+ *
+ * `enabled` yalnızca açıkça `true` verildiğinde ya da `JSKELET_CACHE_PANEL`
+ * ortam değişkeni ayarlandığında açılır: paneli yanlışlıkla açmanın bedeli,
+ * önbelleği boşaltabilen bir ucu internete koymak.
+ *
+ * Ortam değişkeni config'in **üstünde** duruyor, çünkü paneli genelde bir
+ * arıza sırasında tek seferlik açmak isteniyor ve o an config dosyasını
+ * değiştirip yeniden dağıtmak istenmiyor. `JSKELET_CACHE_PANEL=0` aynı
+ * mantıkla config'te açık olan paneli kapatır.
+ *
+ * @param {unknown} raw
+ * @returns {typeof DEFAULT_CACHE_PANEL}
+ */
+function normalizeCachePanel(raw) {
+  const source = /** @type {Record<string, any>} */ (raw ?? {});
+  const env = process.env.JSKELET_CACHE_PANEL;
+
+  const basePath =
+    typeof source.basePath === "string" && source.basePath.startsWith("/")
+      ? source.basePath.replace(/\/+$/, "")
+      : DEFAULT_CACHE_PANEL.basePath;
+
+  /** @param {string} key @param {number} min */
+  const positive = (key, min) => {
+    const value = Number(source[key]);
+    return Number.isFinite(value) && value >= min
+      ? value
+      : /** @type {any} */ (DEFAULT_CACHE_PANEL)[key];
+  };
+
+  return {
+    enabled:
+      env === undefined
+        ? source.enabled === true
+        : env !== "0" && env !== "false" && env !== "",
+    basePath: basePath || DEFAULT_CACHE_PANEL.basePath,
+    banAttempts: Math.floor(positive("banAttempts", 1)),
+    banHours: positive("banHours", 0),
+    sessionHours: positive("sessionHours", 0),
+  };
+}
+
+/**
  * @param {unknown} raw
  * @returns {{ html: ResolvedConfig["html"], htmlMaxEntries: number,
  *   data: Record<string, unknown>, trackUpstream: boolean,
  *   trackDependencies: boolean,
  *   transientRetry: { attempts: number, delayMs: number },
  *   redis: RedisConfig,
+ *   upstream: typeof DEFAULT_UPSTREAM_LIMIT,
+ *   cachePanel: typeof DEFAULT_CACHE_PANEL,
  *   prewarm: Record<string, unknown>,
  *   prewarmPriority: ResolvedConfig["prewarmPriority"] }}
  */
@@ -292,6 +383,8 @@ function normalizeCache(raw) {
         ? { attempts: 0, delayMs: 0 }
         : { ...DEFAULT_TRANSIENT_RETRY, ...(raw?.transientRetry ?? {}) },
     redis: normalizeRedis(raw?.redis),
+    upstream: normalizeUpstream(raw?.upstream),
+    cachePanel: normalizeCachePanel(raw?.panel),
     // Desenler derlenmiş hâlde ayrı alanda tutulur: `prewarm` sayısal
     // ayarların düz torbası olarak kalsın, her turda yeniden derlenmesin.
     prewarm,
@@ -510,6 +603,8 @@ export async function loadConfig(options = {}) {
     trackDependencies,
     transientRetry,
     redis,
+    upstream,
+    cachePanel,
     prewarm,
     prewarmPriority,
   } = normalizeCache(cache);
@@ -530,6 +625,8 @@ export async function loadConfig(options = {}) {
     trackDependencies,
     transientRetry,
     redis,
+    upstream,
+    cachePanel,
     prewarm,
     prewarmPriority,
     brand,

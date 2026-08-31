@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow, noarchive, nosnippet" />
+    <meta name="referrer" content="no-referrer" />
+    <title>Cache</title>
+    <link rel="stylesheet" href="panel.css" />
+  </head>
+  <body class="login">
+    <form id="form" autocomplete="off">
+      <h1>Cache panel</h1>
+      <p>
+        This run's password is printed in the server log
+        (<code>[cache-panel]</code>).
+      </p>
+      <input
+        id="password"
+        type="password"
+        name="password"
+        maxlength="64"
+        spellcheck="false"
+        autocomplete="off"
+        placeholder="32-character password"
+        autofocus
+      />
+      <button class="primary" type="submit">Unlock</button>
+      <p class="error" id="error"></p>
+    </form>
+
+    <script type="module">
+      const form = document.getElementById("form");
+      const input = document.getElementById("password");
+      const error = document.getElementById("error");
+
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        error.textContent = "";
+
+        const response = await fetch("login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ password: input.value }),
+        });
+
+        if (response.ok) {
+          location.reload();
+          return;
+        }
+
+        // Yasaklandıysa sunucu artık 404 dönüyor; kalan deneme sayısı
+        // bilinçli olarak bildirilmiyor.
+        error.textContent =
+          response.status === 404
+            ? "Too many attempts."
+            : "Invalid password.";
+        input.value = "";
+        input.focus();
+      });
+    </script>
+  </body>
+</html>
