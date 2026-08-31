@@ -58,7 +58,22 @@ export {
 } from "./server/data-cache.js";
 // Paylaşımlı önbellek kademesinin durumu. Bağlantı kurulmamışken de güvenle
 // çağrılır; healthcheck uçları bunu okuyor.
-export { getRedisStatus } from "./server/redis.js";
+// `getRedisDetails()` bağlantının nereye kurulduğunu ve hangi türleri
+// paylaştığını söyler (şifre asla dönmez); `inspectRedis()` tür başına anahtar
+// sayar — bir `SCAN` turu olduğu için istek yolunda çağrılmamalı.
+export { getRedisDetails, getRedisStatus, inspectRedis } from "./server/redis.js";
+// CDN kademesi. JSkelet'in önbelleği origin önbelleği; ziyaretçinin gördüğü
+// kopya edge'de duruyor. Bir içeriği gerçekten tazelemek için ikisini birlikte
+// düşürmek gerekiyor: `invalidateHtmlCache()` + `purgeCloudflare()`.
+export {
+  cloudflareConfigured,
+  fetchCacheAnalytics,
+  fetchCloudflareOverview,
+  fetchPathEdges,
+  getCloudflareStatus,
+  purgeCloudflare,
+  toCloudflareUrls,
+} from "./server/cloudflare.js";
 // Upstream hız freninin host başına durumu: healthcheck ve teşhis uçları için.
 export { getUpstreamLimiterStatus } from "./server/upstream-limiter.js";
 export { prewarm, prewarmProgress } from "./server/prewarm.js";

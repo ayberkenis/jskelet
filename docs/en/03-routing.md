@@ -126,6 +126,10 @@ app.get(
 | `revalidate` | `number` (seconds) | The HTML cache TTL. If it is not given, or is 0, this route is not cached. A matching rule in `jskelet.config.mjs` → `cache().html` **overrides** this value. |
 | `private` | `boolean` | The page depends on the visitor. The cache is disabled, a `cache().html` pattern **cannot** override that, and the response is sent with `private, no-store` and `Vary: Cookie`, without an ETag. |
 
+Even with `revalidate` given, **a request that carries a query parameter is
+dynamic by default**; that path needs an allowlist under `cache().query`
+([06-caching.md](./06-caching.md)).
+
 Every session-dependent page needs `private: true`; because identity is not part
 of the cache key, without the flag one user's HTML is served to another. The
 framework also catches this at runtime (a render that reads cookies is never

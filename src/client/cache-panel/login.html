@@ -5,11 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="robots" content="noindex, nofollow, noarchive, nosnippet" />
     <meta name="referrer" content="no-referrer" />
-    <title>Cache</title>
+    <title>Cache · JSkelet</title>
+    <link rel="icon" href="logo.png" />
     <link rel="stylesheet" href="panel.css" />
   </head>
   <body class="login">
     <form id="form" autocomplete="off">
+      <div class="brand">
+        <img src="logo.png" alt="" width="30" height="30" />
+        <span class="wordmark">JSkelet</span>
+      </div>
       <h1>Cache panel</h1>
       <p>
         This run's password is printed in the server log
@@ -27,6 +32,9 @@
       />
       <button class="primary" type="submit">Unlock</button>
       <p class="error" id="error"></p>
+      <p class="hint m0">
+        Three failed attempts block this address for 24 hours.
+      </p>
     </form>
 
     <script type="module">

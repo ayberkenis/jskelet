@@ -115,6 +115,7 @@ export default {
   async cache() {
     return {
       html: { "/": 60, "/haber/:slug": 300 },
+      query: { "/arama": ["q", "page"] },
       maxEntries: 500,
       data: { maxEntries: 10000, staleFactor: 10 },
       prewarm: {
@@ -560,9 +561,9 @@ Ayrıntı: [03-routing.md](./03-routing.md).
 ## `cache()`
 
 **Tip:**
-`() => { html?: Record<string, number>, maxEntries?: number, data?: object, trackUpstream?: boolean, trackDependencies?: boolean, transientRetry?: object | false, upstream?: object, redis?: object, prewarm?: object }` —
+`() => { html?: Record<string, number>, query?: Record<string, string[] | true>, maxEntries?: number, data?: object, trackUpstream?: boolean, trackDependencies?: boolean, transientRetry?: object | false, upstream?: object, redis?: object, prewarm?: object }` —
 **Varsayılan:**
-`{ html: {}, maxEntries: 500, data: { maxEntries: 10000, staleFactor: 10 }, trackUpstream: true, trackDependencies: true, transientRetry: { attempts: 1, delayMs: 300 }, upstream: { rate: 0 }, redis: { enabled: false }, prewarm: { enabled: true, max: 400, intervalSeconds: 0 } }`
+`{ html: {}, query: {}, maxEntries: 500, data: { maxEntries: 10000, staleFactor: 10 }, trackUpstream: true, trackDependencies: true, transientRetry: { attempts: 1, delayMs: 300 }, upstream: { rate: 0 }, redis: { enabled: false }, prewarm: { enabled: true, max: 400, intervalSeconds: 0 } }`
 
 ### `cache().html`
 
@@ -581,6 +582,39 @@ html: {
 Tek istisna `route(fn, { private: true })`: bu route'ta desen eşleşse bile yok
 sayılır. Kilidin tek yönlü olması bilinçli — ters yönde bir hata, bir
 kullanıcının HTML'inin bir başkasına servis edilmesi anlamına geliyor.
+
+### `cache().query`
+
+Desen → cache anahtarına girmesine izin verilen query parametreleri.
+
+**Varsayılan olarak query parametresi taşıyan istek dinamiktir**: `cache().html`
+o yolu kapsıyor olsa bile HTML önbelleğine hiç girmez, `private, no-store` ile
+gider. Sebebi basit — bir yolun bütün varyantlarını cache'lemek `?utm_source=…`
+gibi sonsuz sayıda anahtar üretiyor ve `maxEntries` sınırına dayandığında
+LRU'daki gerçek sayfaları dışarı atıyor. Hangi parametrenin çıktıyı gerçekten
+değiştirdiğini yalnızca uygulama bilir.
+
+```js
+query: {
+  "/arama": ["q", "page"], // yalnızca bu ikisi anahtara girer
+  "/urunler": ["kategori"],
+  "/rapor/:id": true, // bütün parametreler anahtara girer
+  "/kampanya": [], // query tamamen yok sayılır
+}
+```
+
+- **İzin listesi** (`string[]`): listedeki parametreler anahtara girer, her
+ farklı değer kendi girdisini alır. Listede olmayan parametreler **yok
+ sayılır** — sayfa yine cache'lenir ve bütün kampanya varyantları tek kopyayı
+ paylaşır.
+- **`true`**: bütün parametreler anahtara girer. Anahtar sayısını sınırlayan
+ tek şey `maxEntries` olur; yalnızca değer kümesi kapalı olan yollarda kullan.
+- **`[]`**: query hiç dikkate alınmaz, bütün varyantlar query'siz sürümün
+ HTML'ini alır.
+
+Parametreler anahtara **sıralı** yazılır: `?a=1&b=2` ile `?b=2&a=1` aynı girdiyi
+paylaşır. `route(fn, { private: true })` bu bölümden etkilenmez; private route
+hiçbir koşulda cache'lenmez.
 
 ### `cache().maxEntries`
 
@@ -722,6 +756,30 @@ yetkisi demek ve her deploy eski erişimi kendiliğinden iptal etmeli. Yasaklı 
 yetkisiz her cevap `404`'tür. Kullanım ve ekran ayrıntıları:
 [06-cache.md](./06-cache.md).
 
+### `cache().cloudflare`
+
+CDN kademesi. JSkelet'in önbelleği origin önbelleği; ziyaretçinin gördüğü kopya
+edge'de duruyor. Bu bölüm bağlıysa panelden edge purge'ü, cache ile ilgili zone
+ayarları ve cache isabet oranı yönetilebilir.
+
+| Alan | Tip | Varsayılan | Anlamı |
+| --- | --- | --- | --- |
+| `enabled` | `boolean` | `true` | `false` verilirse env'de token olsa bile yüzey kapalı kalır |
+| `zoneId` | `string \| null` | `null` | Zone kimliği (`JSKELET_CLOUDFLARE_ZONE_ID` ezer) |
+| `apiToken` | `string \| null` | `null` | Token; **env tercih edilir**, config'e yazmak sırrı repoya sokar |
+| `hostname` | `string \| null` | `null` | Purge tam URL ister; yol → URL çevrimi bu ad üzerinden yapılır. Verilmezse panelin açıldığı origin kullanılır |
+| `analyticsHours` | `number` | `24` | Analitik penceresi, en çok `72` |
+
+Token yalnızca `JSKELET_CLOUDFLARE_KEY` ile verildiğinde config dosyası temiz
+kalır; izinler yapılacak işe göre: purge için `Zone.Cache Purge`, ayarlar için
+`Zone.Zone Settings`, isabet oranı için `Zone.Analytics` (salt okunur). Token
+hiçbir panel cevabında dönmez, yalnızca "env'den geldi" bilgisi görünür.
+
+Zone bağlı değilse panel bir uyarı değil kurulum önerisi gösterir; Cloudflare
+hata dönerse ilgili bölüm hatayı yazar ve panelin kalanı çalışmaya devam eder.
+Neyin sorulabildiği — özellikle "bu sayfa kaç edge'de cache'li" sorusunun neden
+tam cevabı olmadığı — [06-cache.md](./06-cache.md) içinde.
+
 ```js
 panel: {
   enabled: process.env.CACHE_PANEL === "1",
@@ -852,6 +910,9 @@ basılmaz.
 | `JSKELET_SECRET` | `jskelet/cookies` | — | İmzalı cookie sırrı. `security.cookieSecret` verilmediğinde buradan okunur; ikisi de yoksa imzalı cookie API'si hata verir. [12](./12-panel-ve-oturum.md) |
 | `DEV_TOKEN` | `devGate`, `prewarm` | — | Ayarlıysa token taşımayan her isteğe 404 döner. Isıtma token'ı çerez olarak taşır. [09](./09-dev-araclari.md) |
 | `JSKELET_CACHE_PANEL` | `createApp` | — | Ayarlıysa önbellek panelini açar; `0` config'te açık olan paneli kapatır. Env config'i ezer, çünkü panel genelde bir arıza sırasında tek seferlik açılır. [06](./06-cache.md) |
+| `JSKELET_CLOUDFLARE_KEY` | Cloudflare cache yüzeyi | — | API token. Verilene kadar CDN purge'ü ve edge analitiği kapalıdır; config'teki `apiToken`'ı ezer. Token hiçbir cevapta dönmez. [06](./06-cache.md) |
+| `JSKELET_CLOUDFLARE_ZONE_ID` | Cloudflare cache yüzeyi | — | Zone kimliği. Token'la birlikte verilmedikçe hiçbir Cloudflare ucu çağrılmaz |
+| `JSKELET_CLOUDFLARE_HOSTNAME` | Cloudflare cache yüzeyi | — | Purge URL'lerinin kökü. Panel iç bir adresten açılıyorsa gerekir |
 | `PREWARM` | `startPrewarm` | — | `0` ısıtmayı kapatır; `1` config'teki `enabled: false`'u ezip açar |
 | `PREWARM_MAX` | `prewarm` | `400` | En fazla kaç yol ısıtılır |
 | `PREWARM_CONCURRENCY` | `prewarm` | prod 4, dev 1 | Paralel işçi sayısı |

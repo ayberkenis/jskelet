@@ -26,10 +26,18 @@
  */
 import crypto from "node:crypto";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import express from "express";
+import * as log from "../log.mjs";
 import { FRAMEWORK_ROOT, getConfig } from "../config/index.js";
+import {
+  FRAMEWORK_HOMEPAGE,
+  FRAMEWORK_LICENSE,
+  FRAMEWORK_NODE_RANGE,
+  FRAMEWORK_VERSION,
+} from "../version.mjs";
 import { safeEqual } from "../http/cookies.js";
 import {
   clearHtmlCache,
@@ -44,8 +52,25 @@ import {
   getDataCacheEntries,
   getDataCacheSize,
 } from "./data-cache.js";
-import { getRedisStatus, redisDropMatching } from "./redis.js";
+import {
+  getRedisDetails,
+  getRedisStatus,
+  inspectRedis,
+  redisDropMatching,
+} from "./redis.js";
 import { getUpstreamLimiterStatus } from "./upstream-limiter.js";
+import {
+  clearCloudflareCacheReserve,
+  cloudflareConfigured,
+  fetchCacheAnalytics,
+  fetchCloudflareOverview,
+  fetchPathEdges,
+  getCloudflareStatus,
+  purgeCloudflare,
+  setCloudflareFeature,
+  setCloudflareSetting,
+  toCloudflareUrls,
+} from "./cloudflare.js";
 import { prewarm, prewarmProgress } from "./prewarm.js";
 
 /** Panel dosyaları framework paketinden servis edilir, uygulamadan değil. */
@@ -199,9 +224,9 @@ function notFound(res) {
  * göndermenin faydası yok.
  *
  * @param {string} query Anahtar filtresi (boş → filtre yok).
- * @returns {object}
+ * @returns {Promise<object>}
  */
-function snapshot(query) {
+async function snapshot(query) {
   const term = query.trim().toLowerCase();
   /** @param {{ key: string }} entry */
   const matches = (entry) => !term || entry.key.toLowerCase().includes(term);
@@ -216,6 +241,13 @@ function snapshot(query) {
   return {
     boot: BOOT_ID,
     generatedAt: Date.now(),
+    release: {
+      version: FRAMEWORK_VERSION,
+      license: FRAMEWORK_LICENSE,
+      node: FRAMEWORK_NODE_RANGE,
+      homepage: FRAMEWORK_HOMEPAGE,
+    },
+    host: await hostStatus(),
     process: {
       pid: process.pid,
       node: process.version,
@@ -231,7 +263,14 @@ function snapshot(query) {
       matched: htmlMatched.length,
       entries: htmlMatched
         .sort((a, b) => b.bytes - a.bytes)
-        .slice(0, MAX_LISTED),
+        .slice(0, MAX_LISTED)
+        // Anahtar `yol?query`; query boşken sonda yalnız bir `?` kalıyor.
+        // Silme işlemleri gerçek anahtarı kullanmaya devam eder, panel
+        // ziyaret edilebilir yolu gösterir.
+        .map((entry) => ({
+          ...entry,
+          url: entry.key.endsWith("?") ? entry.key.slice(0, -1) : entry.key,
+        })),
     },
     data: {
       size: getDataCacheSize(),
@@ -242,9 +281,57 @@ function snapshot(query) {
         .sort((a, b) => a.expiresIn - b.expiresIn)
         .slice(0, MAX_LISTED),
     },
-    redis: getRedisStatus(),
+    redis: { ...getRedisStatus(), ...getRedisDetails() },
+    // Cloudflare yalnızca kurulum özeti: zone bilgisi ve analitik ağa çıkıyor
+    // ve döküm birkaç saniyede bir yenileniyor. Ayrıntı ayrı uçta.
+    cloudflare: getCloudflareStatus(),
     upstream: getUpstreamLimiterStatus(),
     prewarm: { ...prewarmProgress },
+  };
+}
+
+/**
+ * Makinenin RAM ve disk durumu.
+ *
+ * Paylaşımlı kademe kapalıyken önbelleğin tamamı bu sürecin belleğinde
+ * yaşıyor ve `maxEntries` ile RAM arasındaki ilişki panelde görünmediği sürece
+ * ayarlanamıyor: "500 girdi çok mu" sorusunun cevabı makinede ne kadar boş
+ * bellek kaldığına bağlı. Disk, HTML önbelleğinin kendisi için değil, ısıtma
+ * ve build çıktısının yaşadığı yer için: dolu bir diskte `jskelet build`
+ * sessizce hatalı manifest bırakıyor.
+ *
+ * `statfs` desteklenmeyen bir platform ya da erişilemeyen bir yol sadece
+ * `null` disk demek; panel yine açılır.
+ *
+ * @returns {Promise<object>}
+ */
+async function hostStatus() {
+  const total = os.totalmem();
+  const free = os.freemem();
+
+  /** @type {{ path: string, total: number, free: number } | null} */
+  let disk = null;
+
+  try {
+    const root = getConfig().root;
+    const stats = await fs.promises.statfs(root);
+    disk = {
+      path: root,
+      total: stats.blocks * stats.bsize,
+      // `bavail`, `bfree` değil: ayrılmış blokları boş göstermek yanıltıcı.
+      free: stats.bavail * stats.bsize,
+    };
+  } catch {
+    disk = null;
+  }
+
+  return {
+    platform: `${os.platform()} ${os.arch()}`,
+    cpus: os.cpus().length,
+    // Windows'ta `loadavg()` her zaman sıfır döner; panel bunu gizler.
+    load: os.loadavg()[0],
+    memory: { total, free, used: total - free },
+    disk,
   };
 }
 
@@ -316,6 +403,20 @@ async function runAction(body, req) {
       };
     }
 
+    case "redis:inspect": {
+      const result = await inspectRedis();
+      if (!result.ok) return { ok: false, message: "Redis is not reachable" };
+
+      const parts = [
+        `${result.html} html keys`,
+        `${result.data} data keys`,
+        result.totalKeys !== null ? `${result.totalKeys} keys in db` : null,
+        result.usedMemory ? `${result.usedMemory} used` : null,
+      ].filter(Boolean);
+
+      return { ok: true, message: parts.join(" · ") };
+    }
+
     case "redis:drop": {
       const kind = body.kind === "data" ? "data" : "html";
       const status = getRedisStatus();
@@ -325,6 +426,93 @@ async function runAction(body, req) {
 
       const dropped = await redisDropMatching(kind);
       return { ok: true, message: `${dropped} shared ${kind} keys dropped` };
+    }
+
+    /* ------------------------------------------------------- cloudflare */
+
+    case "cf:purge-everything": {
+      const result = await purgeCloudflare({ everything: true });
+      return {
+        ok: result.ok,
+        message: result.ok
+          ? "Cloudflare cache purged (everything)"
+          : `Cloudflare: ${result.error}`,
+      };
+    }
+
+    case "cf:purge-urls": {
+      // Panelin elindeki HTML anahtarları yol; Cloudflare tam URL istiyor.
+      // Origin, isteğin geldiği host'tan türetilir ki tek zone'lu kurulumda
+      // ayrıca ayar gerekmesin.
+      const paths = Array.isArray(body.paths) ? body.paths.map(String) : [];
+      if (!paths.length) return { ok: false, message: "No paths given" };
+
+      const urls = toCloudflareUrls(paths, originOf(req));
+      if (!urls.length) {
+        return {
+          ok: false,
+          message: "Could not build absolute URLs — set cache().cloudflare.hostname",
+        };
+      }
+
+      const result = await purgeCloudflare({ files: urls });
+      return {
+        ok: result.ok,
+        message: result.ok
+          ? `Purged ${result.purged} URLs at Cloudflare in ${result.batches} request(s)`
+          : `Cloudflare: ${result.error}`,
+      };
+    }
+
+    case "cf:purge-keys": {
+      /** @type {"prefixes" | "hosts" | "tags"} */
+      const kind =
+        body.kind === "hosts" ? "hosts" : body.kind === "tags" ? "tags" : "prefixes";
+
+      const values = String(body.values ?? "")
+        .split(/[\s,]+/)
+        .filter(Boolean);
+
+      if (!values.length) return { ok: false, message: "Nothing to purge" };
+
+      const result = await purgeCloudflare({ [kind]: values });
+      return {
+        ok: result.ok,
+        message: result.ok
+          ? `Purged ${result.purged} ${kind} at Cloudflare`
+          : `Cloudflare: ${result.error}`,
+      };
+    }
+
+    case "cf:setting": {
+      const result = await setCloudflareSetting(body.id, body.value);
+      return {
+        ok: result.ok,
+        message: result.ok
+          ? `Cloudflare ${body.id} is now ${result.value}`
+          : `Cloudflare: ${result.error}`,
+      };
+    }
+
+    case "cf:feature": {
+      const value = body.value === "on" ? "on" : "off";
+      const result = await setCloudflareFeature(body.feature, value);
+      return {
+        ok: result.ok,
+        message: result.ok
+          ? `Cloudflare ${body.feature} turned ${value}`
+          : `Cloudflare: ${result.error}`,
+      };
+    }
+
+    case "cf:clear-reserve": {
+      const result = await clearCloudflareCacheReserve();
+      return {
+        ok: result.ok,
+        message: result.ok
+          ? "Cache Reserve clear started — it runs asynchronously at Cloudflare"
+          : `Cloudflare: ${result.error}`,
+      };
     }
 
     case "prewarm": {
@@ -396,11 +584,16 @@ function router() {
     sendFile(res, authenticated(req) ? "panel.html" : "login.html");
   });
 
-  // Stil giriş sayfasında da gerekiyor, yani oturumdan önce servis edilir.
-  // İçinde durum bilgisi yok.
+  // Stil ve logo giriş sayfasında da gerekiyor, yani oturumdan önce servis
+  // edilir. İkisinde de durum bilgisi yok.
   api.get("/panel.css", (req, res) => {
     res.type("text/css");
     sendFile(res, "panel.css");
+  });
+
+  api.get("/logo.png", (req, res) => {
+    res.type("image/png");
+    fs.createReadStream(path.join(FRAMEWORK_ROOT, "src", "logo.png")).pipe(res);
   });
 
   api.post("/login", express.json({ limit: "4kb" }), (req, res) => {
@@ -457,9 +650,29 @@ function router() {
     sendFile(res, "panel.js");
   });
 
-  api.get("/data", (req, res) => {
+  api.get("/data", async (req, res) => {
     const query = typeof req.query.q === "string" ? req.query.q : "";
-    res.json(snapshot(query));
+    res.json(await snapshot(query));
+  });
+
+  // Cloudflare ayrı uçlarda: her ikisi de ağa çıkıyor ve döküm turuna
+  // bağlanırlarsa panel Cloudflare'in gecikmesi kadar yavaşlar.
+  api.get("/cloudflare", async (req, res) => {
+    res.json(await fetchCloudflareOverview({ force: req.query.force === "1" }));
+  });
+
+  api.post("/cloudflare/analytics", express.json({ limit: "8kb" }), async (req, res) => {
+    if (!cloudflareConfigured()) {
+      res.json({ ok: false, error: "not configured" });
+      return;
+    }
+
+    const hours = Number(req.body?.hours) || undefined;
+    const path = typeof req.body?.path === "string" ? req.body.path.trim() : "";
+
+    // Yol verildiyse soru "bu sayfa hangi edge'lerden servis edildi", yoksa
+    // "zone genelinde cache oranı ne".
+    res.json(path ? await fetchPathEdges({ path, hours }) : await fetchCacheAnalytics({ hours }));
   });
 
   api.post("/action", express.json({ limit: "64kb" }), async (req, res) => {
@@ -480,6 +693,18 @@ function router() {
 }
 
 /**
+ * Purge URL'lerinin kökü. `cloudflare.hostname` verilmediğinde panelin
+ * açıldığı origin kullanılır: tek zone'lu bir kurulumda ikisi zaten aynı.
+ *
+ * @param {import('express').Request} req
+ * @returns {string | undefined}
+ */
+function originOf(req) {
+  const host = req.get("host");
+  return host ? `${req.protocol}://${host}` : undefined;
+}
+
+/**
  * @param {import('express').Response} res
  * @param {string} name
  */
@@ -497,9 +722,17 @@ export function mountCachePanel(app) {
 
   app.use(settings.basePath, router());
 
+  // Şifre akışın içinde tek bir satır olarak kaybolmamalı: kullanıcı onu bir
+  // kez görüyor ve her restart'ta değişiyor.
   const port = process.env.PORT ?? 3000;
-  console.log(
-    `[cache-panel] http://localhost:${port}${settings.basePath} — ` +
-      `password for this run: ${PASSWORD}`,
-  );
+  log.box({
+    title: "CACHE PANEL",
+    lines: [
+      `http://localhost:${port}${settings.basePath}`,
+      "",
+      `password  ${PASSWORD}`,
+      "",
+      "Valid until this process restarts.",
+    ],
+  });
 }

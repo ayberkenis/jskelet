@@ -16,7 +16,17 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="theme-color" content="#020617">
+    <%#
+      `color-scheme` head'in en başında bildirilmek zorunda: tarayıcı yeni
+      belgenin ilk karesini boyarken henüz stylesheet'i uygulamamış olur ve
+      varsayılan tuvali beyaz kabul eder. Koyu temada gezinme başına bir kare
+      beyaz flaş tam olarak bu. `light dark` tuvali işletim sistemi tercihine
+      bağlar; localStorage'daki seçim tercihten farklıysa satır içi script aynı
+      karede şemayı sabitler.
+    -%>
+    <meta name="color-scheme" content="light dark">
+    <meta name="theme-color" content="#020617" media="(prefers-color-scheme: dark)">
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
     <%# Kaynak ipuçları en başta; preconnect'i geciktirmek doğrudan LCP'ye yazılır. %>
     <%- extraHead %>
     <% if (hasAsset('app.css')) { %>
@@ -37,7 +47,11 @@
         var dark = stored
           ? stored === "dark"
           : matchMedia("(prefers-color-scheme: dark)").matches;
-        if (dark) document.documentElement.classList.add("dark");
+        var root = document.documentElement;
+        if (dark) root.classList.add("dark");
+        // Sınıfla birlikte şema da sabitlenir; aksi halde tuval OS tercihinde
+        // kalır ve saklanmış seçim tersse ilk kare yanlış renkte boyanır.
+        root.style.colorScheme = dark ? "dark" : "light";
       } catch (error) {
         void error;
       }

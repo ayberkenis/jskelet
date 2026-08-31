@@ -79,6 +79,21 @@ export default {
       },
 
       /**
+       * Query parametreli istek varsayılan olarak dinamiktir: buraya yazılmayan
+       * bir parametre cache anahtarına hiç girmez. `?utm_source=…` gibi
+       * kampanya parametrelerinin her kombinasyonu için ayrı bir girdi
+       * üretilmesin diye kural bu yönde — çıktıyı gerçekten değiştiren
+       * parametreyi yalnızca uygulama biliyor.
+       *
+       * `/iletisim?sent=1` bu yüzden burada: başarı mesajı taşıyan sürüm de
+       * cache'lenebilir, ama `?utm_source=…` eklenmiş hâli aynı kopyayı
+       * paylaşır.
+       */
+      query: {
+        "/iletisim": ["sent"],
+      },
+
+      /**
        * Opsiyonel Redis ikinci kademesi. Bellek içi önbellek birincil kalır;
        * Redis yalnızca bu proseste bulunmayan bir sayfa için render'ı atlatır
        * ve invalidation'ı diğer instance'lara yayar.

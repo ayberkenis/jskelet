@@ -123,6 +123,10 @@ app.get(
 | `revalidate` | `number` (saniye) | HTML önbellek TTL'i. Verilmezse ya da 0 ise bu route önbelleklenmez. `jskelet.config.mjs` → `cache().html` içindeki eşleşen bir kural bu değeri **ezer**. |
 | `private` | `boolean` | Sayfa ziyaretçiye bağlı. Önbellek devre dışı kalır, `cache().html` deseni bunu **ezemez**, yanıt `private, no-store` ve `Vary: Cookie` ile ETag'siz gider. |
 
+`revalidate` verilse bile **query parametresi taşıyan istek varsayılan olarak
+dinamiktir**; o yol için `cache().query` altında bir izin listesi tanımlamak
+gerekir ([06-cache.md](./06-cache.md)).
+
 Oturuma bağlı her sayfa `private: true` almalı; önbellek anahtarında kimlik
 olmadığı için bayrak olmadan bir kullanıcının HTML'i bir başkasına servis
 edilir. Framework bu hatayı çalışma zamanında da yakalıyor (controller cookie

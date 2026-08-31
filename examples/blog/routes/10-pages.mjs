@@ -30,8 +30,10 @@ export default function register(app, { route, redirect }) {
         metadata: { title: "İletişim", canonical: "/iletisim" },
         data: { sent: query.sent === "1" },
       }),
-      // Form sayfası kısa süre cache'lenir; `?sent=1` farklı bir cache
-      // anahtarı olduğu için başarı mesajı yanlış sayfada görünmez.
+      // Form sayfası kısa süre cache'lenir. `?sent=1`in de cache'lenmesi için
+      // config'te `cache().query` altında izin verilmesi gerekiyor; izin
+      // verilmediğinde sayfa dinamik davranır, yani başarı mesajı hiçbir
+      // koşulda yanlış sayfada görünmez.
       { revalidate: 300 },
     ),
   );

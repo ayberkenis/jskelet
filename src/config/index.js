@@ -15,7 +15,8 @@
  *   headers()   → [{ source, headers: [{ key, value }] }]
  *   redirects() → [{ source, destination, permanent?, statusCode? }]
  *   rewrites()  → [{ source, destination }] | { beforeFiles?, afterFiles? }
- *   cache()     → { html?: { [source]: saniye }, maxEntries?: number,
+ *   cache()     → { html?: { [source]: saniye },
+ *                   query?: { [source]: string[] | true }, maxEntries?: number,
  *                   data?: {...}, redis?: {...}, prewarm?: {...},
  *                   panel?: {...} }
  *
@@ -30,6 +31,7 @@ import { compilePattern, matchPattern } from "./pattern.js";
 import {
   DEFAULT_BRAND,
   DEFAULT_CACHE_PANEL,
+  DEFAULT_CLOUDFLARE,
   DEFAULT_DATA_CACHE,
   DEFAULT_DEV_GATE_BYPASS,
   DEFAULT_DIRS,
@@ -84,6 +86,9 @@ const CONFIG_FILE = "jskelet.config.mjs";
  * @property {{ pattern: CompiledPattern, destination: string, statusCode: number }[]} redirects
  * @property {{ phase: "beforeFiles" | "afterFiles", pattern: CompiledPattern, destination: string }[]} rewrites
  * @property {{ pattern: CompiledPattern, seconds: number }[]} html
+ * @property {{ pattern: CompiledPattern, allow: true | string[] }[]} cacheQuery
+ *   Yol deseni başına, HTML cache anahtarına girmesine izin verilen query
+ *   parametreleri. Eşleşen kural yoksa query'li istek cache'lenmez.
  * @property {number} htmlMaxEntries HTML önbelleğinin girdi sınırı.
  * @property {Record<string, unknown>} data Upstream veri önbelleği ayarları.
  * @property {boolean} trackUpstream `fetch` sarılıp geçici hatalar otomatik bildirilsin mi.
@@ -92,6 +97,7 @@ const CONFIG_FILE = "jskelet.config.mjs";
  * @property {RedisConfig} redis Opsiyonel Redis ikinci kademesi.
  * @property {typeof DEFAULT_UPSTREAM_LIMIT} upstream Upstream hız freni.
  * @property {typeof DEFAULT_CACHE_PANEL} cachePanel Önbellek yönetim paneli.
+ * @property {typeof DEFAULT_CLOUDFLARE} cloudflare Cloudflare cache yüzeyi.
  * @property {Record<string, unknown>} prewarm
  * @property {{ source: string, test: (pathname: string) => boolean }[]} prewarmPriority
  * @property {Record<string, unknown>} brand
@@ -339,14 +345,86 @@ function normalizeCachePanel(raw) {
 }
 
 /**
+ * Cloudflare bölümü. Token burada da verilebiliyor ama önerilen yol env;
+ * normalizasyon sadece tipleri sabitler, sırrı okumak `cloudflare.js`'in işi.
+ *
  * @param {unknown} raw
- * @returns {{ html: ResolvedConfig["html"], htmlMaxEntries: number,
+ * @returns {typeof DEFAULT_CLOUDFLARE}
+ */
+function normalizeCloudflare(raw) {
+  const source = /** @type {Record<string, any>} */ (raw ?? {});
+  const hours = Number(source.analyticsHours);
+
+  /** @param {unknown} value */
+  const text = (value) => (typeof value === "string" && value ? value : null);
+
+  return {
+    enabled: source.enabled !== false,
+    zoneId: text(source.zoneId),
+    apiToken: text(source.apiToken),
+    // Şema yazılırsa purge URL'i `https://https://…` olur; baştaki şema atılır.
+    hostname: text(source.hostname)?.replace(/^https?:\/\//, "") ?? null,
+    analyticsHours:
+      Number.isFinite(hours) && hours > 0
+        ? Math.min(72, Math.floor(hours))
+        : DEFAULT_CLOUDFLARE.analyticsHours,
+  };
+}
+
+/**
+ * `cache().query` → yol deseni başına, cache anahtarına girmesine izin verilen
+ * query parametreleri.
+ *
+ * Varsayılan bilinçli olarak "query varsa sayfa dinamik": bir yolun bütün
+ * query varyantlarını cache'lemek, `?utm_source=…` gibi sonsuz sayıda anahtar
+ * üretip LRU'daki gerçek sayfaları dışarı atıyor. Hangi parametrenin çıktıyı
+ * gerçekten değiştirdiğini yalnızca uygulama bilir, o yüzden izin listesi
+ * config'ten gelir.
+ *
+ * Bir desen `true` ile eşlenirse bütün parametreler anahtara girer (eski
+ * davranış), `[]` ile eşlenirse hiçbiri girmez — yani query yok sayılır ve
+ * bütün varyantlar query'siz sürümün HTML'ini paylaşır.
+ *
+ * @param {unknown} raw
+ * @returns {ResolvedConfig["cacheQuery"]}
+ */
+function normalizeQueryRules(raw) {
+  /** @type {ResolvedConfig["cacheQuery"]} */
+  const out = [];
+
+  for (const [source, value] of Object.entries(raw ?? {})) {
+    const pattern = compilePattern(source);
+    if (!pattern) continue;
+
+    if (value === true) {
+      out.push({ pattern, allow: true });
+      continue;
+    }
+    if (value === false) continue;
+
+    const allow = asArray(
+      typeof value === "string" ? [value] : value,
+      `cache().query["${source}"]`,
+    )
+      .filter((name) => typeof name === "string" && name)
+      .map(String);
+    out.push({ pattern, allow });
+  }
+
+  return out;
+}
+
+/**
+ * @param {unknown} raw
+ * @returns {{ html: ResolvedConfig["html"],
+ *   cacheQuery: ResolvedConfig["cacheQuery"], htmlMaxEntries: number,
  *   data: Record<string, unknown>, trackUpstream: boolean,
  *   trackDependencies: boolean,
  *   transientRetry: { attempts: number, delayMs: number },
  *   redis: RedisConfig,
  *   upstream: typeof DEFAULT_UPSTREAM_LIMIT,
  *   cachePanel: typeof DEFAULT_CACHE_PANEL,
+ *   cloudflare: typeof DEFAULT_CLOUDFLARE,
  *   prewarm: Record<string, unknown>,
  *   prewarmPriority: ResolvedConfig["prewarmPriority"] }}
  */
@@ -362,10 +440,12 @@ function normalizeCache(raw) {
   }
 
   const prewarm = { ...DEFAULT_PREWARM, ...(raw?.prewarm ?? {}) };
+  const queryRules = normalizeQueryRules(raw?.query);
   const maxEntries = Number(raw?.maxEntries);
 
   return {
     html,
+    cacheQuery: queryRules,
     htmlMaxEntries:
       Number.isFinite(maxEntries) && maxEntries > 0
         ? Math.floor(maxEntries)
@@ -385,6 +465,7 @@ function normalizeCache(raw) {
     redis: normalizeRedis(raw?.redis),
     upstream: normalizeUpstream(raw?.upstream),
     cachePanel: normalizeCachePanel(raw?.panel),
+    cloudflare: normalizeCloudflare(raw?.cloudflare),
     // Desenler derlenmiş hâlde ayrı alanda tutulur: `prewarm` sayısal
     // ayarların düz torbası olarak kalsın, her turda yeniden derlenmesin.
     prewarm,
@@ -597,6 +678,7 @@ export async function loadConfig(options = {}) {
 
   const {
     html,
+    cacheQuery,
     htmlMaxEntries,
     data,
     trackUpstream,
@@ -605,6 +687,7 @@ export async function loadConfig(options = {}) {
     redis,
     upstream,
     cachePanel,
+    cloudflare,
     prewarm,
     prewarmPriority,
   } = normalizeCache(cache);
@@ -619,6 +702,7 @@ export async function loadConfig(options = {}) {
     redirects: normalizeRedirects(redirects),
     rewrites: normalizeRewrites(rewrites),
     html,
+    cacheQuery,
     htmlMaxEntries,
     data,
     trackUpstream,
@@ -627,6 +711,7 @@ export async function loadConfig(options = {}) {
     redis,
     upstream,
     cachePanel,
+    cloudflare,
     prewarm,
     prewarmPriority,
     brand,

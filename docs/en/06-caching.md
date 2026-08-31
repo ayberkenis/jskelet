@@ -117,18 +117,31 @@ The cache also only kicks in for `GET` requests.
 ## The cache key
 
 ```
-`${req.path}?${new URLSearchParams(query).toString()}`
+`${path}?${the allowed query parameters, sorted}`
 ```
 
-So the path **and all query parameters** are part of the key. `/list?page=2`
-and `/list?page=3` are separate entries.
+For a request without a query the key is just the path. **A request that carries
+a query parameter is dynamic by default**: it never enters the cache and is sent
+with `private, no-store`. Caching every variant of a path mints an unbounded
+number of keys (`?utm_source=…` and friends), and in a 500-entry store LRU then
+evicts the real pages in favour of campaign variants.
 
-The practical consequence: a page that does not depend on the query string
-produces a separate entry for every combination when it is called with
-different campaign parameters (`?utm_source=…`). Stripping such parameters at
-the reverse proxy layer, or turning off the cache (by not supplying
-`revalidate`), is a reasonable precaution; by default the store holds at most
-500 entries and evicts the oldest with LRU.
+Which parameter actually changes the output is declared by the application, in
+`jskelet.config.mjs` → `cache().query`:
+
+```js
+cache: () => ({
+  html: { "/list": 60 },
+  query: { "/list": ["page"] },
+}),
+```
+
+Now `/list?page=2` and `/list?page=3` are separate entries, while
+`/list?page=2&utm_source=x` shares the `?page=2` copy: a parameter outside the
+list never reaches the key. A pattern mapped to `true` puts every parameter in
+the key (careful: nothing but `maxEntries` then bounds the entry count), and one
+mapped to `[]` ignores the query entirely. Details:
+[07-configuration.md](./07-configuration.md).
 
 ## Stale-while-revalidate
 
@@ -756,6 +769,13 @@ you the circuit breaker is open and `errors` is the total command failure count.
 The same summary is in the dev panel report
 ([09-dev-tools.md](./09-dev-tools.md)).
 
+Two more diagnostic surfaces:
+
+| Call | What it tells you |
+| --- | --- |
+| `getRedisDetails()` | **Where** the connection points: address, TLS, database, `namespace`, which kinds are shared, whether the purge channel is subscribed. The password is never returned — a connection URL may carry one. |
+| `inspectRedis()` | What is actually in the shared tier: keys per kind, `DBSIZE` and `used_memory`. It runs a `SCAN`, so **never call it on the request path**; in the admin panel it sits behind its own button. |
+
 The full list of settings: [07-configuration.md](./07-configuration.md).
 
 ## The admin panel
@@ -817,9 +837,12 @@ When the panel is on, the server log prints the password:
 
 | Area | Contents |
 | --- | --- |
-| Top bar | Environment, pid, uptime, RSS |
+| Top bar | Version, environment, pid, uptime, RSS |
 | Cards | HTML entry count and limit, HTML bytes in memory, stale entry count, data entry count, Redis state (`connected` / `bypassed` / `off`), prewarm progress |
-| Entry list | HTML: key, fresh/stale, size, status code, remaining TTL, dependency count, precompressed bodies. Data: key, fresh/stale, remaining TTL |
+| Shared tier | **Where** the connection points (address, TLS, database), the key prefix and `namespace`, the `buildId`, which kinds are shared, the state of compressed bodies and the purge broadcast, the command timeout and the error count. When it is off, a Redis recommendation with an install snippet takes its place. |
+| Cloudflare | Zone, plan, cache related zone settings, how long development mode has left, Tiered Cache / Cache Reserve state and the cache hit ratio. When no zone is connected, a setup snippet takes its place. |
+| Host | The machine's memory usage and how full the disk holding the project is |
+| Entry list | HTML: path (opens in a new tab), fresh/stale, size, status code, remaining TTL, dependency count, precompressed bodies. Data: key (click to copy), fresh/stale, remaining TTL |
 
 The list is **filtered by key** and the filter runs on the server: a data cache
 can hold tens of thousands of keys. At most 500 rows come back per request and
@@ -836,7 +859,10 @@ export content.
 | Clear HTML cache | `clearHtmlCache()` |
 | Clear data cache (optional prefix) | `clearDataCache(prefix)` |
 | Drop shared keys | Scans and unlinks the `html` or `data` namespace in Redis |
+| Count keys in Redis | `inspectRedis()` — keys per kind, `DBSIZE` and `used_memory` |
 | Prewarm | `prewarm()` — the pass runs in the background, progress shows in the card |
+| Cloudflare purge (everything / URLs held here / prefix / host / tag) | `purgeCloudflare()` |
+| Change a Cloudflare setting or feature | Zone settings and Tiered Cache / Cache Reserve |
 
 Each one propagates to the shared tier as well: clearing a single replica's
 cache is what produces the "I cleared it and it is still old" question in a
@@ -846,6 +872,116 @@ Dropping a single row is not the same as `invalidateHtmlCache()`: that one
 matches a path pattern and takes down **every** query variant of a path, while
 `dropHtmlCacheKey()` takes the exact key — `/list?page=2` goes and
 `/list?page=3` stays hot.
+
+## The CDN tier: Cloudflare
+
+Everything above is the **origin** cache. With Cloudflare in front, the HTML
+your visitors get usually never reaches you: the copy at the edge is served
+until its TTL runs out. That is why `invalidateHtmlCache()` alone does not fix
+"I updated the page but the old one still shows" — the origin refreshes, the
+edge keeps waiting.
+
+JSkelet lets you drive both tiers from the same place.
+
+### Setup
+
+The token is a secret, so it goes in the environment, not in a config file:
+
+```bash
+JSKELET_CLOUDFLARE_KEY=... # API token
+JSKELET_CLOUDFLARE_ZONE_ID=... # zone identifier
+JSKELET_CLOUDFLARE_HOSTNAME=example.com # optional
+```
+
+Which permissions the token needs depends on what you want to do: `Zone.Cache
+Purge` to purge, `Zone.Zone Settings` to change settings, `Zone.Analytics`
+(read) for the hit ratio and the edge breakdown. A purge-only token still opens
+the panel; the settings sections just report an error.
+
+The zone id and site name are not secrets, so they can also come from
+`jskelet.config.mjs`. The environment always wins:
+
+```js
+cache: {
+  cloudflare: {
+    zoneId: "…",
+    hostname: "example.com", // purging wants absolute URLs; this turns paths into them
+    analyticsHours: 24,
+  },
+}
+```
+
+Without `hostname`, purge URLs are derived from the origin the panel was opened
+on. If you reach the panel over an internal address (`http://10.0.0.4:3000`),
+that address means nothing to Cloudflare — there, `hostname` is required.
+
+### What you can do
+
+Whatever Cloudflare's cache surface offers is in the panel:
+
+| Action | Note |
+| --- | --- |
+| Purge everything | The whole zone. The bluntest tool; warming back up is expensive |
+| Purge by URL | Every page currently held in memory with one button, or `cf purge` per row |
+| Purge by prefix / host / tag | Available on all plans now; 100 keys per request |
+| Development mode | Bypasses the edge cache for three hours, then turns itself off |
+| Cache level, browser cache TTL, query string sorting, Always Online | Zone settings |
+| Tiered Cache, Regional Tiered Cache, Cache Reserve | Plan dependent; shows "unavailable" where the plan lacks it |
+| Clear Cache Reserve | Separate from purging: `purge_everything` drops the edges, the persistent copy in R2 stays |
+
+Long URL lists are split into batches of 100 keys and sent **sequentially**.
+Sending them in parallel means half the batch rejected on the Free plan, where
+purging is limited to five requests per minute.
+
+The same surface from code:
+
+```js
+import { invalidateHtmlCache, purgeCloudflare, toCloudflareUrls } from "jskelet";
+
+export async function onPostPublished(slug) {
+  const paths = ["/", `/blog/${slug}`];
+
+  invalidateHtmlCache(paths); // origin
+  await purgeCloudflare({ files: toCloudflareUrls(paths) }); // edge
+}
+```
+
+Nothing in this module throws: with no token, on a Cloudflare 403 or when the
+network drops, the result is `{ ok: false, error }`. A CDN outage should not
+break your publishing flow.
+
+### "How many edges hold this page?" — what can and cannot be asked
+
+There is no Cloudflare endpoint that lists the **inventory** of an object.
+Hundreds of cities run independent caches and none of them will answer "do you
+currently hold this URL". So the panel shows observation rather than inventory:
+enter a path and the GraphQL analytics tell you which colo (IST, FRA, AMS…)
+served it from cache and how often it went to the origin over the last N hours.
+
+```js
+const report = await fetchPathEdges({ path: "/blog", hours: 24 });
+// → { colos: [{ colo: "IST", hits: 7, misses: 2 }, …], hits, misses }
+```
+
+Two limits to keep in mind while reading it: an edge that received no request
+does not appear at all, even if it holds a copy; and the dataset is sampled, so
+ratios are reliable while absolute counts are estimates.
+
+There is also no way to **warm** an edge you pick. An object enters an edge
+cache only through a real request routed there; you cannot tell Frankfurt from
+your server to go cache something. Three things do work in practice:
+
+- **Warm the origin** (`prewarm`): the edge that takes the first request finds
+  a ready response, so that request is not the slow one.
+- **Tiered Cache**: edges do not go straight to the origin, they pull from an
+  upper tier — the first request in one city counts as warming for the others.
+- **Cache Reserve**: a persistent copy in R2 for long-tail content, so requests
+  do not reach the origin when an edge evicts.
+
+If your `hit` ratio is low, check whether the response is cacheable at all
+before anything else: `Cache-Control: private`, `Set-Cookie` and query string
+settings are the most common reasons an edge decides not to cache, and they
+show up as `dynamic` in this panel.
 
 ## Prewarm — warming up at startup
 

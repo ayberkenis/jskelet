@@ -47,8 +47,14 @@ const TYPES = {
 };
 
 /**
- * Tek bir sürüm kaydı. Sol kolon künye, sağ kolon değişiklikler; mobilde
- * alt alta iner.
+ * Tek bir sürüm kaydı, katlanır bir kart olarak. Bütün sürümleri açık basmak
+ * sayfayı okunmaz bir duvara çeviriyordu; artık yalnızca `open` verilen kayıt
+ * (varsayılan olarak en güncel sürüm) açık geliyor, diğerleri tek satırlık
+ * künyeye iniyor.
+ *
+ * `<details>` bilinçli tercih: JS inmese de kartlar açılıp kapanır. Çapa
+ * bağlantısıyla gelen ziyaretçi için kapalı kartı açma işi
+ * `client/islands/changelog-jump.js` island'ına ait.
  *
  * Madde metinleri CHANGELOG.md'den geldiği için satır içi markdown taşıyor;
  * `render` verildiğinde HTML'e çevirme işi ona bırakılır, verilmezse metin
@@ -57,11 +63,11 @@ const TYPES = {
  * @param {{ entry: { version: string, date?: string, unreleased?: boolean,
  *   summary?: string, groups: Array<{ type: string, items: string[] }> },
  *   labels: { dateLabel: string, types: Record<string, string>,
- *   statuses: Record<string, string> }, current?: boolean,
+ *   statuses: Record<string, string> }, current?: boolean, open?: boolean,
  *   render?: (item: string) => string }} props
  * @returns {string}
  */
-export function changelogEntry({ entry, labels, current = false, render, last = false }) {
+export function changelogEntry({ entry, labels, current = false, open = false, render }) {
   const status = entry.unreleased ? "unreleased" : current ? "current" : "previous";
   const highlight = current && !entry.unreleased;
 
@@ -72,22 +78,22 @@ export function changelogEntry({ entry, labels, current = false, render, last = 
       const items = group.items
         .map(
           (item) =>
-            `<li class="flex gap-2.5">
-              <span aria-hidden="true" class="${cn("mt-2 size-1.5 shrink-0 rounded-full", type.bullet)}"></span>
+            `<li class="flex gap-3">
+              <span aria-hidden="true" class="${cn("mt-2.5 size-1.5 shrink-0 rounded-full", type.bullet)}"></span>
               <span>${render ? render(item) : esc(item)}</span>
             </li>`,
         )
         .join("");
 
-      return `<section class="relative overflow-hidden rounded-2xl border border-slate-200/80 bg-slate-50/70 p-4 pl-5 dark:border-white/5 dark:bg-white/[0.02]">
+      return `<section class="relative overflow-hidden rounded-2xl border border-slate-200/80 bg-slate-50/70 p-5 pl-6 dark:border-white/5 dark:bg-white/[0.02]">
         <span aria-hidden="true" class="${cn("absolute inset-y-0 left-0 w-1", type.rule)}"></span>
-        <div class="mb-3 flex items-center gap-2">
+        <div class="mb-4 flex items-center gap-2">
           <span class="${cn("inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-bold tracking-wide uppercase", type.class)}">
             ${icon({ name: type.icon, size: 12 })}${esc(labels.types[group.type] ?? group.type)}
           </span>
           <span class="font-mono text-xs text-slate-500 dark:text-slate-500">${group.items.length}</span>
         </div>
-        <ul class="m-0 grid list-none gap-2 p-0 text-sm/6 text-slate-700 dark:text-slate-300">${items}</ul>
+        <ul class="m-0 grid list-none gap-3 p-0 text-sm/7 text-slate-700 dark:text-slate-300">${items}</ul>
       </section>`;
     })
     .join("");
@@ -96,9 +102,16 @@ export function changelogEntry({ entry, labels, current = false, render, last = 
     ? esc(labels.statuses.unreleased ?? "unreleased")
     : `v${esc(entry.version)}`;
 
-  return `<article id="v${esc(entry.version)}" class="relative grid scroll-mt-24 gap-5 lg:grid-cols-[12rem_1fr] lg:gap-10">
-    <div class="lg:sticky lg:top-24 grid content-start gap-3 lg:h-fit">
-      <div class="flex items-center gap-2.5">
+  const count = entry.groups.reduce((total, group) => total + group.items.length, 0);
+
+  return `<article id="v${esc(entry.version)}" class="scroll-mt-24">
+    <details class="${cn(
+      "group overflow-hidden rounded-3xl border",
+      highlight
+        ? "border-cyan-300 bg-gradient-to-br from-cyan-50/80 to-white shadow-lg shadow-cyan-950/5 dark:border-cyan-400/30 dark:from-cyan-400/[0.08] dark:to-white/[0.03]"
+        : "border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-white/[0.03]",
+    )}"${open ? " open" : ""}>
+      <summary class="flex cursor-pointer list-none flex-wrap items-center gap-3 p-5 sm:px-7 hover:bg-slate-50/80 [&::-webkit-details-marker]:hidden dark:hover:bg-white/[0.02]">
         <span class="${cn(
           "inline-flex size-9 shrink-0 items-center justify-center rounded-xl",
           highlight
@@ -108,42 +121,29 @@ export function changelogEntry({ entry, labels, current = false, render, last = 
           name: highlight ? "RocketLaunch" : entry.unreleased ? "GitBranch" : "Tag",
           size: 18,
         })}</span>
-        <a href="#v${esc(entry.version)}" class="m-0 font-mono text-2xl font-bold tracking-tight no-underline hover:text-cyan-700 dark:hover:text-cyan-300">${title}</a>
-      </div>
 
-      <div class="flex flex-wrap items-center gap-2">
+        <span class="font-mono text-xl font-bold tracking-tight sm:text-2xl">${title}</span>
+
         <span class="${cn(
-          "inline-flex w-fit items-center rounded-full border px-2.5 py-1 text-[11px] font-bold tracking-wide uppercase",
+          "inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-bold tracking-wide uppercase",
           highlight
             ? "border-cyan-300 bg-cyan-50 text-cyan-800 dark:border-cyan-400/30 dark:bg-cyan-400/10 dark:text-cyan-200"
             : "border-slate-200 bg-slate-50 text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-slate-300",
         )}">${esc(labels.statuses[status] ?? status)}</span>
+
         ${
           entry.date
             ? `<time datetime="${esc(entry.date)}" class="font-mono text-xs text-slate-500 dark:text-slate-400" title="${esc(labels.dateLabel)}">${esc(entry.date)}</time>`
             : ""
         }
-      </div>
-    </div>
 
-    <div class="relative pl-6 sm:pl-8 lg:pl-10">
-      <span aria-hidden="true" class="${cn(
-        "absolute top-3 left-1.5 w-px bg-gradient-to-b from-slate-300 to-transparent sm:left-2.5 lg:left-3.5 dark:from-white/15",
-        last ? "bottom-4" : "-bottom-14",
-      )}"></span>
-      <span aria-hidden="true" class="${cn(
-        "absolute top-2 left-0 size-3 rounded-full ring-4 ring-white sm:left-1 lg:left-2 dark:ring-[#070b18]",
-        highlight
-          ? "bg-gradient-to-br from-cyan-500 to-indigo-600"
-          : "bg-slate-300 dark:bg-slate-600",
-      )}"></span>
+        <span class="ml-auto flex items-center gap-3">
+          <span class="font-mono text-xs text-slate-500 dark:text-slate-400">${count}</span>
+          <span aria-hidden="true" class="inline-flex size-8 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition-transform group-open:rotate-180 dark:border-white/10 dark:text-slate-300">${icon({ name: "CaretDown", size: 14 })}</span>
+        </span>
+      </summary>
 
-      <div class="${cn(
-        "grid gap-5 rounded-3xl border p-5 sm:p-7",
-        highlight
-          ? "border-cyan-300 bg-gradient-to-br from-cyan-50/80 to-white shadow-xl shadow-cyan-950/5 dark:border-cyan-400/30 dark:from-cyan-400/[0.08] dark:to-white/[0.03]"
-          : "border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-white/[0.03]",
-      )}">
+      <div class="grid gap-5 border-t border-slate-200/80 p-5 sm:p-7 dark:border-white/10">
         ${
           entry.summary
             ? `<p class="m-0 text-base/7 font-medium text-slate-800 dark:text-slate-200">${
@@ -151,9 +151,9 @@ export function changelogEntry({ entry, labels, current = false, render, last = 
               }</p>`
             : ""
         }
-        <div class="grid gap-4 xl:grid-cols-2">${groups}</div>
+        <div class="grid gap-4">${groups}</div>
       </div>
-    </div>
+    </details>
   </article>`;
 }
 

@@ -285,6 +285,31 @@ function truncate(text, max) {
 const BOX = 52;
 
 /**
+ * Çerçeveli bilgi kutusu.
+ *
+ * Açılış logunda kaybolmaması gereken tek şey sır: önbellek panelinin şifresi
+ * her restart'ta değişiyor ve kullanıcı onu bir kez, akışın içinde görüyor.
+ * Genişlik içeriğe göre büyür — bir URL'i ya da 32 haneli bir şifreyi
+ * kırpmak kutunun bütün amacını bozar.
+ *
+ * @param {{ title: string, lines: string[],
+ *   tint?: (value: string) => string }} info `lines` içinde boş string ayırıcı
+ *   satır olur. Satırlar **düz metin** olmalı: bir ANSI dizisi `length`e
+ *   sayıldığı için hizalamayı bozar, rengi çerçeve taşır.
+ */
+export function box({ title, lines, tint = c.cyan }) {
+  const width = Math.max(BOX, title.length + 4, ...lines.map((text) => text.length + 4));
+  const top = `┌─ ${title} ${"─".repeat(width - title.length - 3)}┐`;
+  const bottom = `└${"─".repeat(width)}┘`;
+
+  write(`\n${tint(top)}\n`);
+  for (const text of ["", ...lines, ""]) {
+    write(`${tint("│")}  ${text}${" ".repeat(width - 4 - text.length)}  ${tint("│")}\n`);
+  }
+  write(`${tint(bottom)}\n\n`);
+}
+
+/**
  * Çerçeveli hata kutusu — kendi framework'ünü geliştirirken hatanın
  * akış içinde kaybolmaması için.
  *

@@ -10,6 +10,12 @@ one is listed under a **Breaking** heading.
 
 ### Added
 
+- `cache().query`, a pattern → allowlist mapping that decides which query
+  parameters belong to the HTML cache key. An allowlist caches one entry per
+  distinct value of the listed parameters and ignores the rest, so every
+  `?utm_source=…` variant of a path shares one copy; `true` puts the whole query
+  in the key and `[]` ignores it entirely. Parameters enter the key sorted, so
+  `?a=1&b=2` and `?b=2&a=1` are one entry.
 - A cache admin panel at `/_jskelet/cache`, turned on with
   `cache().panel: { enabled: true }` or `JSKELET_CACHE_PANEL=1`. It lists what
   the in-process tier holds (key, size, status, remaining TTL, dependency count,
@@ -27,6 +33,38 @@ one is listed under a **Breaking** heading.
   hours, and every banned or unauthorised response is a `404` rather than a 401
   that would confirm the panel exists. The panel is excluded from indexing,
   prewarming and navigation speculation.
+- Cloudflare cache management, from the panel and from code. Set
+  `JSKELET_CLOUDFLARE_KEY` and `JSKELET_CLOUDFLARE_ZONE_ID` (or
+  `cache().cloudflare`) and the panel gains the CDN tier next to the origin one:
+  purge everything, purge every URL currently held in memory with one button or
+  a single row with `cf purge`, purge by prefix, host or cache tag, toggle
+  development mode, cache level, browser cache TTL, query string sorting,
+  Always Online, Tiered Cache, Regional Tiered Cache and Cache Reserve, clear
+  Cache Reserve, and read the cache hit ratio. This matters because
+  `invalidateHtmlCache()` refreshes the origin while the copy your visitors get
+  keeps being served from the edge until its TTL expires. The same surface is
+  exported as `purgeCloudflare()`, `toCloudflareUrls()`,
+  `fetchCloudflareOverview()`, `fetchCacheAnalytics()`, `fetchPathEdges()` and
+  `getCloudflareStatus()`; none of them throw, so a CDN outage returns
+  `{ ok: false, error }` instead of breaking a publish flow. Long purge lists
+  are batched at Cloudflare's 100-keys-per-request limit and sent sequentially
+  to stay inside the rate limit. The token is read from the environment, is
+  never returned in a response, and only cache related zone settings can be
+  changed.
+- An edge breakdown for a single path: `fetchPathEdges()` reports which
+  Cloudflare colos served it from cache and which went to the origin. This is
+  observation, not inventory — Cloudflare has no endpoint that lists which
+  edges currently hold a URL, and no way to warm an edge you pick, so the panel
+  says as much rather than implying otherwise.
+- `getRedisDetails()` reports where the shared tier actually points — address,
+  TLS, database, namespace, which kinds are shared and whether the purge channel
+  is subscribed — because "connected" alone does not explain a Redis that shares
+  nothing because of a wrong namespace. The password is never part of the
+  output. `inspectRedis()` counts the keys per kind plus `DBSIZE` and
+  `used_memory`; it runs a `SCAN`, so the panel keeps it behind its own button
+  instead of the refresh loop. When Redis is off, the panel explains what a
+  shared tier would buy and shows the memory and disk state of the host instead,
+  which is the number that decides whether `maxEntries` is too high.
 - `dropHtmlCacheKey()` and `dropDataCacheKey()` drop one exact cache key.
   `invalidateHtmlCache()` matches a path pattern and takes down every query
   variant of a path, which is the right default for a webhook but wrong when you
@@ -51,7 +89,7 @@ one is listed under a **Breaking** heading.
   hits, misses, coalesced concurrent reads, values promoted from the shared tier
   and — the only number that reaches the quota — real producer runs. A prewarm
   pass now prints its own share of that (`12 upstream calls for 430 data reads
-  (97% from the data cache)`), which is what tells you whether the fix is a
+(97% from the data cache)`), which is what tells you whether the fix is a
   longer TTL or a rate limit. The dev report has a Data cache card for it.
 
 - The dev overlay header now shows the installed JSkelet version next to the
@@ -117,8 +155,7 @@ one is listed under a **Breaking** heading.
   the previous one is still running.
 - `cache().prewarm.retryDelayMs` (also `PREWARM_RETRY_DELAY_MS`) waits before the
   retry pass, since rate limit windows are measured in seconds.
-- `cache().maxEntries` configures the HTML cache limit, which used to be a fixed
-  500.
+- `cache().maxEntries` configures the HTML cache limit, which used to be a fixed 500.
 - Transient upstream failures are now detected without any application code:
   `globalThis.fetch` is wrapped during startup and `429`, `5xx` and network
   errors raised inside a render are reported on their own, so rate limits stop
@@ -126,7 +163,7 @@ one is listed under a **Breaking** heading.
   `reportUpstreamFailure()`. Requests outside a render and requests to the
   server itself are ignored, deterministic answers such as `404` are not
   reported, and the wrapper can be turned off with `cache().trackUpstream:
-  false`.
+false`.
 - `cache().transientRetry` (`{ attempts: 1, delayMs: 300 }` by default) retries a
   page that called `notFound()` while upstream was failing. Each attempt runs in
   a fresh upstream and per-request cache scope, so a page whose data arrives on
@@ -135,6 +172,12 @@ one is listed under a **Breaking** heading.
 
 ### Changed
 
+- The release history page in `examples/marketing` now shows one release at a
+  time: the newest one is expanded and older releases collapse to a single
+  header row with their date, status and change count. Every release used to be
+  printed open in a two-column grid, which made the page an unreadable wall as
+  soon as a few versions piled up. Version links and the quick-jump strip still
+  work, and they open the collapsed release they point at.
 - The prewarm retry pass no longer retries permanent failures. A `400`, `403` or
   `404` does not get better on the second try, so those paths are dropped from
   the retry round and counted as `N not retried (permanent)` in the summary. The
@@ -143,8 +186,8 @@ one is listed under a **Breaking** heading.
   that out instead of retrying into the same 429.
 - Errors and warnings raised during a prewarm pass are no longer logged one per
   page. Request errors and the per-page render warnings (`was produced with
-  missing data`, `returned notFound() while upstream is failing`, `could not be
-  produced`) are counted while the pass runs and printed as a single summary
+missing data`, `returned notFound() while upstream is failing`, `could not be
+produced`) are counted while the pass runs and printed as a single summary
   block afterwards, grouped by message with the most frequent kinds first, so a
   failing upstream can no longer bury the "warmed N/M pages" line under hundreds
   of near-identical lines. Real traffic logs as before, and the dev tools panel
@@ -196,6 +239,16 @@ one is listed under a **Breaking** heading.
   value derived from a mistyped protocol constant. Browsers verify that value and
   closed the connection immediately with "Incorrect 'Sec-WebSocket-Accept' header
   value", so the panel silently fell back to polling.
+
+### Breaking
+
+- A request that carries a query parameter is now dynamic by default: it is not
+  written to the HTML cache and the response is sent with `private, no-store`,
+  even when a `cache().html` pattern covers the path. Every query variant used
+  to become its own cache entry, which let campaign parameters
+  (`?utm_source=…`) mint unbounded keys and evict real pages from a 500-entry
+  store. Pages whose output genuinely depends on the query keep their cache by
+  listing the relevant parameters under `cache().query`.
 
 ## [0.1.2] - 2026-08-30
 
@@ -249,7 +302,7 @@ one is listed under a **Breaking** heading.
   `X-Forwarded-For` and rate limiting or audit logs see the wrong address.
 - Every message the framework prints is now English: config, router, render,
   cache, prewarm, asset and build warnings, CLI output, the project `jskelet
-  init` scaffolds, and the devtools overlay and report interfaces. Visitor-facing
+init` scaffolds, and the devtools overlay and report interfaces. Visitor-facing
   status pages still follow `brand.lang` and keep their Turkish translations.
 - The dev overlay and report now show the current JSkelet logo, served with a
   cacheable response instead of being re-fetched on every navigation.

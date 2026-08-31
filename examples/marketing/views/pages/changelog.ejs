@@ -50,14 +50,14 @@
   </p>
   <% } else { %>
   <%- versionRail({ entries, labels: t.changelog, current: release.version }) %>
-  <div class="mt-10 grid gap-14">
+  <div class="mt-10 grid gap-4" data-island="changelog-jump">
     <% for (const [index, entry] of entries.entries()) { %>
     <%- changelogEntry({
       entry,
       labels: t.changelog,
       current: entry.version === release.version,
+      open: index === 0,
       render: renderChange,
-      last: index === entries.length - 1,
     }) %>
     <% } %>
   </div>

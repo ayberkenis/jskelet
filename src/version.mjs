@@ -20,3 +20,12 @@ export const FRAMEWORK_VERSION = manifest.version ?? "0.0.0";
 
 /** Paket adı: sürüm kontrolü hangi kayıt defteri girdisine bakacağını buradan bilir. */
 export const FRAMEWORK_PACKAGE = manifest.name ?? "jskelet";
+
+/** Künye alanları: yönetim panelinin footer'ı bunları basıyor. */
+export const FRAMEWORK_LICENSE = manifest.license ?? "MIT";
+
+/** @type {string} */
+export const FRAMEWORK_NODE_RANGE = manifest.engines?.node ?? "";
+
+/** @type {string} */
+export const FRAMEWORK_HOMEPAGE = manifest.homepage ?? "";

@@ -110,17 +110,30 @@ saklayabiliyordu.
 ## Cache anahtarı
 
 ```
-`${req.path}?${new URLSearchParams(query).toString()}`
+`${yol}?${izin verilen query parametreleri, sıralı}`
 ```
 
-Yani yol **ve tüm query parametreleri** anahtarın parçasıdır. `/liste?sayfa=2`
-ile `/liste?sayfa=3` ayrı girdilerdir.
+Query'siz bir istek için anahtar yalnızca yoldur. **Query parametresi taşıyan
+istek varsayılan olarak dinamiktir**: önbelleğe hiç girmez ve `private,
+no-store` ile gider. Bir yolun bütün varyantlarını cache'lemek `?utm_source=…`
+gibi sonsuz sayıda anahtar üretiyor ve 500 girdilik store'da LRU, gerçek
+sayfaları kampanya varyantları için dışarı atıyor.
 
-Bunun pratik sonucu: query string'e bağlı olmayan bir sayfa, farklı kampanya
-parametreleriyle (`?utm_source=…`) çağrıldığında her kombinasyon için ayrı bir
-girdi üretir. Bu tür parametreleri ters proxy katmanında temizlemek ya da
-önbelleği kapatmak (`revalidate` vermemek) makul bir önlemdir; store varsayılan
-olarak en fazla 500 girdi tutar ve LRU ile en eskiyi düşürür.
+Hangi parametrenin çıktıyı gerçekten değiştirdiğini uygulama bildirir —
+`jskelet.config.mjs` → `cache().query`:
+
+```js
+cache: () => ({
+  html: { "/liste": 60 },
+  query: { "/liste": ["sayfa"] },
+}),
+```
+
+Artık `/liste?sayfa=2` ile `/liste?sayfa=3` ayrı girdiler, `/liste?sayfa=2&utm_source=x`
+ise `?sayfa=2` kopyasını paylaşır: listede olmayan parametre anahtara girmez.
+Bir desen `true` ile eşlenirse bütün parametreler anahtara girer (dikkat: girdi
+sayısını sınırlayan tek şey `maxEntries` olur), `[]` ile eşlenirse query tamamen
+yok sayılır. Ayrıntı: [07-yapilandirma.md](./07-yapilandirma.md).
 
 ## Stale-while-revalidate
 
@@ -738,6 +751,13 @@ Bağlantı kurulmamışken de güvenle çağrılır. Dönen nesne
 kesicinin açık olduğunu, `errors` toplam komut hatasını gösterir. Aynı özet dev
 panelinin raporunda da var ([09-dev-araclari.md](./09-dev-araclari.md)).
 
+İki teşhis yüzeyi daha var:
+
+| Çağrı | Ne der |
+| --- | --- |
+| `getRedisDetails()` | Bağlantının **nereye** kurulduğu: adres, TLS, veritabanı, `namespace`, hangi türlerin paylaşıldığı, purge yayınına abone olunup olunmadığı. Şifre asla dönmez — bağlantı URL'i sır taşıyor olabilir. |
+| `inspectRedis()` | Paylaşımlı kademede gerçekten ne durduğu: tür başına anahtar sayısı, `DBSIZE` ve `used_memory`. Bir `SCAN` turu olduğu için **istek yolunda çağrılmaz**; yönetim panelinde de ayrı bir düğmeye bağlı. |
+
 Ayarların tam listesi: [07-yapilandirma.md](./07-yapilandirma.md).
 
 ## Yönetim paneli
@@ -795,9 +815,12 @@ Panel açıldığında sunucu logu şifreyi basar:
 
 | Bölüm | Gösterdiği |
 | --- | --- |
-| Üst satır | Ortam, pid, uptime, RSS |
+| Üst satır | Sürüm, ortam, pid, uptime, RSS |
 | Kartlar | HTML girdi sayısı ve sınırı, bellekteki HTML boyutu, bayat girdi sayısı, veri girdisi sayısı, Redis durumu (`connected` / `bypassed` / `off`), ısıtma turunun ilerlemesi |
-| Girdi listesi | HTML: anahtar, taze/bayat, boyut, durum kodu, kalan TTL, bağımlılık sayısı, hazır sıkıştırılmış gövdeler. Veri: anahtar, taze/bayat, kalan TTL |
+| Paylaşımlı kademe | Bağlantının **nereye** kurulduğu (adres, TLS, veritabanı), anahtar öneki ve `namespace`, `buildId`, hangi türlerin paylaşıldığı, sıkıştırılmış gövde ve purge yayını durumu, komut zaman aşımı ve hata sayısı. Kapalıysa yerine Redis önerisi ve kurulum parçacığı çıkar. |
+| Cloudflare | Zone, plan, cache ile ilgili zone ayarları, development mode'un kalan süresi, Tiered Cache / Cache Reserve durumu ve cache isabet oranı. Bağlı değilse kurulum parçacığı çıkar. |
+| Host | Makinenin RAM kullanımı ve projenin bulunduğu diskin doluluğu |
+| Girdi listesi | HTML: yol (yeni sekmede açılır), taze/bayat, boyut, durum kodu, kalan TTL, bağımlılık sayısı, hazır sıkıştırılmış gövdeler. Veri: anahtar (tıklayınca panoya kopyalanır), taze/bayat, kalan TTL |
 
 Liste **anahtar bazında filtrelenir** ve filtre sunucuda uygulanır: veri
 önbelleğinde on binlerce anahtar olabiliyor. Her istekte en fazla 500 satır
@@ -814,7 +837,10 @@ değil.
 | Clear HTML cache | `clearHtmlCache()` |
 | Clear data cache (önek opsiyonel) | `clearDataCache(prefix)` |
 | Drop shared keys | Redis'teki `html` ya da `data` isim alanını tarar ve düşürür |
+| Count keys in Redis | `inspectRedis()` — tür başına anahtar sayısı, `DBSIZE` ve `used_memory` |
 | Prewarm | `prewarm()` — tur arkada koşar, ilerleme kartta görünür |
+| Cloudflare purge (her şey / bellekteki URL'ler / prefix / host / tag) | `purgeCloudflare()` |
+| Cloudflare ayarı ya da özelliği değiştirmek | Zone ayarları ve Tiered Cache / Cache Reserve |
 
 Hepsi paylaşımlı kademeye de yayılır: tek kopyanın önbelleğini boşaltmak,
 kümede çalışan bir kurulumda "temizledim ama hâlâ eski" sorusunu üretir.
@@ -823,6 +849,117 @@ Listedeki tek satırı silmek `invalidateHtmlCache()`ten farklıdır: o yol
 desenine bakar ve bir yolun **bütün** query varyantlarını düşürür,
 `dropHtmlCacheKey()` ise tam anahtarı alır — `/liste?sayfa=2` düşerken
 `/liste?sayfa=3` sıcak kalır.
+
+## CDN kademesi: Cloudflare
+
+Buraya kadar anlatılan her şey **origin** önbelleği. Önünde Cloudflare varsa
+ziyaretçinin gördüğü HTML çoğu zaman hiç size ulaşmıyor: edge'deki kopya
+TTL'ini doldurana kadar servis edilir. Bu yüzden `invalidateHtmlCache()`
+tek başına "sayfayı güncelledim ama eski hâli görünüyor" sorununu çözmez —
+origin tazelenir, edge beklemeye devam eder.
+
+JSkelet iki kademeyi aynı yerden yönetilebilir kılar.
+
+### Kurulum
+
+Token bir sır; config dosyasına değil ortama yazılır:
+
+```bash
+JSKELET_CLOUDFLARE_KEY=... # API token
+JSKELET_CLOUDFLARE_ZONE_ID=... # zone kimliği
+JSKELET_CLOUDFLARE_HOSTNAME=example.com # opsiyonel
+```
+
+Token'a gereken izinler, yapmak istediğinize göre: purge için `Zone.Cache
+Purge`, ayarları değiştirmek için `Zone.Zone Settings`, isabet oranı ve edge
+kırılımı için `Zone.Analytics` (salt okunur). Yalnızca purge izni verilen bir
+token'la panel açılır, ayar bölümleri hata yazar.
+
+Zone kimliği ve site adı sır olmadığı için `jskelet.config.mjs` içinden de
+verilebilir; env her zaman önceliklidir:
+
+```js
+cache: {
+  cloudflare: {
+    zoneId: "…",
+    hostname: "example.com", // purge tam URL ister; yol → URL çevrimi için
+    analyticsHours: 24,
+  },
+}
+```
+
+`hostname` verilmezse purge URL'leri panelin açıldığı origin'den türetilir.
+Paneli iç bir adresten (`http://10.0.0.4:3000`) açıyorsanız bu adresin
+Cloudflare'de karşılığı yok; o kurulumda `hostname` zorunlu.
+
+### Ne yapılabilir
+
+Cloudflare'in cache yüzeyinde ne varsa panelde de var:
+
+| İşlem | Not |
+| --- | --- |
+| Purge everything | Zone'un tamamı. En kaba araç; ısınma maliyeti yüksek |
+| Purge by URL | Panelin o an bellekte tuttuğu sayfalar tek düğmeyle; ya da satır başına `cf purge` |
+| Purge by prefix / host / tag | Artık her planda çalışıyor; istek başına 100 anahtar |
+| Development mode | Üç saat boyunca edge önbelleğini baypas eder, sonra kendiliğinden kapanır |
+| Cache level, browser cache TTL, query string sıralaması, Always Online | Zone ayarları |
+| Tiered Cache, Regional Tiered Cache, Cache Reserve | Plana bağlı; kapalı planda "unavailable" görünür |
+| Clear Cache Reserve | Purge'den ayrı: `purge_everything` edge'i düşürür, R2'deki kalıcı kopya kalır |
+
+Uzun URL listeleri istek başına 100 anahtarlık partilere bölünür ve **sırayla**
+gönderilir. Paralel göndermek Free planda dakikada beş isteklik hız freni
+yüzünden yarısı reddedilen bir tur demek.
+
+Kod tarafında aynı yüzey:
+
+```js
+import { invalidateHtmlCache, purgeCloudflare, toCloudflareUrls } from "jskelet";
+
+export async function onPostPublished(slug) {
+  const paths = ["/", `/blog/${slug}`];
+
+  invalidateHtmlCache(paths); // origin
+  await purgeCloudflare({ files: toCloudflareUrls(paths) }); // edge
+}
+```
+
+Bu modüldeki hiçbir fonksiyon fırlatmaz: token yoksa, Cloudflare 403 dönerse
+ya da ağ düşerse sonuç `{ ok: false, error }` olur. Bir CDN arızası içerik
+yayınlama akışını kesmemeli.
+
+### "Bu sayfa kaç edge'de cache'li?" — sorulabilen ve sorulamayan
+
+Cloudflare API'sinde bir objenin **envanterini** veren uç yok. Yüzlerce şehirde
+birbirinden bağımsız önbellekler var ve hiçbiri "şu an bende bu URL'in kopyası
+var mı" sorusuna cevap vermiyor. Panel bu yüzden envanter değil **gözlem**
+gösterir: bir yol girip sorguladığınızda GraphQL analitiğinden son N saatte
+hangi kolonun (IST, FRA, AMS…) o yolu kaç kez cache'ten, kaç kez origin'den
+servis ettiği gelir.
+
+```js
+const report = await fetchPathEdges({ path: "/blog", hours: 24 });
+// → { colos: [{ colo: "IST", hits: 7, misses: 2 }, …], hits, misses }
+```
+
+Okurken iki sınırı akılda tutun: hiç istek almamış bir edge listede görünmez,
+kopyası olsa da; ve veri kümesi örneklemeli, yani oranlar güvenilir ama mutlak
+sayılar yaklaşıktır.
+
+Seçtiğiniz bir edge'i **ısıtmanın** da yolu yok. Bir obje ancak o koloya
+yönlenen gerçek bir istekle o edge'in önbelleğine giriyor; sunucudan
+"Frankfurt'a bunu cache'let" diyemezsiniz. Pratikte yapılabilen üç şey var:
+
+- **Origin'i ısıtmak** (`prewarm`): ilk isteği alan edge cevabı hazır bulur,
+  o istek yavaşlamaz.
+- **Tiered Cache**: edge'ler origin'e doğrudan gitmez, aradaki üst katmandan
+  besleniyor; bir şehirdeki ilk istek diğer şehirler için de ısıtma sayılır.
+- **Cache Reserve**: uzun kuyruklu içerik için R2'de kalıcı kopya; edge
+  düşünce istek origin'e kadar inmiyor.
+
+`hit` oranınız düşükse önce cevabın cache'lenebilir olup olmadığına bakın:
+`Cache-Control: private`, `Set-Cookie` ve query string ayarları edge'in
+cache'lememe kararının en sık sebepleri, ve bu panelde `dynamic` olarak
+görünür.
 
 ## Prewarm — açılışta ısıtma
 

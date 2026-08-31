@@ -207,8 +207,13 @@ export function route(controller, options = {}) {
     const revalidate = isPrivate
       ? undefined
       : resolveRevalidate(req.path, options.revalidate);
-    const cacheable = !isPrivate && req.method === "GET" && Boolean(revalidate);
-    const cacheKey = `${req.path}?${new URLSearchParams(
+    // Anahtar `null` ise query bu yol için cache'lenebilir değil: sayfa
+    // dinamik davranır. Anahtar yine de gerekiyor (hata sayfası ölçümü,
+    // teşhis) ama TTL sıfırlanıp cache yolu kapatılır.
+    const key = buildCacheKey(req.path, ctx.query);
+    const cacheable =
+      !isPrivate && req.method === "GET" && Boolean(revalidate) && key !== null;
+    const cacheKey = key ?? `${req.path}?${new URLSearchParams(
       Object.entries(ctx.query).map(([k, v]) => [k, String(v)]),
     ).toString()}`;
 
@@ -408,6 +413,73 @@ const revalidateByPath = new Map();
  * Desen taraması ucuz olduğu için en eski girdileri atmak güvenli.
  */
 const REVALIDATE_CACHE_MAX = 2000;
+
+/**
+ * Aynı gerekçeyle (yakalayıcı route'ta sınırsız büyüme) query kuralı da yol
+ * başına hatırlanır.
+ *
+ * @type {Map<string, true | string[] | null>}
+ */
+const queryPolicyByPath = new Map();
+
+/**
+ * @param {string} pathname
+ * @returns {true | string[] | null} `null`: bu yol için hiçbir parametreye
+ *   izin verilmiyor.
+ */
+function resolveQueryPolicy(pathname) {
+  if (queryPolicyByPath.has(pathname)) {
+    return queryPolicyByPath.get(pathname) ?? null;
+  }
+
+  const rules = getConfig().cacheQuery;
+  const match = rules.find((rule) => matchPattern(rule.pattern, pathname));
+
+  if (queryPolicyByPath.size >= REVALIDATE_CACHE_MAX) {
+    const oldest = queryPolicyByPath.keys().next().value;
+    if (oldest !== undefined) queryPolicyByPath.delete(oldest);
+  }
+
+  const policy = match ? match.allow : null;
+  queryPolicyByPath.set(pathname, policy);
+  return policy;
+}
+
+/**
+ * HTML cache anahtarı, ya da query bu yol için cache'lenebilir değilse `null`.
+ *
+ * Varsayılan olarak query parametresi taşıyan istek dinamiktir: `cache().query`
+ * altında eşleşen bir kural olmadıkça cache'e hiç girmez. Aksi hâlde bir yolun
+ * bütün `?utm_source=…` varyantları ayrı girdi olur ve LRU'daki gerçek
+ * sayfaları dışarı atar.
+ *
+ * İzin verilen parametreler **sıralı** yazılır: `?a=1&b=2` ile `?b=2&a=1` aynı
+ * sayfa olduğu için aynı anahtarı almalı.
+ *
+ * @param {string} pathname
+ * @param {Record<string, unknown>} query
+ * @returns {string | null}
+ */
+function buildCacheKey(pathname, query) {
+  const entries = Object.entries(query);
+  if (!entries.length) return `${pathname}?`;
+
+  const policy = resolveQueryPolicy(pathname);
+  if (policy === null) return null;
+
+  const kept =
+    policy === true ? entries : entries.filter(([name]) => policy.includes(name));
+
+  // İzin listesi dışındaki parametreler anahtara girmez: sayfa cache'lenir ve
+  // bütün kampanya varyantları tek kopyayı paylaşır.
+  const params = new URLSearchParams(
+    kept
+      .map(/** @returns {[string, string]} */ ([name, value]) => [name, String(value)])
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
+  );
+
+  return `${pathname}?${params.toString()}`;
+}
 
 /**
  * @param {string} pathname

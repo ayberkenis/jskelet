@@ -406,6 +406,114 @@ export function getRedisStatus() {
 }
 
 /**
+ * Bağlantının **nereye** kurulduğu ve hangi ayarlarla çalıştığı.
+ *
+ * Şifre asla dönmez: bağlantı URL'i `redis://user:pass@host` biçiminde
+ * olabiliyor ve panelin işi adresi göstermek, sırrı değil. Ayrıştırılamayan
+ * bir URL için adres `"custom"` olur — bozuk bir değer teşhis ucunu
+ * düşürmemeli.
+ *
+ * @returns {{ address: string, secure: boolean, db: string | null,
+ *   namespace: string, keyPrefix: string, html: boolean, data: boolean,
+ *   storeEncoded: boolean, events: boolean, commandTimeoutMs: number,
+ *   subscribed: boolean }}
+ */
+export function getRedisDetails() {
+  let address = "localhost:6379 (ioredis default)";
+  let secure = false;
+  /** @type {string | null} */
+  let db = null;
+
+  if (settings.url) {
+    try {
+      const parsed = new URL(settings.url);
+      address = `${parsed.hostname}:${parsed.port || 6379}`;
+      secure = parsed.protocol === "rediss:";
+      const name = parsed.pathname.replace(/^\//, "");
+      db = name || null;
+    } catch {
+      address = "custom";
+    }
+  }
+
+  return {
+    address,
+    secure,
+    db,
+    namespace: settings.namespace,
+    keyPrefix: settings.keyPrefix,
+    html: settings.html === true,
+    data: settings.data === true,
+    storeEncoded: settings.storeEncoded === true,
+    events: settings.events === true,
+    commandTimeoutMs: settings.commandTimeoutMs,
+    subscribed: Boolean(subscriber),
+  };
+}
+
+/**
+ * Paylaşımlı kademede gerçekten **ne durduğunu** sayar: tür başına anahtar
+ * sayısı ve sunucunun bildirdiği bellek kullanımı.
+ *
+ * Ayrı bir çağrı olması gerekiyor. Sayım `SCAN` turu demek ve panelin döküm
+ * ucu birkaç saniyede bir yenileniyor; her turda tüm keyspace'i taramak
+ * Redis'i teşhis uğruna yormak olurdu. Panel bunu düğmeye basınca çağırır.
+ *
+ * @returns {Promise<{ ok: boolean, html: number, data: number,
+ *   usedMemory: string | null, totalKeys: number | null }>}
+ */
+export async function inspectRedis() {
+  if (!usable()) return { ok: false, html: 0, data: 0, usedMemory: null, totalKeys: null };
+
+  try {
+    const [html, data] = await Promise.all([count("html"), count("data")]);
+
+    /** @type {string | null} */
+    let usedMemory = null;
+    /** @type {number | null} */
+    let totalKeys = null;
+
+    try {
+      const info = await client.info("memory");
+      usedMemory = /used_memory_human:(\S+)/.exec(String(info))?.[1] ?? null;
+      totalKeys = Number(await client.dbsize());
+    } catch {
+      // `INFO`/`DBSIZE` kısıtlı bir kurulumda (managed Redis) reddedilebilir;
+      // anahtar sayıları yine geçerli.
+    }
+
+    noteSuccess();
+    return { ok: true, html, data, usedMemory, totalKeys };
+  } catch (error) {
+    noteFailure("inspect", error);
+    return { ok: false, html: 0, data: 0, usedMemory: null, totalKeys: null };
+  }
+}
+
+/**
+ * @param {"html" | "data"} kind
+ * @returns {Promise<number>}
+ */
+async function count(kind) {
+  let cursor = "0";
+  let total = 0;
+
+  do {
+    const [next, keys] = await client.scan(
+      cursor,
+      "MATCH",
+      `${prefix}:${kind}:*`,
+      "COUNT",
+      500,
+    );
+    cursor = next;
+    total += keys.length;
+  } while (cursor !== "0");
+
+  return total;
+}
+
+/**
  * Bağlantıları kapatır. `SIGTERM` sonrası uçuştaki komutların bitmesi
  * beklenir (`quit`), zorla kesilmez.
  *

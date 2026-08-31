@@ -8,6 +8,9 @@
 export default {
   cache: () => ({
     html: { "/:path*": 60 },
+    // Query kuralları: izin listesi, "hepsi" ve "hiçbiri" biçimlerinin üçü de
+    // temsil edilsin ki `cache-query.test.mjs` her dalı sınayabilsin.
+    query: { "/search": ["q", "page"], "/all": true, "/ignore": [] },
     prewarm: { enabled: false },
   }),
 };

@@ -11,6 +11,7 @@ registerAll({
   "nav-toggle": () => import("../islands/nav-toggle.js"),
   "copy-command": () => import("../islands/copy-command.js"),
   "doc-toc": () => import("../islands/doc-toc.js"),
+  "changelog-jump": () => import("../islands/changelog-jump.js"),
   bars: () => import("../islands/bars.js"),
   latency: () => import("../islands/latency.js"),
 });

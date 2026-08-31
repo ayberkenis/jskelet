@@ -215,6 +215,37 @@ export const DEFAULT_CACHE_PANEL = {
   sessionHours: 12,
 };
 
+/**
+ * Cloudflare cache yüzeyi.
+ *
+ * JSkelet'in önbelleği origin önbelleği; ziyaretçinin gördüğü kopya CDN'de.
+ * Bu bölüm ikisini aynı panelden yönetilebilir kılar (bkz.
+ * `src/server/cloudflare.js`).
+ *
+ * Token **config'e yazılmamalı**: `JSKELET_CLOUDFLARE_KEY` env'i önceliklidir
+ * ve önerilen yol odur. Zone kimliği sır değil, ama o da env'den okunabilir
+ * (`JSKELET_CLOUDFLARE_ZONE_ID`).
+ *
+ * Gereken token izinleri: purge için `Zone.Cache Purge`, ayarlar için
+ * `Zone.Zone Settings`, analitik için `Zone.Analytics` (salt okunur).
+ */
+export const DEFAULT_CLOUDFLARE = {
+  /** `false` verilirse env'de token olsa bile yüzey kapalı kalır. */
+  enabled: true,
+  /** @type {string | null} */
+  zoneId: null,
+  /** @type {string | null} Env tercih edilir; burada tutmak sırrı repoya sokar. */
+  apiToken: null,
+  /**
+   * Purge, tam URL istiyor; panel elinde yalnızca yol tutuyor. Site adı
+   * verilmezse purge isteğinin geldiği istek origin'i kullanılır.
+   * @type {string | null}
+   */
+  hostname: null,
+  /** Analitik penceresi (saat). Cloudflare'in izin verdiği aralıkla sınırlı. */
+  analyticsHours: 24,
+};
+
 /** Oturuma bağlı sayfalar ısıtılmaz; uygulama kendi listesini verebilir. */
 export const DEFAULT_PREWARM_SKIP = [
   "/api/",

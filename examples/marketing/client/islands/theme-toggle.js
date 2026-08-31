@@ -19,6 +19,9 @@ export function mount(element) {
   const apply = (theme) => {
     const dark = theme === "dark";
     document.documentElement.classList.toggle("dark", dark);
+    // `color-scheme` sınıfla birlikte gitmek zorunda: tuvalin rengi bundan
+    // türetiliyor ve geride kalırsa sonraki gezinmenin ilk karesi flaş yapar.
+    document.documentElement.style.colorScheme = dark ? "dark" : "light";
     element.setAttribute("aria-pressed", String(dark));
     // Düğme bir sonraki duruma geçişi anlatır: koyu temadayken güneş gösterir.
     if (darkIcon) darkIcon.hidden = dark;

@@ -20,7 +20,9 @@ import {
 } from "../src/server/data-cache.js";
 import {
   emitRemoteCacheEventForTests,
+  getRedisDetails,
   getRedisStatus,
+  inspectRedis,
   setRedisClientForTests,
 } from "../src/server/redis.js";
 
@@ -381,4 +383,56 @@ test("the status is safe to read with no connection", () => {
   const status = getRedisStatus();
   assert.equal(status.enabled, false);
   assert.equal(status.connected, false);
+});
+
+/* ----------------------------------------------------------------- teşhis */
+
+test("the connection details never carry the password", () => {
+  setRedisClientForTests(createFakeRedis(), {
+    url: "rediss://admin:s3cret@cache.internal:6380/3",
+    namespace: "haber",
+  });
+
+  const details = getRedisDetails();
+  assert.equal(details.address, "cache.internal:6380");
+  assert.equal(details.secure, true);
+  assert.equal(details.db, "3");
+  assert.equal(details.namespace, "haber");
+  assert.ok(
+    !JSON.stringify(details).includes("s3cret"),
+    "sır teşhis çıktısına girmemeli",
+  );
+});
+
+test("a broken url degrades to a label instead of throwing", () => {
+  setRedisClientForTests(createFakeRedis(), { url: "not a url" });
+  assert.equal(getRedisDetails().address, "custom");
+});
+
+test("inspecting the shared tier counts the keys of each kind", async () => {
+  const fake = createFakeRedis();
+  setRedisClientForTests(fake);
+
+  await withHtmlCache("/a?", 60, async () => ({ html: "x", status: 200 }));
+  await withHtmlCache("/b?", 60, async () => ({ html: "y", status: 200 }));
+  await withDataCache("quote:AAPL", 60, async () => ({ price: 1 }));
+
+  const result = await inspectRedis();
+  assert.equal(result.ok, true);
+  assert.equal(result.html, 2);
+  assert.equal(result.data, 1);
+  // `INFO`/`DBSIZE` kısıtlı kurulumlarda reddedilebiliyor; sayımlar yine döner.
+  assert.equal(result.usedMemory, null);
+  assert.equal(result.totalKeys, null);
+});
+
+test("inspecting without a connection reports failure instead of throwing", async () => {
+  setRedisClientForTests(null);
+  assert.deepEqual(await inspectRedis(), {
+    ok: false,
+    html: 0,
+    data: 0,
+    usedMemory: null,
+    totalKeys: null,
+  });
 });

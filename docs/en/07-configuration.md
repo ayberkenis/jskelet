@@ -119,6 +119,7 @@ export default {
   async cache() {
     return {
       html: { "/": 60, "/news/:slug": 300 },
+      query: { "/search": ["q", "page"] },
       maxEntries: 500,
       data: { maxEntries: 10000, staleFactor: 10 },
       prewarm: {
@@ -572,9 +573,9 @@ Details: [03-routing.md](./03-routing.md).
 ## `cache()`
 
 **Type:**
-`() => { html?: Record<string, number>, maxEntries?: number, data?: object, trackUpstream?: boolean, trackDependencies?: boolean, transientRetry?: object | false, upstream?: object, redis?: object, prewarm?: object }` —
+`() => { html?: Record<string, number>, query?: Record<string, string[] | true>, maxEntries?: number, data?: object, trackUpstream?: boolean, trackDependencies?: boolean, transientRetry?: object | false, upstream?: object, redis?: object, prewarm?: object }` —
 **Default:**
-`{ html: {}, maxEntries: 500, data: { maxEntries: 10000, staleFactor: 10 }, trackUpstream: true, trackDependencies: true, transientRetry: { attempts: 1, delayMs: 300 }, upstream: { rate: 0 }, redis: { enabled: false }, prewarm: { enabled: true, max: 400, intervalSeconds: 0 } }`
+`{ html: {}, query: {}, maxEntries: 500, data: { maxEntries: 10000, staleFactor: 10 }, trackUpstream: true, trackDependencies: true, transientRetry: { attempts: 1, delayMs: 300 }, upstream: { rate: 0 }, redis: { enabled: false }, prewarm: { enabled: true, max: 400, intervalSeconds: 0 } }`
 
 ### `cache().html`
 
@@ -593,6 +594,39 @@ html: {
   "/search": 0,
 }
 ```
+
+### `cache().query`
+
+A pattern → list of query parameters allowed into the cache key.
+
+**By default a request that carries a query parameter is dynamic**: even when
+`cache().html` covers that path, the response never enters the HTML cache and
+is sent with `private, no-store`. The reason is simple — caching every variant
+of a path mints an unbounded number of keys (`?utm_source=…` and friends), and
+once the `maxEntries` limit is reached those keys evict the real pages. Only the
+application knows which parameter actually changes the output.
+
+```js
+query: {
+  "/search": ["q", "page"], // only these two belong to the key
+  "/products": ["category"],
+  "/report/:id": true, // every parameter belongs to the key
+  "/campaign": [], // the query is ignored entirely
+}
+```
+
+- **Allowlist** (`string[]`): the listed parameters become part of the key and
+ each distinct value gets its own entry. Parameters outside the list are
+ **ignored** — the page is still cached and every campaign variant shares one
+ copy.
+- **`true`**: every parameter belongs to the key. Nothing but `maxEntries`
+ bounds the number of entries, so use it only where the value set is closed.
+- **`[]`**: the query is not considered at all; every variant is served the HTML
+ of the query-less version.
+
+Parameters are written into the key **sorted**, so `?a=1&b=2` and `?b=2&a=1`
+share one entry. `route(fn, { private: true })` is unaffected by this section; a
+private route is never cached under any condition.
 
 ### `cache().maxEntries`
 
@@ -740,6 +774,32 @@ leaking one means handing out the right to flush the cache, and a deploy should
 revoke old access on its own. Banned and unauthorised requests all get a `404`.
 Usage and screens: [06-caching.md](./06-caching.md).
 
+### `cache().cloudflare`
+
+The CDN tier. JSkelet's cache is the origin cache; the copy your visitors get
+sits at the edge. With this section connected, the panel can purge the edge,
+read and change cache related zone settings and show the cache hit ratio.
+
+| Field | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `enabled` | `boolean` | `true` | Set `false` to keep the surface off even when a token is present in the environment |
+| `zoneId` | `string \| null` | `null` | Zone identifier (`JSKELET_CLOUDFLARE_ZONE_ID` overrides it) |
+| `apiToken` | `string \| null` | `null` | The token; **prefer the environment**, putting it here puts a secret in the repo |
+| `hostname` | `string \| null` | `null` | Purging wants absolute URLs; paths are resolved against this name. Falls back to the origin the panel was opened on |
+| `analyticsHours` | `number` | `24` | Analytics window, at most `72` |
+
+Passing the token only through `JSKELET_CLOUDFLARE_KEY` keeps the config file
+clean. Permissions follow what you intend to do: `Zone.Cache Purge` to purge,
+`Zone.Zone Settings` for settings, `Zone.Analytics` (read) for the hit ratio.
+The token is never returned in a panel response — only the fact that it came
+from the environment.
+
+With no zone connected the panel shows a setup snippet rather than a warning,
+and if Cloudflare returns an error that section reports it while the rest of the
+panel keeps working. What can actually be asked — in particular why "how many
+edges hold this page" has no exact answer — is in
+[06-caching.md](./06-caching.md).
+
 ```js
 panel: {
   enabled: process.env.CACHE_PANEL === "1",
@@ -871,6 +931,9 @@ and no warning is printed.
 | `JSKELET_SECRET` | `jskelet/cookies` | — | The signed cookie secret. Read when `security.cookieSecret` is not set; if neither exists, the signed cookie API throws. [12](./12-dashboards-and-sessions.md) |
 | `DEV_TOKEN` | `devGate`, `prewarm` | — | If set, every request without a token gets a 404. Prewarming carries the token as a cookie. [09](./09-dev-tools.md) |
 | `JSKELET_CACHE_PANEL` | `createApp` | — | When set, turns the cache panel on; `0` turns off a panel enabled in the config. The env wins because the panel is usually opened once during an incident. [06](./06-caching.md) |
+| `JSKELET_CLOUDFLARE_KEY` | Cloudflare cache surface | — | API token. Until it is set, CDN purging and edge analytics stay off; it overrides `apiToken` in the config. The token is never returned in a response. [06](./06-caching.md) |
+| `JSKELET_CLOUDFLARE_ZONE_ID` | Cloudflare cache surface | — | Zone identifier. No Cloudflare endpoint is called unless it is set alongside the token |
+| `JSKELET_CLOUDFLARE_HOSTNAME` | Cloudflare cache surface | — | The root for purge URLs. Required when the panel is opened over an internal address |
 | `PREWARM` | `startPrewarm` | — | `0` turns prewarming off; `1` overrides `enabled: false` in the config and turns it on |
 | `PREWARM_MAX` | `prewarm` | `400` | At most how many paths are prewarmed |
 | `PREWARM_CONCURRENCY` | `prewarm` | prod 4, dev 1 | Number of parallel workers |

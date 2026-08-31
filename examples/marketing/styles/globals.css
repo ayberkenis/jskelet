@@ -14,6 +14,19 @@
 /** Tema client'ta karara bağlanır; cache'lenen HTML herkese aynı gider. */
 @custom-variant dark (&:where(.dark, .dark *));
 
+/**
+ * JS kapalıyken de tuval doğru renkte kalsın: satır içi script `colorScheme`'i
+ * yazamadığında şema sınıftan türetilir. Tuvalin rengi tarayıcının gezinme
+ * sırasında boyadığı ilk kareyi belirliyor, yani beyaz flaşın kaynağı burası.
+ */
+html {
+  color-scheme: light;
+}
+
+html.dark {
+  color-scheme: dark;
+}
+
 @theme inline {
   /**
    * Web font yok. Sistem yığını hiç istek üretmez ve FOUT/CLS riski taşımaz;
