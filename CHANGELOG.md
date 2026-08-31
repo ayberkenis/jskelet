@@ -87,12 +87,14 @@ one is listed under a **Breaking** heading.
 
 ### Changed
 
-- Request errors raised during a prewarm pass are no longer logged one by one.
-  They are counted while the pass runs and printed as a single summary line
-  afterwards, grouped by status and message with the most frequent kinds first,
-  so a flaky upstream can no longer bury the "warmed N/M pages" line under
-  hundreds of stack traces. Errors from real traffic are logged as before, and
-  the dev tools panel still shows the per-path detail.
+- Errors and warnings raised during a prewarm pass are no longer logged one per
+  page. Request errors and the per-page render warnings (`was produced with
+  missing data`, `returned notFound() while upstream is failing`, `could not be
+  produced`) are counted while the pass runs and printed as a single summary
+  block afterwards, grouped by message with the most frequent kinds first, so a
+  failing upstream can no longer bury the "warmed N/M pages" line under hundreds
+  of near-identical lines. Real traffic logs as before, and the dev tools panel
+  still shows the per-path detail.
 - The marketing example's changelog page is now a timeline: releases are laid out
   along a rail with a sticky version column, each change group gets its own card
   with a coloured rule and item count, and a row of version chips at the top

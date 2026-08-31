@@ -20,6 +20,7 @@
  */
 import process from "node:process";
 import { getConfig, hook } from "../config/index.js";
+import { getRequestContext } from "../http/request-context.js";
 import { takeInvalidatedPaths } from "./html-cache.js";
 
 /**
@@ -45,11 +46,13 @@ export const prewarmProgress = {
 };
 
 /**
- * Isıtma turu sırasında bastırılan istek hataları: mesaj → kaç kez görüldü.
+ * Isıtma turu sırasında bastırılan uyarılar: mesaj → kaç kez görüldü.
  *
  * Yüzlerce yolu tarayan bir tur, upstream bir an için tıksırdığında yüzlerce
- * yığın izini loga döküyor ve asıl bilgi (kaç sayfa ısındı) kayboluyor. Tur
- * boyunca hatalar burada toplanır, tur bitince tek satırda özetlenir.
+ * satır loga döküyor ve asıl bilgi (kaç sayfa ısındı) kayboluyor. Tur boyunca
+ * mesajlar burada toplanır, tur bitince tek satırda özetlenir. Yol adı
+ * anahtara girmez: gruplanabilmesi için mesajın kendisi yeterli, tek bir yolun
+ * ayrıntısı zaten `entries` üzerinden dev panelinde görünüyor.
  * @type {Map<string, number>}
  */
 const suppressed = new Map();
@@ -59,19 +62,41 @@ const suppressed = new Map();
  * ısıtmanın user-agent'ıyla geldiğinde doğru; gerçek trafiğin hataları her
  * zaman loglanmaya devam eder.
  *
- * @param {{ get?: (name: string) => string | undefined }} req
+ * @param {{ get?: (name: string) => string | undefined } | null | undefined} req
  * @returns {boolean}
  */
 export function isPrewarmRequest(req) {
-  if (!prewarmProgress.active) return false;
+  if (!prewarmProgress.active || !req) return false;
   const ua = req.get?.("user-agent");
   return Boolean(ua) && ua === getConfig().brand.prewarmUserAgent;
 }
 
 /**
- * Bastırılan bir hatayı sayaca ekler. Yığın izi saklanmaz: özet satırının
- * amacı "neyin bozulduğunu" göstermek, hatayı ayıklamak değil — tek bir yol
- * için ayrıntı isteyen dev paneli `entries` üzerinden bakar.
+ * Şu an işlenen istek ısıtma turuna mı ait? `req` elde olmayan derin
+ * katmanlar (render, cache) için: yanıt nesnesi istek bağlamında taşınıyor.
+ *
+ * @returns {boolean}
+ */
+function inPrewarmRequest() {
+  if (!prewarmProgress.active) return false;
+  return isPrewarmRequest(getRequestContext()?.res?.req);
+}
+
+/**
+ * Isıtma turuna ait bir uyarıyı loglamak yerine sayar.
+ *
+ * @param {string} message Gruplama anahtarı; yol adı içermemeli.
+ * @returns {boolean} `true` ise sayıldı, çağıran taraf loglamamalı.
+ */
+export function suppressForPrewarm(message) {
+  if (!inPrewarmRequest()) return false;
+  suppressed.set(message, (suppressed.get(message) ?? 0) + 1);
+  return true;
+}
+
+/**
+ * Bastırılan bir istek hatasını sayaca ekler. Yığın izi saklanmaz: özet
+ * satırının amacı "neyin bozulduğunu" göstermek, hatayı ayıklamak değil.
  *
  * @param {number} status
  * @param {unknown} error
@@ -439,7 +464,7 @@ export async function prewarm({ origin, quiet = false, paths: only }) {
       const total = ranked.reduce((sum, [, n]) => sum + n, 0);
 
       console.warn(
-        `[prewarm] ${total} request error${total === 1 ? "" : "s"} were not logged individually:\n` +
+        `[prewarm] ${total} problem${total === 1 ? " was" : "s were"} not logged individually:\n` +
           shown.map(([message, n]) => `  ${n}× ${message}`).join("\n") +
           (rest ? `\n  … ${rest} more in ${ranked.length - shown.length} other kinds` : ""),
       );

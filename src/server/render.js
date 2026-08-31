@@ -39,6 +39,7 @@ import * as html from "../views/helpers/html.js";
 import * as tags from "../views/helpers/tags.js";
 import { loadComponents } from "../views/components/loader.js";
 import { renderStatusPage } from "./status-page.js";
+import { suppressForPrewarm } from "./prewarm.js";
 
 const isDev = process.env.NODE_ENV === "development";
 
@@ -530,10 +531,12 @@ async function produce(controller, ctx) {
   let failures = first.transient;
 
   for (let round = 1; round <= attempts; round += 1) {
-    console.warn(
-      `[render] ${ctx.pathname} returned notFound() while upstream is failing ` +
-        `(${summarizeFailures(failures)}), retrying (${round}/${attempts})`,
-    );
+    const retryDetail =
+      `returned notFound() while upstream is failing ` +
+      `(${summarizeFailures(failures)}), retrying (${round}/${attempts})`;
+    if (!suppressForPrewarm(retryDetail)) {
+      console.warn(`[render] ${ctx.pathname} ${retryDetail}`);
+    }
 
     // Beklemeden tekrar denemek rate limit'e girmiş bir API'de aynı 429'u
     // getirir; kısa bekleme hem pencerenin dönmesine şans verir hem de
@@ -558,10 +561,12 @@ async function produce(controller, ctx) {
 
   // Denemeler tükendi. 404 yerine 503: önbelleğe girmez, `Retry-After` taşır
   // ve bir sonraki istek gerçek içeriği üretebilir.
-  console.warn(
-    `[render] ${ctx.pathname} could not be produced, upstream is still failing ` +
-      `(${summarizeFailures(failures)}), serving an uncached 503 instead of a 404`,
-  );
+  const outageDetail =
+    `could not be produced, upstream is still failing ` +
+    `(${summarizeFailures(failures)}), serving an uncached 503 instead of a 404`;
+  if (!suppressForPrewarm(outageDetail)) {
+    console.warn(`[render] ${ctx.pathname} ${outageDetail}`);
+  }
 
   return {
     html: await renderStatusPage(503),
@@ -624,17 +629,22 @@ function hasUpstreamFailures(pathname) {
   const transient = failures.filter((failure) => isTransientStatus(failure.status));
   const permanent = failures.filter((failure) => !isTransientStatus(failure.status));
 
+  // Isıtma turu yüzlerce yolu tarıyor; aynı upstream arızası her yol için bir
+  // satır basınca tur özeti kayboluyor. Turun uyarıları sayılıp sonunda
+  // toplanır (bkz. `suppressForPrewarm`).
   if (permanent.length) {
-    console.warn(
-      `[render] ${pathname} was produced with missing data, upstream is failing permanently (${summarizeFailures(permanent)})`,
-    );
+    const detail = `missing data, upstream is failing permanently (${summarizeFailures(permanent)})`;
+    if (!suppressForPrewarm(detail)) {
+      console.warn(`[render] ${pathname} was produced with ${detail}`);
+    }
   }
 
   if (!transient.length) return false;
 
-  console.warn(
-    `[render] ${pathname} was produced with missing data, not caching it (${summarizeFailures(transient)})`,
-  );
+  const detail = `missing data, not caching it (${summarizeFailures(transient)})`;
+  if (!suppressForPrewarm(detail)) {
+    console.warn(`[render] ${pathname} was produced with ${detail}`);
+  }
 
   return true;
 }

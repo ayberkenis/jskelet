@@ -727,13 +727,15 @@ Rules:
 5. A summary is logged:
    `[prewarm] warmed 128/130 pages, 2 failed, 5 recovered on the retry pass (12.4s)`
 
-Request errors raised during the pass are not logged one by one. They are
-counted while the pass runs and printed after the summary as a single line,
-grouped by status and message with the most frequent kinds first:
+Request errors and the per-page render warnings (`was produced with missing
+data`, `returned notFound() while upstream is failing`, `could not be
+produced`) raised during the pass are not logged one by one. They are counted
+while the pass runs and printed after the summary, most frequent kinds first:
 
 ```text
-[prewarm] 37 request errors were not logged individually:
-  31× 502 upstream fetch failed: /api/quotes
+[prewarm] 137 problems were not logged individually:
+  94× missing data, upstream is failing permanently (403 /api/v1/polls)
+  37× missing data, upstream is failing permanently (400 /api/v1/posts)
   6× 500 Cannot read properties of undefined (reading 'title')
 ```
 

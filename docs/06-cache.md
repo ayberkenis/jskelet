@@ -706,13 +706,15 @@ Kurallar:
 5. Özet loglanır:
    `[prewarm] warmed 128/130 pages, 2 failed, 5 recovered on the retry pass (12.4s)`
 
-Tur sırasında oluşan istek hataları tek tek loglanmaz; sayılır ve tur bitince
-özetin ardından tek bir satırda, en sık görülen türler başta olacak şekilde
-basılır:
+Tur sırasında oluşan istek hataları ve sayfa başına basılan render uyarıları
+(`was produced with missing data`, `returned notFound() while upstream is
+failing`, `could not be produced`) tek tek loglanmaz; sayılır ve tur bitince
+özetin ardından, en sık görülen türler başta olacak şekilde basılır:
 
 ```text
-[prewarm] 37 request errors were not logged individually:
-  31× 502 upstream fetch failed: /api/quotes
+[prewarm] 137 problems were not logged individually:
+  94× missing data, upstream is failing permanently (403 /api/v1/polls)
+  37× missing data, upstream is failing permanently (400 /api/v1/posts)
   6× 500 Cannot read properties of undefined (reading 'title')
 ```
 
