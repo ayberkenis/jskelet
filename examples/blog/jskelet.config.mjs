@@ -78,6 +78,21 @@ export default {
         "/blog/:slug": 300,
       },
 
+      /**
+       * Opsiyonel Redis ikinci kademesi. Bellek içi önbellek birincil kalır;
+       * Redis yalnızca bu proseste bulunmayan bir sayfa için render'ı atlatır
+       * ve invalidation'ı diğer instance'lara yayar.
+       *
+       * Örnekte kapalı: tek süreç çalışan bir kurulumda kazanç yok ve `ioredis`
+       * kurulu olmasa da her şey çalışmalı. Birden fazla kopya çalıştırıyorsanız
+       * `npm install ioredis` sonrası `REDIS_URL` vermek yeterli.
+       */
+      redis: {
+        enabled: Boolean(process.env.REDIS_URL),
+        url: process.env.REDIS_URL ?? null,
+        namespace: "jskelet-blog",
+      },
+
       /** Açılışta sayfaları önden render edip önbelleğe koyan tarama. */
       prewarm: {
         enabled: true,

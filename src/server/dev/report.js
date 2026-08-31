@@ -14,6 +14,7 @@ import path from "node:path";
 import zlib from "node:zlib";
 import { getHtmlCacheEntries, getHtmlCacheSize } from "../html-cache.js";
 import { getDataCacheSize } from "../data-cache.js";
+import { getRedisStatus } from "../redis.js";
 import { prewarmProgress } from "../prewarm.js";
 import { getConfig } from "../../config/index.js";
 
@@ -350,6 +351,9 @@ export function buildReport(devtools) {
       // Veri önbelleğinden yalnızca sayaç: uzun kuyruklu bir sitede on
       // binlerce anahtar oluyor ve dökümü rapora koymak faydasız bir yük.
       data: getDataCacheSize(),
+      // Paylaşımlı kademe kapalıyken de basılır: "Redis'i açtım ama neden
+      // çalışmıyor" sorusunun cevabı en çok burada aranıyor.
+      redis: getRedisStatus(),
     },
     prewarm: { ...prewarmProgress },
     requests: devtools.requests,

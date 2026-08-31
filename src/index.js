@@ -53,6 +53,9 @@ export {
   getDataCacheSize,
   withDataCache,
 } from "./server/data-cache.js";
+// Paylaşımlı önbellek kademesinin durumu. Bağlantı kurulmamışken de güvenle
+// çağrılır; healthcheck uçları bunu okuyor.
+export { getRedisStatus } from "./server/redis.js";
 export { prewarm, prewarmProgress } from "./server/prewarm.js";
 export { createProxy } from "./server/middleware/upstream-proxy.js";
 export { getConfig, loadConfig } from "./config/index.js";

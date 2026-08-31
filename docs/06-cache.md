@@ -530,7 +530,124 @@ silinmiş dosyayı istemeye devam eder ([09-dev-araclari.md](./09-dev-araclari.m
 
 Önbellek süreç belleğinde yaşadığı için birden fazla süreç/kopya çalıştırıyorsanız
 her birinin kendi önbelleği olur; `clearHtmlCache()` yalnızca çağrıldığı süreci
-etkiler.
+etkiler. Birden fazla instance çalıştıran bir kurulumda bunu aşmanın yolu bir
+sonraki bölümde.
+
+## Paylaşımlı önbellek: Redis
+
+Varsayılan önbellek tek prosese ait. Bu, tek instance çalışan bir sitede en hızlı
+ve en basit kurulum — ama üç kopya çalıştırdığınızda iki sorun çıkar:
+
+1. **Her kopya kendi başına ısınır.** Yeni bir instance açıldığında ya da bir
+   deploy sonrası konteyner yenilendiğinde önbellek boştur; aynı sayfa üç kez
+   render edilir, aynı veri üç kez çekilir.
+2. **Invalidation tek kopyaya ulaşır.** `invalidateHtmlCache()` çağıran webhook
+   yalnızca isteği alan instance'ı tazeler; diğerleri TTL'i bekler. Ziyaretçi
+   hangi kopyaya düştüğüne göre eski ya da yeni içeriği görür.
+
+`cache().redis` bu iki sorunu çözer. Redis **birincil store olmaz**: bellek içi
+önbellek (L1) aynen kalır ve her istek onu okur; Redis ikinci kademedir (L2).
+
+```js
+// jskelet.config.mjs
+export default {
+  cache() {
+    return {
+      html: { "/haber/:slug": 300 },
+      redis: {
+        enabled: true,
+        url: process.env.REDIS_URL,
+        namespace: "haber-sitesi",
+      },
+    };
+  },
+};
+```
+
+`ioredis` opsiyonel bir peer bağımlılıktır, uygulamanın kendisine kurulur:
+
+```bash
+npm install ioredis
+```
+
+Kurulmadıysa ya da Redis'e bağlanılamıyorsa uyarı basılır ve site **bellek içi
+önbellekle çalışmaya devam eder**. Redis çalışırken düşerse aynı şey olur: bir
+devre kesici art arda beş hatadan sonra katmanı beş saniye baypas eder, böylece
+her istek ağ zaman aşımı beklemez.
+
+### Ne kazanırsınız
+
+- **Soğuk instance sıcak önbellek bulur.** L1'de olmayan bir yol için render
+  çalışmadan önce Redis okunur; başka bir kopya o sayfayı ürettiyse render hiç
+  çalışmaz.
+- **Veri önbelleği kotayı bir kez harcar.** `withDataCache` aynı mantıkla
+  çalışır ve kazanç burada daha büyük: JSON küçük, bir kopyanın çektiği veri
+  hepsine yeter.
+- **Invalidation her kopyaya gider.** `invalidateHtmlCache()`,
+  `clearHtmlCache()` ve `clearDataCache()` bir pub/sub kanalına mesaj bırakır;
+  her instance kendi L1'ine aynı işlemi uygular. Deseni yayınlar, eşleşen
+  anahtarları değil — hangi yolun nerede sıcak olduğu kopyaya bağlı.
+
+### Anahtar düzeni
+
+```
+_jskelet:{namespace}:{buildId}:html:{yol}?{query}
+_jskelet:{namespace}:{buildId}:data:{anahtar}
+_jskelet:{namespace}:events
+```
+
+`buildId` her build'de değişir (`jskelet build` bunu `.jskelet/build.json`
+dosyasına yazar) ve **zorunlu bir parçadır**: saklanan HTML hash'li varlık
+yollarını gömüyor, yani bir deploy'dan sonra eski HTML geçersizdir. Kimlik
+önekte durduğu için yeni sürüm kendiliğinden yeni bir isim alanına yazar, eski
+anahtarlar TTL ile ölür — elle temizlik ya da `FLUSHDB` gerekmez. Build
+çalıştırılmadıysa kimlik `dev` olur.
+
+`namespace` aynı Redis'i paylaşan birden fazla uygulamayı ayırır. Olay kanalı
+bilinçli olarak `buildId` **taşımaz**: deploy sırasında eski ve yeni sürüm yan
+yana koşuyor ve bir purge ikisine de ulaşmalı.
+
+### Bilmeniz gereken takaslar
+
+- **Kişiye özel çıktı paylaşılmaz.** `storable: false` işaretlenen bir render
+  (cookie/`Authorization` okuyan sayfa) Redis'e hiç yazılmaz. Tek prosesteyken
+  bile geçerli olan bu kural paylaşımlı kademede daha da kritik: sızması, bir
+  kullanıcının HTML'ini tüm kümeye servis etmek olur. `degraded` render ve 200
+  dışındaki durum kodları da paylaşılmaz.
+- **Sıkıştırılmış gövdeler varsayılan olarak yerel kalır.** `storeEncoded: true`
+  ile açılabilir, ama girdi başına boyutu iki-üç katına çıkarır; brotli'yi
+  yeniden üretmek çoğu zaman Redis'ten indirmekten ucuzdur.
+- **Yumuşak invalidation Redis kopyasını siler.** Bayatlatmanın Redis karşılığı
+  her anahtar için oku-değiştir-yaz turu demek ve bir webhook binlerce anahtarı
+  birden düşürüyor. Silmenin bedeli, o yolu hiç görmemiş bir kopyanın bir kez
+  render etmesi; L1'i sıcak olan kopyalar eski HTML'i bayat pencerede servis
+  etmeye devam eder.
+- **Yalnızca taze girdi kabul edilir.** Bayat bir kopyayı L1'e almak tazelemeyi
+  sonsuza kadar ertelerdi: girdi bayat kalır, her tur yine Redis'i okur ve
+  render hiç çalışmaz.
+- **Tutarlılık nihai.** Bir purge ile o purge'ün her kopyaya ulaşması arasında
+  kısa bir pencere var. Bu pencerede bir kopya eski HTML'i servis edebilir;
+  süresi TTL ile sınırlı.
+- **Dev'de kapalı tutun.** Dev sunucusu manifest her değiştiğinde önbelleği
+  boşaltıyor; paylaşımlı bir store bunu anlamsızlaştırır. `enabled` yalnızca
+  açıkça `true` verildiğinde açılır.
+
+### Durumu görmek
+
+```js
+import { getRedisStatus } from "jskelet";
+
+app.get("/api/healthcheck", (req, res) => {
+  res.json({ ok: true, cache: getRedisStatus() });
+});
+```
+
+Bağlantı kurulmamışken de güvenle çağrılır. Dönen nesne
+`{ enabled, connected, keyPrefix, buildId, errors, bypassed }`; `bypassed` devre
+kesicinin açık olduğunu, `errors` toplam komut hatasını gösterir. Aynı özet dev
+panelinin raporunda da var ([09-dev-araclari.md](./09-dev-araclari.md)).
+
+Ayarların tam listesi: [07-yapilandirma.md](./07-yapilandirma.md).
 
 ## Prewarm — açılışta ısıtma
 
@@ -588,6 +705,20 @@ Kurallar:
    saniye mertebesinde, hemen tekrar denemek aynı 429'u almak demek.
 5. Özet loglanır:
    `[prewarm] warmed 128/130 pages, 2 failed, 5 recovered on the retry pass (12.4s)`
+
+Tur sırasında oluşan istek hataları tek tek loglanmaz; sayılır ve tur bitince
+özetin ardından tek bir satırda, en sık görülen türler başta olacak şekilde
+basılır:
+
+```text
+[prewarm] 37 request errors were not logged individually:
+  31× 502 upstream fetch failed: /api/quotes
+  6× 500 Cannot read properties of undefined (reading 'title')
+```
+
+Böylece bir anlık upstream arızası "warmed …" satırını yüzlerce yığın izinin
+altına gömmüyor. Gerçek trafiğin hataları eskisi gibi anında loglanır, tek bir
+yolun ayrıntısı için dev panelindeki **Prewarming** sekmesine bakılır.
 
 ### Isıtma sırası: `priority`
 

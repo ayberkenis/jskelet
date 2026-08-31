@@ -1,6 +1,6 @@
 {
   "name": "jskelet",
-  "version": "0.1.9",
+  "version": "0.2",
   "description": "A framework that feels like no framework: Express 5 + EJS server rendering, vanilla JS islands, Tailwind v4 and an in-process HTML TTL cache.",
   "type": "module",
   "license": "MIT",
@@ -66,6 +66,7 @@
   "peerDependencies": {
     "@phosphor-icons/core": "^2.1.1",
     "@tailwindcss/postcss": "^4.3.3",
+    "ioredis": "^5.4.0 || ^6.0.0",
     "lightningcss": "^1.32.0",
     "postcss": "^8.5.26",
     "sharp": "^0.35.4",
@@ -76,6 +77,9 @@
       "optional": true
     },
     "@tailwindcss/postcss": {
+      "optional": true
+    },
+    "ioredis": {
       "optional": true
     },
     "lightningcss": {

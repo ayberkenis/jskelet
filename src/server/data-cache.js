@@ -16,11 +16,26 @@
  * genellikle `null` döner ve bunu saklamak, geçici bir 429'u TTL boyunca "veri
  * yok" hâline dondurmak olurdu. Boş cevabı bilinçli olarak saklamak isteyen
  * `storeEmpty: true` verir.
+ *
+ * `cache.redis` açıkken bu önbellek ikinci bir kademeye (L2) yaslanır. Redis'e
+ * en uygun katman burası: JSON küçük, sıkıştırılmış varyant sorunu yok ve
+ * kazanç doğrudan API kotasına yazılıyor — bir node'un çektiği veri hepsine
+ * yeter. Redis kapalı ya da erişilemez olduğunda bu modül birebir eskisi gibi
+ * çalışır.
  */
 import { getConfig } from "../config/index.js";
 import { DEFAULT_DATA_CACHE } from "../config/defaults.js";
 import { recordDependency } from "./cache-deps.js";
 import { invalidateHtmlByDependency } from "./html-cache.js";
+import {
+  cacheKey,
+  onCacheEvent,
+  publishCacheEvent,
+  redisDropMatching,
+  redisGetJson,
+  redisSetJson,
+  redisShares,
+} from "./redis.js";
 
 /**
  * @typedef {{ value: unknown, expiresAt: number, staleUntil: number }} DataEntry
@@ -74,6 +89,16 @@ function read(key) {
   return { value: entry.value, stale: now >= entry.expiresAt };
 }
 
+/** Girdi sınırını aşan en eski kayıtları düşürür. */
+function evict() {
+  const { maxEntries } = settings();
+  while (store.size > maxEntries) {
+    const oldest = store.keys().next().value;
+    if (oldest === undefined) break;
+    store.delete(oldest);
+  }
+}
+
 /**
  * @param {string} key
  * @param {unknown} value
@@ -84,18 +109,55 @@ function write(key, value, ttlSeconds, staleFactor) {
   const now = Date.now();
   const ttl = ttlSeconds * 1000;
 
-  store.set(key, {
+  /** @type {DataEntry} */
+  const entry = {
     value,
     expiresAt: now + ttl,
     staleUntil: now + ttl + ttl * staleFactor,
-  });
+  };
 
-  const { maxEntries } = settings();
-  while (store.size > maxEntries) {
-    const oldest = store.keys().next().value;
-    if (oldest === undefined) break;
-    store.delete(oldest);
+  store.set(key, entry);
+
+  // Redis kopyası ateşle-unut: çağıran taraf beklemez. Anahtarın Redis ömrü
+  // bayat penceresinin sonuna kadar, çünkü bayat veri de işe yarıyor.
+  if (redisShares("data")) {
+    redisSetJson(cacheKey("data", key), entry, entry.staleUntil - now);
   }
+
+  evict();
+}
+
+/**
+ * Başka bir node'un yazdığı girdiyi L1'e alır. TTL yeniden başlatılmaz:
+ * mutlak zamanlar olduğu gibi korunur, yoksa girdi node'dan node'a atlayarak
+ * süresiz tazelik kazanır.
+ *
+ * @param {string} key
+ * @param {DataEntry} entry
+ */
+function promote(key, entry) {
+  store.set(key, entry);
+  evict();
+}
+
+/**
+ * Paylaşımlı kademeden okur.
+ *
+ * Yalnızca **taze** girdi kabul edilir. Bayat bir kopyayı L1'e almak
+ * tazelemeyi sonsuza kadar ertelerdi: girdi bayat kalır, her tazeleme turu
+ * yine Redis'i okur ve `producer` hiç çalışmaz.
+ *
+ * @param {string} key
+ * @returns {Promise<DataEntry | null>}
+ */
+async function readShared(key) {
+  if (!redisShares("data")) return null;
+
+  const entry = await redisGetJson(cacheKey("data", key));
+  if (!entry || typeof entry.expiresAt !== "number") return null;
+  if (Date.now() >= entry.expiresAt) return null;
+
+  return /** @type {DataEntry} */ (entry);
 }
 
 /**
@@ -113,21 +175,39 @@ function refresh(key, ttlSeconds, producer, options) {
 
   const staleFactor = options.staleFactor ?? settings().staleFactor;
 
-  const task = Promise.resolve()
-    .then(producer)
-    .then((value) => {
-      const empty = value === undefined || value === null;
-      if (!empty || options.storeEmpty === true) {
-        write(key, value, ttlSeconds, staleFactor);
-      }
-      return value;
-    })
-    .finally(() => {
-      inflight.delete(key);
-    });
+  const task = produce(key, ttlSeconds, producer, options, staleFactor).finally(() => {
+    inflight.delete(key);
+  });
 
   inflight.set(key, task);
   return task;
+}
+
+/**
+ * @param {string} key
+ * @param {number} ttlSeconds
+ * @param {() => Promise<unknown>} producer
+ * @param {{ storeEmpty?: boolean, staleFactor?: number }} options
+ * @param {number} staleFactor
+ * @returns {Promise<unknown>}
+ */
+async function produce(key, ttlSeconds, producer, options, staleFactor) {
+  // Başka bir node bu anahtarı çoktan tazelediyse upstream'e hiç gitmeyiz.
+  // Kotayı koruyan `inflight` birleştirmesinin küme çapındaki karşılığı bu.
+  const shared = await readShared(key);
+  if (shared) {
+    promote(key, shared);
+    return shared.value;
+  }
+
+  const value = await producer();
+
+  const empty = value === undefined || value === null;
+  if (!empty || options.storeEmpty === true) {
+    write(key, value, ttlSeconds, staleFactor);
+  }
+
+  return value;
 }
 
 /**
@@ -212,10 +292,38 @@ export function dataCache(fn, options) {
  * uygulamanın ayrıca `invalidateHtmlCache()` çağırması gerekmez ve aynı veriyi
  * gösteren liste sayfalarını unutmak mümkün değildir (bkz. `cache-deps.js`).
  *
+ * `cache.redis` açıkken çağrı ayrıca paylaşımlı kademeden siler ve diğer
+ * node'lara duyurulur — bugün bir webhook yalnızca isteği alan node'un
+ * önbelleğini tazeliyor, diğerleri TTL'i bekliyordu.
+ *
  * @param {string} [prefix] Verilmezse tüm önbellek boşaltılır.
  * @returns {number} Silinen girdi sayısı.
  */
 export function clearDataCache(prefix) {
+  const removed = clearLocal(prefix);
+
+  if (redisShares("data")) {
+    void redisDropMatching(
+      "data",
+      prefix === undefined ? undefined : (key) => key.startsWith(prefix),
+    );
+  }
+
+  // Yayın yerel silmeden **sonra** yapılır; diğer node'lar kendi anahtarlarını
+  // kendileri tarar, çünkü hangi anahtarın nerede sıcak olduğu node'a bağlı.
+  publishCacheEvent({ type: "data:clear", prefix: prefix ?? null });
+
+  return removed;
+}
+
+/**
+ * Silmenin yerel kısmı. Uzaktan gelen olay bunu çağırır: yeniden yayın yapan
+ * bir dinleyici iki node arasında sonsuz mesaj döngüsü üretir.
+ *
+ * @param {string} [prefix]
+ * @returns {number}
+ */
+function clearLocal(prefix) {
   /** @type {string[]} */
   const removed = [];
 
@@ -234,6 +342,13 @@ export function clearDataCache(prefix) {
   if (removed.length) invalidateHtmlByDependency(removed);
   return removed.length;
 }
+
+// Uzak bir node veri düşürdüğünde bu proses de kendi L1'ini temizler; zincir
+// `invalidateHtmlByDependency` üzerinden etkilenen sayfalara kadar gider.
+onCacheEvent((event) => {
+  if (event.type !== "data:clear") return;
+  clearLocal(typeof event.prefix === "string" ? event.prefix : undefined);
+});
 
 /** @returns {number} */
 export function getDataCacheSize() {

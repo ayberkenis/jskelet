@@ -572,9 +572,9 @@ Details: [03-routing.md](./03-routing.md).
 ## `cache()`
 
 **Type:**
-`() => { html?: Record<string, number>, maxEntries?: number, data?: object, trackUpstream?: boolean, trackDependencies?: boolean, transientRetry?: object | false, prewarm?: object }` —
+`() => { html?: Record<string, number>, maxEntries?: number, data?: object, trackUpstream?: boolean, trackDependencies?: boolean, transientRetry?: object | false, redis?: object, prewarm?: object }` —
 **Default:**
-`{ html: {}, maxEntries: 500, data: { maxEntries: 10000, staleFactor: 10 }, trackUpstream: true, trackDependencies: true, transientRetry: { attempts: 1, delayMs: 300 }, prewarm: { enabled: true, max: 400, intervalSeconds: 0 } }`
+`{ html: {}, maxEntries: 500, data: { maxEntries: 10000, staleFactor: 10 }, trackUpstream: true, trackDependencies: true, transientRetry: { attempts: 1, delayMs: 300 }, redis: { enabled: false }, prewarm: { enabled: true, max: 400, intervalSeconds: 0 } }`
 
 ### `cache().html`
 
@@ -642,6 +642,40 @@ How many extra times a page is tried when `notFound()` was called because of a
 transient upstream failure. The point is that an existing page never turns into
 a 404; if the retries are exhausted the response is an uncached 503. `false` or
 `attempts: 0` disables the retry. Details: [06-caching.md](./06-caching.md).
+
+### `cache().redis`
+
+An optional Redis second tier (L2). The in-process cache stays primary; Redis
+only skips the render for a path that is not in L1 and spreads invalidation to
+the other instances. `ioredis` has to be installed in the application
+(`npm install ioredis`); if it is missing or unreachable a warning is printed and
+the site keeps running on the in-process cache.
+
+| Field | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `enabled` | `boolean` | `false` | Only turns on when `true` is passed explicitly |
+| `url` | `string \| null` | `null` | `redis://` or `rediss://`. When empty, the ioredis default (`localhost:6379`) |
+| `namespace` | `string` | `"default"` | Separates applications sharing one Redis |
+| `keyPrefix` | `string` | `"_jskelet"` | Root of the key layout |
+| `html` | `boolean` | `true` | Whether HTML bodies are shared |
+| `data` | `boolean` | `true` | Whether `withDataCache` entries are shared |
+| `storeEncoded` | `boolean` | `false` | Whether brotli/gzip bodies are shared too; doubles or triples the size per entry |
+| `events` | `boolean` | `true` | Invalidation broadcast over pub/sub |
+| `commandTimeoutMs` | `number` | `200` | At most how long a single command may block |
+
+Keys live as `_jskelet:{namespace}:{buildId}:html:{path}?{query}`. `buildId`
+changes with every build, so old HTML becomes invalid on its own after a deploy.
+Personalised (`storable: false`), `degraded` and non-200 responses are never
+written to the shared tier. Trade-offs and diagnosis:
+[06-caching.md](./06-caching.md).
+
+```js
+redis: {
+  enabled: process.env.NODE_ENV === "production",
+  url: process.env.REDIS_URL,
+  namespace: "news-site",
+}
+```
 
 ### `cache().prewarm`
 

@@ -44,6 +44,45 @@ export const prewarmProgress = {
   entries: [],
 };
 
+/**
+ * Isıtma turu sırasında bastırılan istek hataları: mesaj → kaç kez görüldü.
+ *
+ * Yüzlerce yolu tarayan bir tur, upstream bir an için tıksırdığında yüzlerce
+ * yığın izini loga döküyor ve asıl bilgi (kaç sayfa ısındı) kayboluyor. Tur
+ * boyunca hatalar burada toplanır, tur bitince tek satırda özetlenir.
+ * @type {Map<string, number>}
+ */
+const suppressed = new Map();
+
+/**
+ * İstek ısıtma turunun kendi isteği mi? Yalnızca tur çalışırken ve istek
+ * ısıtmanın user-agent'ıyla geldiğinde doğru; gerçek trafiğin hataları her
+ * zaman loglanmaya devam eder.
+ *
+ * @param {{ get?: (name: string) => string | undefined }} req
+ * @returns {boolean}
+ */
+export function isPrewarmRequest(req) {
+  if (!prewarmProgress.active) return false;
+  const ua = req.get?.("user-agent");
+  return Boolean(ua) && ua === getConfig().brand.prewarmUserAgent;
+}
+
+/**
+ * Bastırılan bir hatayı sayaca ekler. Yığın izi saklanmaz: özet satırının
+ * amacı "neyin bozulduğunu" göstermek, hatayı ayıklamak değil — tek bir yol
+ * için ayrıntı isteyen dev paneli `entries` üzerinden bakar.
+ *
+ * @param {number} status
+ * @param {unknown} error
+ * @returns {void}
+ */
+export function notePrewarmError(status, error) {
+  const message = error instanceof Error ? error.message : String(error);
+  const key = `${status} ${message.split("\n")[0]}`;
+  suppressed.set(key, (suppressed.get(key) ?? 0) + 1);
+}
+
 /** @param {unknown} value @param {number} fallback */
 function num(value, fallback) {
   const parsed = Number(value);
@@ -326,6 +365,7 @@ export async function prewarm({ origin, quiet = false, paths: only }) {
     finishedAt: null,
     entries: [],
   });
+  suppressed.clear();
 
   let ok = 0;
   let failed = 0;
@@ -388,6 +428,22 @@ export async function prewarm({ origin, quiet = false, paths: only }) {
         `${skipped > 0 ? `, ${skipped} ${rotate ? "deferred to the next pass" : "over the limit"}` : ""}` +
         ` (${(elapsed / 1000).toFixed(1)}s)`,
     );
+
+    // Tur boyunca bastırılan hatalar: en sık görülenler önce, liste uzarsa
+    // kalanı tek satırda toplanır. Amaç, logu şişirmeden "ne bozuldu"yu
+    // görünür tutmak.
+    if (suppressed.size) {
+      const ranked = [...suppressed.entries()].sort((a, b) => b[1] - a[1]);
+      const shown = ranked.slice(0, 5);
+      const rest = ranked.slice(shown.length).reduce((sum, [, n]) => sum + n, 0);
+      const total = ranked.reduce((sum, [, n]) => sum + n, 0);
+
+      console.warn(
+        `[prewarm] ${total} request error${total === 1 ? "" : "s"} were not logged individually:\n` +
+          shown.map(([message, n]) => `  ${n}× ${message}`).join("\n") +
+          (rest ? `\n  … ${rest} more in ${ranked.length - shown.length} other kinds` : ""),
+      );
+    }
   }
 
   return { ok, failed, total: paths.length, elapsed };

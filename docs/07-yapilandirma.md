@@ -560,9 +560,9 @@ Ayrıntı: [03-routing.md](./03-routing.md).
 ## `cache()`
 
 **Tip:**
-`() => { html?: Record<string, number>, maxEntries?: number, data?: object, trackUpstream?: boolean, trackDependencies?: boolean, transientRetry?: object | false, prewarm?: object }` —
+`() => { html?: Record<string, number>, maxEntries?: number, data?: object, trackUpstream?: boolean, trackDependencies?: boolean, transientRetry?: object | false, redis?: object, prewarm?: object }` —
 **Varsayılan:**
-`{ html: {}, maxEntries: 500, data: { maxEntries: 10000, staleFactor: 10 }, trackUpstream: true, trackDependencies: true, transientRetry: { attempts: 1, delayMs: 300 }, prewarm: { enabled: true, max: 400, intervalSeconds: 0 } }`
+`{ html: {}, maxEntries: 500, data: { maxEntries: 10000, staleFactor: 10 }, trackUpstream: true, trackDependencies: true, transientRetry: { attempts: 1, delayMs: 300 }, redis: { enabled: false }, prewarm: { enabled: true, max: 400, intervalSeconds: 0 } }`
 
 ### `cache().html`
 
@@ -626,6 +626,40 @@ Geçici bir upstream hatası yüzünden `notFound()` çağrılan sayfa kaç kez 
 denenir. Amaç var olan bir sayfanın 404'e dönüşmemesi; denemeler tükenirse yanıt
 önbelleğe girmeyen bir 503 olur. `false` ya da `attempts: 0` tekrarı kapatır.
 Ayrıntı: [06-cache.md](./06-cache.md).
+
+### `cache().redis`
+
+Opsiyonel Redis ikinci kademesi (L2). Bellek içi önbellek birincil kalır; Redis
+yalnızca L1'de bulunmayan bir yol için render'ı atlatır ve invalidation'ı diğer
+instance'lara yayar. `ioredis` uygulamaya kurulmalı (`npm install ioredis`);
+kurulmadıysa ya da bağlanılamıyorsa uyarı basılır ve site bellek içi önbellekle
+çalışmaya devam eder.
+
+| Alan | Tip | Varsayılan | Anlamı |
+| --- | --- | --- | --- |
+| `enabled` | `boolean` | `false` | Yalnızca açıkça `true` verildiğinde açılır |
+| `url` | `string \| null` | `null` | `redis://` ya da `rediss://`. Boşsa ioredis varsayılanı (`localhost:6379`) |
+| `namespace` | `string` | `"default"` | Aynı Redis'i paylaşan uygulamaları ayırır |
+| `keyPrefix` | `string` | `"_jskelet"` | Anahtar düzeninin kökü |
+| `html` | `boolean` | `true` | HTML gövdeleri paylaşılsın mı |
+| `data` | `boolean` | `true` | `withDataCache` girdileri paylaşılsın mı |
+| `storeEncoded` | `boolean` | `false` | Brotli/gzip gövdeleri de paylaşılsın mı; girdi başına boyutu iki-üç katına çıkarır |
+| `events` | `boolean` | `true` | pub/sub üzerinden invalidation yayını |
+| `commandTimeoutMs` | `number` | `200` | Tek bir komutun en fazla bekletebileceği süre |
+
+Anahtarlar `_jskelet:{namespace}:{buildId}:html:{yol}?{query}` biçiminde yaşar.
+`buildId` her build'de değişir, böylece deploy sonrası eski HTML kendiliğinden
+geçersiz olur. Kişiye özel (`storable: false`), `degraded` ve 200 dışındaki
+yanıtlar paylaşımlı kademeye hiç yazılmaz. Takaslar ve teşhis:
+[06-cache.md](./06-cache.md).
+
+```js
+redis: {
+  enabled: process.env.NODE_ENV === "production",
+  url: process.env.REDIS_URL,
+  namespace: "haber-sitesi",
+}
+```
 
 ### `cache().prewarm`
 

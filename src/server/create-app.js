@@ -33,8 +33,9 @@ import { IMMUTABLE_CACHE } from "../config/defaults.js";
 import { registerRoutes } from "./router.js";
 import { renderNotFound } from "./render.js";
 import { renderStatusPage, statusFromError } from "./status-page.js";
-import { startPrewarm } from "./prewarm.js";
+import { isPrewarmRequest, notePrewarmError, startPrewarm } from "./prewarm.js";
 import { trackUpstreamFetch } from "./upstream-tracking.js";
+import { connectRedis, disconnectRedis } from "./redis.js";
 import { isNotFoundError, isRedirectError } from "../http/control-flow.js";
 
 /**
@@ -50,6 +51,12 @@ export async function createApp(options = {}) {
   // yalnızca render bağlamı içindeki `fetch` çağrılarına bakar, ama bağlamın
   // ilk kurulduğu istek de kapsanmalı.
   if (config.trackUpstream) trackUpstreamFetch();
+
+  // Önbelleğin ikinci kademesi route'lardan önce kurulmalı: ilk istek de
+  // paylaşımlı kopyayı görebilsin. Bağlanamazsa uyarı basılır ve uygulama
+  // bellek içi önbellekle çalışmaya devam eder — middleware sırasına
+  // dokunmayan, tamamen opsiyonel bir adım.
+  await connectRedis(config);
 
   const app = express();
 
@@ -132,7 +139,11 @@ export async function createApp(options = {}) {
     }
 
     const status = statusFromError(error);
-    console.error(`[${status}] ${req.method} ${req.originalUrl}`, error);
+    // Isıtma turunun hataları tek tek loglanmaz; tur bitince özet olarak
+    // basılır. Yüzlerce yolu tarayan bir tur, upstream bir an tıksırdığında
+    // logu yığın izleriyle dolduruyordu.
+    if (isPrewarmRequest(req)) notePrewarmError(status, error);
+    else console.error(`[${status}] ${req.method} ${req.originalUrl}`, error);
 
     // Hata sayfası hiçbir katmanda saklanmamalı: geçici bir upstream arızası
     // CDN'de dakikalarca yaşayan bir 500 sayfasına dönüşmesin.
@@ -193,6 +204,7 @@ export async function startServer(options = {}) {
           `jskelet → http://localhost:${port} (${process.env.NODE_ENV ?? "production"})`,
         );
         startPrewarm({ port });
+        attachShutdown(server);
         resolve(server);
       });
 
@@ -211,6 +223,47 @@ export async function startServer(options = {}) {
 
     listen(host ?? "::");
   });
+}
+
+/**
+ * `SIGTERM`/`SIGINT` sonrası düzenli kapanış.
+ *
+ * Kapatılması gereken tek dış bağlantı Redis ve `quit` uçuştaki komutların
+ * bitmesini bekliyor; sert `disconnect` yarıda kalan bir `SET` bırakabiliyor.
+ *
+ * Açık HTTP bağlantıları **beklenmez**. `close()` tek başına yalnızca yeni
+ * bağlantıyı reddediyor; keep-alive bir istemci ya da dev panelinin
+ * WebSocket'i sunucuyu süresiz ayakta tutuyor ve Ctrl+C yanıt vermiyormuş gibi
+ * görünüyordu. Sinyal geldiğinde ters proxy zaten trafik göndermiyor.
+ *
+ * Yine de bir zamanlayıcı var: Redis kapanışı askıda kalırsa süreç `SIGKILL`
+ * beklemek zorunda kalmasın.
+ *
+ * @param {import('http').Server} server
+ */
+function attachShutdown(server) {
+  let closing = false;
+
+  const shutdown = () => {
+    // İkinci sinyal beklemeyi kısa kessin: kullanıcı Ctrl+C'ye tekrar bastıysa
+    // gerçekten çıkmak istiyor.
+    if (closing) process.exit(0);
+    closing = true;
+
+    const timer = setTimeout(() => process.exit(0), 3000);
+    timer.unref();
+
+    server.close();
+    server.closeAllConnections?.();
+
+    void disconnectRedis().finally(() => {
+      clearTimeout(timer);
+      process.exit(0);
+    });
+  };
+
+  process.once("SIGTERM", shutdown);
+  process.once("SIGINT", shutdown);
 }
 
 /**

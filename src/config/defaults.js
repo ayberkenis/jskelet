@@ -120,6 +120,41 @@ export const DEFAULT_DATA_CACHE = {
   staleFactor: 10,
 };
 
+/**
+ * Opsiyonel Redis ikinci kademesi (L2).
+ *
+ * Redis **birincil store değil**: bellek içi önbellek (L1) aynen kalır, Redis
+ * iki iş yapar — L1'de bulunmayan bir sayfa için render'ı atlatmak ve
+ * invalidation'ı bütün node'lara yaymak. Tek instance çalışan bir kurulumda
+ * kazanç neredeyse yok; bu yüzden `enabled` varsayılan olarak kapalı.
+ *
+ * `storeEncoded` kapalı, çünkü sıkıştırılmış gövdeleri de paylaşmak girdi
+ * başına boyutu iki-üç katına çıkarır ve brotli'yi yeniden üretmek Redis'ten
+ * indirmekten çoğu zaman daha ucuz.
+ */
+export const DEFAULT_REDIS = {
+  enabled: false,
+  /** `redis://` ya da `rediss://`. Boşsa ioredis varsayılanı (localhost:6379). */
+  url: /** @type {string | null} */ (null),
+  /** Aynı Redis'i paylaşan birden fazla uygulamayı ayırır. */
+  namespace: "default",
+  keyPrefix: "_jskelet",
+  /** HTML gövdeleri paylaşılsın mı. */
+  html: true,
+  /** Veri önbelleği paylaşılsın mı. */
+  data: true,
+  /** Brotli/gzip gövdeleri de paylaşılsın mı. */
+  storeEncoded: false,
+  /** pub/sub üzerinden invalidation yayını. */
+  events: true,
+  /**
+   * Tek bir komutun en fazla bekletebileceği süre. Önbellek okuması isteği
+   * bloklayan bir adım: Redis takıldığında render'a düşmek, ağı beklemekten
+   * iyidir.
+   */
+  commandTimeoutMs: 200,
+};
+
 /** Oturuma bağlı sayfalar ısıtılmaz; uygulama kendi listesini verebilir. */
 export const DEFAULT_PREWARM_SKIP = ["/api/", "/_fragment/", "/__jskelet/"];
 

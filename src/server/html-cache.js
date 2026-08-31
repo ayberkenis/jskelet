@@ -14,16 +14,45 @@
  * `invalidateHtmlCache()` ikisinin arasını açar ve varsayılan davranışı
  * **bayatlatmaktır**: girdi silinmez, süresi geçmiş sayılır. Ziyaretçi eski
  * HTML'i beklemeden alır, tazeleme arkada tek seferde koşar.
+ *
+ * ## Paylaşımlı kademe
+ *
+ * `cache.redis` açıkken store'un ikinci bir kademesi olur. Bellek içi store
+ * (L1) **birincil kalır**: `read()` senkron, sıkıştırılmış gövdeler girdiyle
+ * birlikte ve tutarlılık makinesi (`tokens`, `purgedDeps`) tek proseste. Redis
+ * yalnızca L1'de bulunmayan bir yol için render'ı atlatır ve invalidation'ı
+ * diğer node'lara duyurur. Redis erişilemez olduğunda bu modül birebir eskisi
+ * gibi çalışır.
  */
 
 import { getConfig } from "../config/index.js";
 import { DEFAULT_HTML_CACHE_MAX_ENTRIES } from "../config/defaults.js";
 import { collectDependencies } from "./cache-deps.js";
 import { compilePattern, matchPattern } from "../config/pattern.js";
+import {
+  cacheKey,
+  onCacheEvent,
+  publishCacheEvent,
+  redisDrop,
+  redisDropMatching,
+  redisGetJson,
+  redisSetJson,
+  redisShares,
+  redisSharesEncoded,
+} from "./redis.js";
 
 /**
+ * `storedAt`: girdinin üretildiği an. Paylaşımlı kademeden gelen bir girdiyi
+ * kabul etmeden önce "bu render yerel bir purge'den önce mi başladı" sorusu
+ * yine sorulur; cevabı bu alan taşıyor.
+ *
+ * `sharedEncodings`: Redis'e en son kaç sıkıştırılmış gövde yazıldığı.
+ * `encoded` haritası yanıt yolunda (`sendHtml`) doluyor, yani yazma anında
+ * boş; `storeEncoded` açıkken harita büyüdüğünde girdi yeniden paylaşılır.
+ *
  * @typedef {{ html: string, status: number, expiresAt: number,
- *   staleUntil: number, encoded: Map<string, Buffer>, deps: Set<string> }} HtmlEntry
+ *   staleUntil: number, encoded: Map<string, Buffer>, deps: Set<string>,
+ *   storedAt: number, sharedEncodings: number }} HtmlEntry
  */
 
 /**
@@ -170,11 +199,105 @@ function read(key) {
   store.delete(key);
   store.set(key, entry);
 
+  // `encoded` yanıt yolunda dolduğu için yazma anında paylaşılamıyor. Kontrol
+  // yalnızca `storeEncoded` açıkken yapılır; kapalıyken (varsayılan) bu satır
+  // tek bir karşılaştırmaya bile girmez.
+  if (redisSharesEncoded() && entry.encoded.size !== entry.sharedEncodings) {
+    share(key, entry);
+  }
+
   return {
     html: entry.html,
     status: entry.status,
     encoded: entry.encoded,
     stale: now >= entry.expiresAt,
+  };
+}
+
+/**
+ * Girdiyi paylaşımlı kademeye yazar. Ateşle-unut: yanıt yolunda beklenmez,
+ * L1 kopyası bu isteği zaten karşılıyor.
+ *
+ * @param {string} key
+ * @param {HtmlEntry} entry
+ */
+function share(key, entry) {
+  if (!redisShares("html")) return;
+
+  const ttlMs = entry.staleUntil - Date.now();
+  if (ttlMs <= 0) return;
+
+  /** @type {Record<string, unknown>} */
+  const payload = {
+    html: entry.html,
+    status: entry.status,
+    storedAt: entry.storedAt,
+    expiresAt: entry.expiresAt,
+    staleUntil: entry.staleUntil,
+    deps: [...entry.deps],
+  };
+
+  if (redisSharesEncoded() && entry.encoded.size) {
+    /** @type {Record<string, string>} */
+    const encoded = {};
+    for (const [encoding, buffer] of entry.encoded) {
+      encoded[encoding] = buffer.toString("base64");
+    }
+    payload.encoded = encoded;
+    entry.sharedEncodings = entry.encoded.size;
+  }
+
+  redisSetJson(cacheKey("html", key), payload, ttlMs);
+}
+
+/**
+ * Paylaşımlı kademeden okur ve L1 girdisine çevirir.
+ *
+ * Yalnızca **taze** girdi kabul edilir: bayat bir kopyayı L1'e almak
+ * tazelemeyi sonsuza kadar ertelerdi — girdi bayat kalır, her tazeleme turu
+ * yine Redis'i okur ve `producer` hiç çalışmaz.
+ *
+ * @param {string} key
+ * @returns {Promise<HtmlEntry | null>}
+ */
+async function readShared(key) {
+  if (!redisShares("html")) return null;
+
+  const payload = await redisGetJson(cacheKey("html", key));
+  if (!payload || typeof payload.html !== "string") return null;
+  if (typeof payload.expiresAt !== "number" || Date.now() >= payload.expiresAt) {
+    return null;
+  }
+
+  const deps = new Set(Array.isArray(payload.deps) ? payload.deps.map(String) : []);
+  const storedAt = Number(payload.storedAt) || 0;
+
+  // Uzak girdi de yerel purge geçmişine takılır: bu proseste düşürülmüş bir
+  // veriyi okumuş HTML'i geri almak, az önce yapılan invalidation'ı iptal
+  // etmek olurdu.
+  if (readsPurgedData(deps, storedAt)) return null;
+
+  /** @type {Map<string, Buffer>} */
+  const encoded = new Map();
+  if (payload.encoded && typeof payload.encoded === "object") {
+    for (const [encoding, base64] of Object.entries(payload.encoded)) {
+      if (typeof base64 === "string") {
+        encoded.set(encoding, Buffer.from(base64, "base64"));
+      }
+    }
+  }
+
+  return {
+    html: payload.html,
+    status: Number(payload.status) || 200,
+    encoded,
+    // Mutlak zamanlar korunur: TTL'i yeniden başlatmak, girdinin node'dan
+    // node'a atlayarak süresiz tazelik kazanması demek.
+    expiresAt: payload.expiresAt,
+    staleUntil: Number(payload.staleUntil) || payload.expiresAt,
+    deps,
+    storedAt,
+    sharedEncodings: encoded.size,
   };
 }
 
@@ -187,11 +310,8 @@ function read(key) {
 function write(key, value, ttlSeconds, deps = null) {
   const now = Date.now();
 
-  // Aynı anahtarın eski girdisi ters indekste kalmasın: bağımlılıklar
-  // tazelemeden tazelemeye değişebilir.
-  drop(key);
-
-  store.set(key, {
+  /** @type {HtmlEntry} */
+  const entry = {
     html: value.html,
     status: value.status,
     // Sıkıştırılmış gövdeler HTML ile aynı ömrü paylaşır: aynı sayfa her
@@ -200,14 +320,32 @@ function write(key, value, ttlSeconds, deps = null) {
     expiresAt: now + ttlSeconds * 1000,
     staleUntil: now + ttlSeconds * 1000 * (1 + STALE_FACTOR),
     deps: deps ?? new Set(),
-  });
+    storedAt: now,
+    sharedEncodings: 0,
+  };
 
-  if (deps) {
-    for (const dep of deps) {
-      let set = dependents.get(dep);
-      if (!set) dependents.set(dep, (set = new Set()));
-      set.add(key);
-    }
+  install(key, entry);
+  share(key, entry);
+}
+
+/**
+ * Girdiyi L1'e yerleştirir, ters indekse bağlar ve sınırı uygular. Store'a
+ * yazmanın tek yolu bu.
+ *
+ * @param {string} key
+ * @param {HtmlEntry} entry
+ */
+function install(key, entry) {
+  // Aynı anahtarın eski girdisi ters indekste kalmasın: bağımlılıklar
+  // tazelemeden tazelemeye değişebilir.
+  drop(key);
+
+  store.set(key, entry);
+
+  for (const dep of entry.deps) {
+    let set = dependents.get(dep);
+    if (!set) dependents.set(dep, (set = new Set()));
+    set.add(key);
   }
 
   const limit = maxEntries();
@@ -249,36 +387,59 @@ function refresh(key, ttlSeconds, producer) {
 
   const token = {};
   tokens.set(key, token);
+
+  const task = produce(key, ttlSeconds, producer, token).finally(() => {
+    inflight.delete(key);
+    if (tokens.get(key) === token) tokens.delete(key);
+  });
+
+  inflight.set(key, task);
+  return task;
+}
+
+/**
+ * @param {string} key
+ * @param {number} ttlSeconds
+ * @param {() => Promise<{ html: string, status: number, degraded?: boolean,
+ *   storable?: boolean }>} producer
+ * @param {object} token
+ * @returns {Promise<{ html: string, status: number, degraded?: boolean,
+ *   storable?: boolean }>}
+ */
+async function produce(key, ttlSeconds, producer, token) {
   const startedAt = Date.now();
+
+  // Başka bir node bu sayfayı zaten render ettiyse render hiç çalışmaz. Soğuk
+  // ayağa kalkan bir instance'ın sıcak önbellek bulmasının tek yolu bu.
+  const shared = await readShared(key);
+  if (shared && tokens.get(key) === token) {
+    install(key, shared);
+    return { html: shared.html, status: shared.status };
+  }
 
   // Bağımlılıklar tazelemede de toplanır, ilk üretimde değil sadece: sayfanın
   // okuduğu anahtarlar zamanla değişir (yeni bir widget, kaldırılan bir blok).
   const deps = trackDependencies() ? new Set() : null;
 
-  const task = (deps ? collectDependencies(deps, producer) : producer())
-    .then((value) => {
-      // `degraded`: upstream düştüğü için eksik veriyle üretilmiş HTML.
-      // Saklanırsa eksik içerik tüm TTL boyunca servis edilir.
-      //
-      // `storable: false`: çıktı kullanıcıya bağlı (cookie/Authorization
-      // okundu). Anahtar yalnızca yol + query olduğu için saklamak, bir
-      // kullanıcının HTML'ini bir başkasına servis etmek olur.
-      //
-      // Token uyuşmuyorsa bu tur, sonucu geçersiz kılan bir invalidation'ın
-      // öncesinde başlamış demektir; yazmak az önce düşürüleni geri koyardı.
-      const valid = tokens.get(key) === token && !readsPurgedData(deps, startedAt);
-      if (valid && value.status === 200 && !value.degraded && value.storable !== false) {
-        write(key, value, ttlSeconds, deps);
-      }
-      return value;
-    })
-    .finally(() => {
-      inflight.delete(key);
-      if (tokens.get(key) === token) tokens.delete(key);
-    });
+  const value = await (deps ? collectDependencies(deps, producer) : producer());
 
-  inflight.set(key, task);
-  return task;
+  // `degraded`: upstream düştüğü için eksik veriyle üretilmiş HTML.
+  // Saklanırsa eksik içerik tüm TTL boyunca servis edilir.
+  //
+  // `storable: false`: çıktı kullanıcıya bağlı (cookie/Authorization
+  // okundu). Anahtar yalnızca yol + query olduğu için saklamak, bir
+  // kullanıcının HTML'ini bir başkasına servis etmek olur. Paylaşımlı
+  // kademede bunun bedeli daha da ağır — bir kullanıcının HTML'i tüm kümeye
+  // dağılırdı — bu yüzden kontrol Redis yazımından önce, `write()` içinde.
+  //
+  // Token uyuşmuyorsa bu tur, sonucu geçersiz kılan bir invalidation'ın
+  // öncesinde başlamış demektir; yazmak az önce düşürüleni geri koyardı.
+  const valid = tokens.get(key) === token && !readsPurgedData(deps, startedAt);
+  if (valid && value.status === 200 && !value.degraded && value.storable !== false) {
+    write(key, value, ttlSeconds, deps);
+  }
+
+  return value;
 }
 
 /**
@@ -319,6 +480,17 @@ export async function withHtmlCache(key, ttlSeconds, producer) {
  * yani gerçekten **geçersiz** — bayatlatmak yetmez.
  */
 export function clearHtmlCache() {
+  clearLocal();
+
+  if (redisShares("html")) void redisDropMatching("html");
+  publishCacheEvent({ type: "html:clear" });
+}
+
+/**
+ * Boşaltmanın yerel kısmı. Uzaktan gelen olay bunu çağırır: yeniden yayın
+ * yapan bir dinleyici iki node arasında sonsuz mesaj döngüsü üretir.
+ */
+function clearLocal() {
   store.clear();
   dependents.clear();
   tokens.clear();
@@ -402,22 +574,51 @@ function invalidateKey(key, hard) {
  * @returns {number} Etkilenen girdi sayısı (uçuştaki render'lar dahil).
  */
 export function invalidateHtmlCache(target, options = {}) {
-  const matchers = (Array.isArray(target) ? target : [target])
-    .map(toMatcher)
-    .filter((matcher) => matcher !== null);
+  const targets = Array.isArray(target) ? target : [target];
+  const hard = options.hard === true;
+  const count = invalidateLocal(targets, hard);
 
+  // Paylaşımlı kopya yumuşak invalidation'da da **silinir**. Bayatlatmanın
+  // Redis karşılığı her anahtar için oku-değiştir-yaz turu demek ve bir
+  // webhook binlerce anahtarı birden düşürüyor. Silmenin bedeli, o yolu hiç
+  // görmemiş bir node'un bir kez render etmesi; L1'i sıcak olan node'lar eski
+  // HTML'i bayat pencerede servis etmeye devam ediyor.
+  if (redisShares("html")) {
+    const matchers = compileMatchers(targets);
+    if (matchers.length) {
+      void redisDropMatching("html", (key) =>
+        matchers.some((matcher) => matcher(pathOf(key))),
+      );
+    }
+  }
+
+  // Hedefler yayınlanır, eşleşen anahtarlar değil: hangi yolun nerede sıcak
+  // olduğu node'a bağlı, her node deseni kendi store'una uygular.
+  publishCacheEvent({
+    type: "html:invalidate",
+    hard,
+    targets: targets.map(serializeTarget).filter((entry) => entry !== null),
+  });
+
+  return count;
+}
+
+/**
+ * @param {(string | RegExp)[]} targets
+ * @param {boolean} hard
+ * @returns {number}
+ */
+function invalidateLocal(targets, hard) {
+  const matchers = compileMatchers(targets);
   if (!matchers.length) return 0;
 
-  const hard = options.hard === true;
   let count = 0;
 
   // Uçuştaki render'lar da hedeflenir: henüz yazılmamış bir tur, purge'den
   // önce okunmuş veriyle önbelleğe girmemeli. Anahtarlar kopyalanır, çünkü
   // `invalidateKey` sert modda store'dan siliyor.
   for (const key of new Set([...store.keys(), ...tokens.keys()])) {
-    const mark = key.indexOf("?");
-    const pathname = mark === -1 ? key : key.slice(0, mark);
-    if (!matchers.some((matcher) => matcher(pathname))) continue;
+    if (!matchers.some((matcher) => matcher(pathOf(key)))) continue;
     invalidateKey(key, hard);
     count += 1;
   }
@@ -426,8 +627,84 @@ export function invalidateHtmlCache(target, options = {}) {
 }
 
 /**
+ * @param {(string | RegExp)[]} targets
+ * @returns {((pathname: string) => boolean)[]}
+ */
+function compileMatchers(targets) {
+  return /** @type {((pathname: string) => boolean)[]} */ (
+    targets.map(toMatcher).filter((matcher) => matcher !== null)
+  );
+}
+
+/**
+ * Anahtar `yol?query`; eşleştirme **yol kısmına** yapılır.
+ *
+ * @param {string} key
+ * @returns {string}
+ */
+function pathOf(key) {
+  const mark = key.indexOf("?");
+  return mark === -1 ? key : key.slice(0, mark);
+}
+
+/**
+ * `RegExp` JSON'a girmez (`JSON.stringify(/x/)` → `{}`), bu yüzden kaynak ve
+ * bayrakları taşınır.
+ *
+ * @param {string | RegExp} target
+ * @returns {string | { re: string, flags: string } | null}
+ */
+function serializeTarget(target) {
+  if (typeof target === "string") return target;
+  if (target instanceof RegExp) return { re: target.source, flags: target.flags };
+  return null;
+}
+
+/**
+ * @param {unknown} value
+ * @returns {string | RegExp | null}
+ */
+function deserializeTarget(value) {
+  if (typeof value === "string") return value;
+
+  const entry = /** @type {{ re?: unknown, flags?: unknown }} */ (value);
+  if (!entry || typeof entry.re !== "string") return null;
+
+  try {
+    return new RegExp(entry.re, typeof entry.flags === "string" ? entry.flags : "");
+  } catch {
+    // Bozuk bir desen bu node'u düşürmemeli; olay yok sayılır.
+    return null;
+  }
+}
+
+// Uzak bir node invalidation yaptığında bu proses de kendi L1'ini işaretler.
+// Dinleyiciler yalnızca yerel yolları çağırır, yoksa mesaj döngüsü oluşur.
+onCacheEvent((event) => {
+  if (event.type === "html:clear") {
+    clearLocal();
+    return;
+  }
+
+  if (event.type !== "html:invalidate") return;
+
+  const targets = /** @type {(string | RegExp)[]} */ (
+    (Array.isArray(event.targets) ? event.targets : [])
+      .map(deserializeTarget)
+      .filter((entry) => entry !== null)
+  );
+
+  if (targets.length) invalidateLocal(targets, event.hard === true);
+});
+
+/**
  * Verilen veri anahtarlarını render sırasında okumuş sayfaları bayatlatır.
  * `clearDataCache()` bunu çağırır; uygulamanın hiçbir şey bildirmesi gerekmez.
+ *
+ * Burada **yayın yapılmaz**: çağıran `clearDataCache()` zaten bir
+ * `data:clear` olayı yayınlıyor ve uzak node'lar aynı zinciri kendi ters
+ * indeksleri üzerinden çalıştırıyor. Ters indeks node'a özel olduğu için
+ * doğru olan da bu — bir sayfa yalnızca onu render etmiş node'da kayıtlı.
  *
  * @param {Iterable<string>} dataKeys
  * @returns {number} Etkilenen HTML girdisi sayısı.
@@ -453,6 +730,15 @@ export function invalidateHtmlByDependency(dataKeys) {
   }
 
   for (const key of keys) invalidateKey(key, false);
+
+  // Paylaşımlı kopyalar da düşer, yoksa soğuk bir node az önce geçersiz
+  // kılınan HTML'i Redis'ten geri alırdı. Yalnızca bu node'un tanıdığı
+  // anahtarlar silinebiliyor; hiçbir L1'de sıcak olmayan bir sayfanın Redis
+  // kopyası TTL'ini bekler.
+  if (keys.size && redisShares("html")) {
+    redisDrop([...keys].map((key) => cacheKey("html", key)));
+  }
+
   return keys.size;
 }
 

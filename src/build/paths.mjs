@@ -74,7 +74,32 @@ function manifestFile() {
 /** @param {Record<string, string>} manifest */
 export function writeManifest(manifest) {
   fs.mkdirSync(paths.generated, { recursive: true });
-  fs.writeFileSync(manifestFile(), `${JSON.stringify(manifest, null, 2)}\n`);
+  const json = `${JSON.stringify(manifest, null, 2)}\n`;
+  fs.writeFileSync(manifestFile(), json);
+  writeBuildId(json);
+}
+
+/**
+ * Build kimliği: manifest içeriğinin hash'i.
+ *
+ * Paylaşımlı bir önbellekte (Redis) HTML anahtarları bu kimliği taşımak
+ * zorunda. Saklanan HTML hash'li varlık yollarını gömüyor; yeni bir deploy'dan
+ * sonra eski HTML başka bir node'dan geri gelirse artık var olmayan
+ * `/assets/app.<eskihash>.css` istenir ve sayfa stilsiz kalır. Kimlik önekte
+ * durduğunda yeni build kendiliğinden yeni bir isim alanına yazar, eskisi TTL
+ * ile ölür — elle temizlik gerekmez.
+ *
+ * Kimlik manifest'in **içine** yazılmaz: oradaki her anahtar `asset()`
+ * yüzeyine sızıyor.
+ *
+ * @param {string} manifestJson
+ */
+function writeBuildId(manifestJson) {
+  const payload = { id: hash(manifestJson), createdAt: new Date().toISOString() };
+  fs.writeFileSync(
+    path.join(paths.generated, "build.json"),
+    `${JSON.stringify(payload, null, 2)}\n`,
+  );
 }
 
 /**

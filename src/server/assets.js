@@ -60,6 +60,34 @@ export function hasAsset(name) {
   return Boolean(state().manifest[name]);
 }
 
+/** @type {string | null} */
+let buildId = null;
+
+/**
+ * Bu build'i tanımlayan kısa kimlik (`build.json` → `id`).
+ *
+ * Paylaşımlı önbellek anahtarlarının isim alanı bu: saklanan HTML hash'li
+ * varlık yollarını gömdüğü için bir deploy'dan sonra eski HTML **geçersizdir**.
+ *
+ * Build çalışmadıysa `"dev"` döner — build çıktısı olmadan da ayağa kalkma
+ * kuralı burada da geçerli.
+ *
+ * @returns {string}
+ */
+export function getBuildId() {
+  if (!isDev && buildId) return buildId;
+
+  try {
+    const file = path.join(getConfig().dirs.generated, "build.json");
+    const id = JSON.parse(fs.readFileSync(file, "utf8")).id;
+    buildId = typeof id === "string" && id ? id : "dev";
+  } catch {
+    buildId = "dev";
+  }
+
+  return buildId;
+}
+
 /**
  * @typedef {{ width: number, height: number,
  *   variants: { width: number, url: string }[] }} OptimizedImage

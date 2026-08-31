@@ -16,7 +16,7 @@
  *   redirects() → [{ source, destination, permanent?, statusCode? }]
  *   rewrites()  → [{ source, destination }] | { beforeFiles?, afterFiles? }
  *   cache()     → { html?: { [source]: saniye }, maxEntries?: number,
- *                   data?: {...}, prewarm?: {...} }
+ *                   data?: {...}, redis?: {...}, prewarm?: {...} }
  *
  * Fonksiyon olmayan bölümler (`brand`, `security`, `static`, `navigation`…)
  * düz nesne olarak okunur.
@@ -36,6 +36,7 @@ import {
   DEFAULT_NAVIGATION_EXCLUDE,
   DEFAULT_PREWARM,
   DEFAULT_PREWARM_SKIP,
+  DEFAULT_REDIS,
   DEFAULT_SECURITY,
   DEFAULT_STATIC,
   DEFAULT_TRANSIENT_RETRY,
@@ -57,6 +58,19 @@ const CONFIG_FILE = "jskelet.config.mjs";
  */
 
 /**
+ * @typedef {object} RedisConfig
+ * @property {boolean} enabled
+ * @property {string | null} url
+ * @property {string} namespace
+ * @property {string} keyPrefix
+ * @property {boolean} html HTML gövdeleri paylaşılsın mı.
+ * @property {boolean} data Veri önbelleği paylaşılsın mı.
+ * @property {boolean} storeEncoded Sıkıştırılmış gövdeler de paylaşılsın mı.
+ * @property {boolean} events pub/sub invalidation yayını.
+ * @property {number} commandTimeoutMs
+ */
+
+/**
  * @typedef {import('./pattern.js').CompiledPattern} CompiledPattern
  *
  * @typedef {object} ResolvedConfig
@@ -72,6 +86,7 @@ const CONFIG_FILE = "jskelet.config.mjs";
  * @property {boolean} trackUpstream `fetch` sarılıp geçici hatalar otomatik bildirilsin mi.
  * @property {boolean} trackDependencies Render'ın okuduğu veri anahtarları kaydedilsin mi.
  * @property {{ attempts: number, delayMs: number }} transientRetry
+ * @property {RedisConfig} redis Opsiyonel Redis ikinci kademesi.
  * @property {Record<string, unknown>} prewarm
  * @property {{ source: string, test: (pathname: string) => boolean }[]} prewarmPriority
  * @property {Record<string, unknown>} brand
@@ -208,11 +223,39 @@ function normalizePriority(raw) {
 }
 
 /**
+ * Redis bölümü. Bozuk bir değer sunucuyu düşürmemeli: her alan tipine
+ * zorlanır ve `enabled` yalnızca açıkça `true` verildiğinde açılır.
+ *
+ * @param {unknown} raw
+ * @returns {RedisConfig}
+ */
+function normalizeRedis(raw) {
+  const source = /** @type {Record<string, any>} */ (raw ?? {});
+  const timeout = Number(source.commandTimeoutMs);
+
+  return {
+    enabled: source.enabled === true,
+    url: typeof source.url === "string" && source.url ? source.url : null,
+    namespace: String(source.namespace ?? DEFAULT_REDIS.namespace),
+    keyPrefix: String(source.keyPrefix ?? DEFAULT_REDIS.keyPrefix),
+    html: source.html !== false,
+    data: source.data !== false,
+    storeEncoded: source.storeEncoded === true,
+    events: source.events !== false,
+    commandTimeoutMs:
+      Number.isFinite(timeout) && timeout > 0
+        ? Math.floor(timeout)
+        : DEFAULT_REDIS.commandTimeoutMs,
+  };
+}
+
+/**
  * @param {unknown} raw
  * @returns {{ html: ResolvedConfig["html"], htmlMaxEntries: number,
  *   data: Record<string, unknown>, trackUpstream: boolean,
  *   trackDependencies: boolean,
  *   transientRetry: { attempts: number, delayMs: number },
+ *   redis: RedisConfig,
  *   prewarm: Record<string, unknown>,
  *   prewarmPriority: ResolvedConfig["prewarmPriority"] }}
  */
@@ -248,6 +291,7 @@ function normalizeCache(raw) {
       raw?.transientRetry === false
         ? { attempts: 0, delayMs: 0 }
         : { ...DEFAULT_TRANSIENT_RETRY, ...(raw?.transientRetry ?? {}) },
+    redis: normalizeRedis(raw?.redis),
     // Desenler derlenmiş hâlde ayrı alanda tutulur: `prewarm` sayısal
     // ayarların düz torbası olarak kalsın, her turda yeniden derlenmesin.
     prewarm,
@@ -465,6 +509,7 @@ export async function loadConfig(options = {}) {
     trackUpstream,
     trackDependencies,
     transientRetry,
+    redis,
     prewarm,
     prewarmPriority,
   } = normalizeCache(cache);
@@ -484,6 +529,7 @@ export async function loadConfig(options = {}) {
     trackUpstream,
     trackDependencies,
     transientRetry,
+    redis,
     prewarm,
     prewarmPriority,
     brand,

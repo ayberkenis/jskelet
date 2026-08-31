@@ -542,7 +542,129 @@ not cleared the page would keep requesting a deleted file
 
 Because the cache lives in process memory, if you run more than one
 process/replica each one has its own cache; `clearHtmlCache()` only affects the
-process it is called in.
+process it is called in. The next section covers how to get past this when you
+run several instances.
+
+## A shared cache: Redis
+
+The default cache belongs to a single process. That is the fastest and simplest
+setup for a site running one instance — but two problems appear once you run
+three replicas:
+
+1. **Every replica warms up on its own.** When a new instance comes up, or a
+   container is replaced after a deploy, its cache is empty: the same page is
+   rendered three times and the same data is fetched three times.
+2. **Invalidation reaches one replica.** The webhook that calls
+   `invalidateHtmlCache()` only refreshes the instance that received the
+   request; the others wait for the TTL. A visitor sees the old or the new
+   content depending on which replica they land on.
+
+`cache().redis` solves both. Redis is **not the primary store**: the in-process
+cache (L1) stays exactly as it is and every request reads it; Redis is a second
+tier (L2).
+
+```js
+// jskelet.config.mjs
+export default {
+  cache() {
+    return {
+      html: { "/news/:slug": 300 },
+      redis: {
+        enabled: true,
+        url: process.env.REDIS_URL,
+        namespace: "news-site",
+      },
+    };
+  },
+};
+```
+
+`ioredis` is an optional peer dependency, installed in the application itself:
+
+```bash
+npm install ioredis
+```
+
+If it is not installed, or Redis cannot be reached, a warning is printed and the
+site **keeps running on the in-process cache**. The same happens if Redis goes
+down while running: a circuit breaker bypasses the tier for five seconds after
+five consecutive failures, so requests do not each wait for a network timeout.
+
+### What you get
+
+- **A cold instance finds a warm cache.** For a path that is not in L1, Redis is
+  read before the render runs; if another replica already produced that page, the
+  render never happens.
+- **The data cache spends the quota once.** `withDataCache` works the same way,
+  and the gain is bigger here: JSON is small, and what one replica fetched is
+  enough for all of them.
+- **Invalidation reaches every replica.** `invalidateHtmlCache()`,
+  `clearHtmlCache()` and `clearDataCache()` leave a message on a pub/sub
+  channel and each instance applies the same operation to its own L1. The
+  pattern is published, not the matched keys — which path is hot where depends
+  on the replica.
+
+### Key layout
+
+```
+_jskelet:{namespace}:{buildId}:html:{path}?{query}
+_jskelet:{namespace}:{buildId}:data:{key}
+_jskelet:{namespace}:events
+```
+
+`buildId` changes with every build (`jskelet build` writes it to
+`.jskelet/build.json`) and it is a **required** part: the stored HTML embeds
+hashed asset paths, so after a deploy the old HTML is invalid. Because the id
+sits in the prefix, a new version automatically writes into a new namespace and
+the old keys die with their TTL — no manual cleanup and no `FLUSHDB`. When the
+build has not been run the id is `dev`.
+
+`namespace` separates several applications sharing one Redis. The event channel
+deliberately does **not** carry `buildId`: during a deploy the old and the new
+version run side by side and a purge has to reach both.
+
+### Trade-offs worth knowing
+
+- **Personalised output is never shared.** A render marked `storable: false` (a
+  page that read a cookie or `Authorization`) is never written to Redis. The
+  rule already holds in a single process, but it matters far more in a shared
+  tier: a leak would mean serving one user's HTML to the whole cluster.
+  `degraded` renders and non-200 status codes are not shared either.
+- **Compressed bodies stay local by default.** `storeEncoded: true` turns this
+  on, but it doubles or triples the size per entry; recomputing brotli is
+  usually cheaper than downloading it from Redis.
+- **A soft invalidation deletes the Redis copy.** Staling in Redis would mean a
+  read-modify-write round per key, and a webhook drops thousands of keys at
+  once. The cost of deleting is one render on a replica that never saw that
+  path; replicas whose L1 is hot keep serving the old HTML through the stale
+  window.
+- **Only fresh entries are accepted.** Promoting a stale copy into L1 would
+  postpone the refresh forever: the entry stays stale, every pass reads Redis
+  again and the render never runs.
+- **Consistency is eventual.** There is a short window between a purge and that
+  purge reaching every replica. During it a replica may serve the old HTML; the
+  window is bounded by the TTL.
+- **Keep it off in dev.** The dev server clears the cache whenever the manifest
+  changes, which makes a shared store pointless. `enabled` only turns on when
+  `true` is passed explicitly.
+
+### Seeing the status
+
+```js
+import { getRedisStatus } from "jskelet";
+
+app.get("/api/healthcheck", (req, res) => {
+  res.json({ ok: true, cache: getRedisStatus() });
+});
+```
+
+Safe to call even with no connection. The returned object is
+`{ enabled, connected, keyPrefix, buildId, errors, bypassed }`; `bypassed` tells
+you the circuit breaker is open and `errors` is the total command failure count.
+The same summary is in the dev panel report
+([09-dev-tools.md](./09-dev-tools.md)).
+
+The full list of settings: [07-configuration.md](./07-configuration.md).
 
 ## Prewarm — warming up at startup
 
@@ -604,6 +726,21 @@ Rules:
    same 429.
 5. A summary is logged:
    `[prewarm] warmed 128/130 pages, 2 failed, 5 recovered on the retry pass (12.4s)`
+
+Request errors raised during the pass are not logged one by one. They are
+counted while the pass runs and printed after the summary as a single line,
+grouped by status and message with the most frequent kinds first:
+
+```text
+[prewarm] 37 request errors were not logged individually:
+  31× 502 upstream fetch failed: /api/quotes
+  6× 500 Cannot read properties of undefined (reading 'title')
+```
+
+This way a momentary upstream failure cannot bury the "warmed …" line under
+hundreds of stack traces. Errors from real traffic are logged immediately as
+before; for the detail of a single path, look at the **Prewarming** tab in the
+dev panel.
 
 ### Warm-up order: `priority`
 

@@ -10,6 +10,28 @@ one is listed under a **Breaking** heading.
 
 ### Added
 
+- An optional Redis tier behind both caches, turned on with
+  `cache().redis: { enabled: true, url }` and `npm install ioredis`. The
+  in-process cache stays primary and every request still reads it; Redis only
+  does the two things a single process cannot. An instance that has never seen a
+  path finds the HTML another replica already produced, so a fresh container or a
+  post-deploy replacement does not re-render and re-fetch everything from
+  scratch. And `invalidateHtmlCache()`, `clearHtmlCache()` and
+  `clearDataCache()` now reach every replica over pub/sub instead of only the one
+  that received the webhook — until now the others waited out the TTL and a
+  visitor saw old or new content depending on where they landed. Keys live under
+  `_jskelet:{namespace}:{buildId}:…`, where the build id makes HTML from a
+  previous deploy expire on its own rather than pointing at asset files that no
+  longer exist. Personalised (`storable: false`), degraded and non-200 responses
+  are never shared. If `ioredis` is missing, Redis is unreachable or it goes down
+  mid-flight, a warning is printed and the site keeps serving from memory.
+- `getRedisStatus()` reports whether the shared tier is connected, which key
+  prefix and build id it is using, and how many command failures there have
+  been — usable from a healthcheck endpoint. The same summary appears in the dev
+  panel report.
+- Servers started with `startServer()` now shut down on `SIGTERM`/`SIGINT`
+  instead of being killed: the listener is closed and the Redis connection is
+  drained so in-flight writes are not cut mid-command.
 - Targeted HTML invalidation: `invalidateHtmlCache(target, { hard })` takes a
   path, the config pattern syntax (`/news/:slug`), a regular expression or a list
   of them, and returns how many entries were affected. By default it **stales**
@@ -65,6 +87,12 @@ one is listed under a **Breaking** heading.
 
 ### Changed
 
+- Request errors raised during a prewarm pass are no longer logged one by one.
+  They are counted while the pass runs and printed as a single summary line
+  afterwards, grouped by status and message with the most frequent kinds first,
+  so a flaky upstream can no longer bury the "warmed N/M pages" line under
+  hundreds of stack traces. Errors from real traffic are logged as before, and
+  the dev tools panel still shows the per-path detail.
 - The marketing example's changelog page is now a timeline: releases are laid out
   along a rail with a sticky version column, each change group gets its own card
   with a coloured rule and item count, and a row of version chips at the top
