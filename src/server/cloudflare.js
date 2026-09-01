@@ -306,11 +306,20 @@ async function graphql(query, variables) {
 }
 
 /**
+ * GraphQL analitik penceresinin iki ucu. Yalnızca `datetime_geq` gönderilirse
+ * Cloudflare üst sınırı sorguyu işlediği ana koyuyor; Free zone'larda tavan
+ * tam 1 gün ve ağ gecikmesi `1d179ms…` gibi bir taşma üretip reddediyor.
+ * İki uç aynı `Date.now()`'dan hesaplanınca pencere tam N saat kalır.
+ *
  * @param {number} hours
- * @returns {string} ISO zaman damgası
+ * @returns {{ since: string, until: string }}
  */
-function since(hours) {
-  return new Date(Date.now() - hours * 3600_000).toISOString();
+function timeWindow(hours) {
+  const untilMs = Date.now();
+  return {
+    since: new Date(untilMs - hours * 3600_000).toISOString(),
+    until: new Date(untilMs).toISOString(),
+  };
 }
 
 /**
@@ -330,13 +339,14 @@ function since(hours) {
 export async function fetchCacheAnalytics(options = {}) {
   const config = settings();
   const hours = Math.max(1, Math.min(72, options.hours ?? config.analyticsHours));
+  const { since, until } = timeWindow(hours);
 
   const query = `
-    query CacheStatus($zone: String!, $since: Time!) {
+    query CacheStatus($zone: String!, $since: Time!, $until: Time!) {
       viewer {
         zones(filter: { zoneTag: $zone }) {
           httpRequestsAdaptiveGroups(
-            filter: { datetime_geq: $since }
+            filter: { datetime_geq: $since, datetime_leq: $until }
             limit: 50
             orderBy: [count_DESC]
           ) {
@@ -348,7 +358,7 @@ export async function fetchCacheAnalytics(options = {}) {
       }
     }`;
 
-  const response = await graphql(query, { zone: config.zoneId, since: since(hours) });
+  const response = await graphql(query, { zone: config.zoneId, since, until });
   if (!response.ok) return { ok: false, hours, sampled: true, rows: [], error: response.error };
 
   const groups = response.data?.viewer?.zones?.[0]?.httpRequestsAdaptiveGroups ?? [];
@@ -381,13 +391,14 @@ export async function fetchCacheAnalytics(options = {}) {
 export async function fetchPathEdges({ path, hours }) {
   const config = settings();
   const window = Math.max(1, Math.min(72, hours ?? config.analyticsHours));
+  const { since, until } = timeWindow(window);
 
   const query = `
-    query PathEdges($zone: String!, $since: Time!, $path: String!) {
+    query PathEdges($zone: String!, $since: Time!, $until: Time!, $path: String!) {
       viewer {
         zones(filter: { zoneTag: $zone }) {
           httpRequestsAdaptiveGroups(
-            filter: { datetime_geq: $since, clientRequestPath: $path }
+            filter: { datetime_geq: $since, datetime_leq: $until, clientRequestPath: $path }
             limit: 500
             orderBy: [count_DESC]
           ) {
@@ -400,7 +411,8 @@ export async function fetchPathEdges({ path, hours }) {
 
   const response = await graphql(query, {
     zone: config.zoneId,
-    since: since(window),
+    since,
+    until,
     path,
   });
 

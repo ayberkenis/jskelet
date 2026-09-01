@@ -188,6 +188,12 @@ test("the cache status breakdown is read from the adaptive dataset", async () =>
   stubFetch(({ body }) => {
     assert.ok(body.query.includes("httpRequestsAdaptiveGroups"));
     assert.ok(body.variables.since, "pencere başlangıcı gönderilmeli");
+    assert.ok(body.variables.until, "üst sınır sabitlenmeli — açık uç Free zone'da 1d'yi aşıyor");
+    assert.ok(body.query.includes("datetime_leq"), "filter üst sınırı da taşımalı");
+
+    const spanMs =
+      Date.parse(body.variables.until) - Date.parse(body.variables.since);
+    assert.equal(spanMs, 12 * 3600_000, "pencere tam N saat; ağ gecikmesi eklenmez");
 
     return {
       payload: {

@@ -8,6 +8,14 @@ one is listed under a **Breaking** heading.
 
 ## [Unreleased]
 
+### Fixed
+
+- Cloudflare analytics in the cache panel no longer asks for an open-ended
+  window. Queries used only `datetime_geq`, so Cloudflare closed the range at
+  query time and a default 24h lookback became `1d` plus network delay — Free
+  zones reject anything wider than one day. Both ends are now pinned from the
+  same clock (`datetime_leq` included).
+
 ### Added
 
 - `cache().query`, a pattern → allowlist mapping that decides which query
