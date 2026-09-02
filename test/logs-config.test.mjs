@@ -36,9 +36,9 @@ test("normalizeLogs: empty kinds falls back to defaults", () => {
   assert.deepEqual(logs.kinds, ["http", "event", "error"]);
 });
 
-test("normalizeLogs: JSKELET_LOG_BUCKET overrides; AWS_REGION fills when unset", () => {
+test("normalizeLogs: JSKELET_LOG_BUCKET overrides; JSKELET_S3_REGION fills when unset", () => {
   process.env.JSKELET_LOG_BUCKET = "env-bucket";
-  process.env.AWS_REGION = "eu-central-1";
+  process.env.JSKELET_S3_REGION = "eu-central-1";
 
   const withConfigRegion = normalizeLogs({
     s3: {
@@ -62,6 +62,37 @@ test("normalizeLogs: JSKELET_LOG_BUCKET overrides; AWS_REGION fills when unset",
     s3: { enabled: true, bucket: "config-bucket" },
   });
   assert.equal(fromEnv.s3.region, "eu-central-1");
+});
+
+test("normalizeLogs: bucket path splits into bucket + prefix", () => {
+  process.env.JSKELET_LOG_BUCKET = "ayberkenis/jskelet/logs";
+
+  const fromEnv = normalizeLogs({
+    s3: { enabled: true, prefix: "ignored/" },
+  });
+  assert.equal(fromEnv.s3.bucket, "ayberkenis");
+  assert.equal(fromEnv.s3.prefix, "jskelet/logs/");
+
+  const fromConfig = normalizeLogs({
+    s3: { enabled: true, bucket: "ayberkenis/jskelet/logs/" },
+  });
+  assert.equal(fromConfig.s3.bucket, "ayberkenis");
+  assert.equal(fromConfig.s3.prefix, "jskelet/logs/");
+});
+
+test("normalizeLogs: JSKELET_S3_API_URL sets endpoint and defaults region to auto", () => {
+  process.env.JSKELET_LOG_BUCKET = "ayberkenis/jskelet/logs";
+  process.env.JSKELET_S3_API_URL =
+    "https://95b2c4d0d4558018edfad72708f1bc90.r2.cloudflarestorage.com";
+
+  const logs = normalizeLogs({ s3: { enabled: true } });
+  assert.equal(logs.s3.bucket, "ayberkenis");
+  assert.equal(logs.s3.prefix, "jskelet/logs/");
+  assert.equal(
+    logs.s3.endpoint,
+    "https://95b2c4d0d4558018edfad72708f1bc90.r2.cloudflarestorage.com",
+  );
+  assert.equal(logs.s3.region, "auto");
 });
 
 test("normalizeLogs: console false and file dir", () => {

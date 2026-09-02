@@ -30,9 +30,12 @@ one is listed under a **Breaking** heading.
 - Top-level `logs` config for persistent sinks: daily NDJSON files
   (`logs.file`) and batched S3 PutObject (`logs.s3`) with embedded SigV4 — no
   `@aws-sdk` dependency. `kinds` selects `http` / `event` / `error`; `console`
-  toggles runtime stdout lines. Missing bucket/region/credentials warn and
+  toggles runtime stdout lines. `JSKELET_LOG_BUCKET` (and `logs.s3.bucket`) may
+  be a plain bucket or a `bucket/prefix/…` path. `JSKELET_S3_API_URL` sets the
+  R2/MinIO endpoint (region defaults to `auto`). Missing credentials warn and
   disable the S3 sink without taking the site down. Env: `JSKELET_LOG_BUCKET`,
-  `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`, `AWS_REGION`.
+  `JSKELET_S3_ACCESS_KEY_ID`, `JSKELET_S3_SECRET_ACCESS_KEY`,
+  `JSKELET_S3_SESSION_TOKEN`, `JSKELET_S3_REGION`, `JSKELET_S3_API_URL`.
 - Admin panel pages under `/_jskelet/admin`: Overview, Cache, Routes, Views,
   Logs and System. Configurable `allowIps` (exact or CIDR), `blockBots` (default
   on — crawler UAs get 404 before login), and `logSize`. Live Logs use an

@@ -199,9 +199,11 @@ export const DEFAULT_REDIS = {
  * runtime `http`/`event`/`error` satırlarının terminalde görünmesini kontrol
  * eder (banner/build satırlarına dokunmaz).
  *
- * S3 credential'ları config'e yazılmaz — `AWS_ACCESS_KEY_ID` /
- * `AWS_SECRET_ACCESS_KEY` (ve isteğe bağlı `AWS_SESSION_TOKEN`). Bucket için
- * `JSKELET_LOG_BUCKET` env'i config'i ezer.
+ * S3 credential'ları config'e yazılmaz — `JSKELET_S3_ACCESS_KEY_ID` /
+ * `JSKELET_S3_SECRET_ACCESS_KEY` (ve isteğe bağlı `JSKELET_S3_SESSION_TOKEN`).
+ * Bucket için `JSKELET_LOG_BUCKET` (veya `JSKELET_S3_BUCKET`) env'i config'i
+ * ezer ve `ayberkenis/jskelet/logs` gibi `bucket/prefix` yolunu kabul eder.
+ * Uyumlu API adresi `JSKELET_S3_API_URL` (R2 / MinIO).
  */
 export const DEFAULT_LOGS = {
   console: true,

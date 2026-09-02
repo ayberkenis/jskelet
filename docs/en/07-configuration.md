@@ -782,17 +782,17 @@ events (`event` / `error`) are written as NDJSON lines to a file and/or S3.
 | `file.dir` | `string` | `"logs"` | Directory relative to the project root; `jskelet-YYYY-MM-DD.log` |
 | `file.rotate` | `"daily"` | `"daily"` | Daily rotation only |
 | `s3.enabled` | `boolean` | `false` | S3 batch PutObject sink |
-| `s3.bucket` | `string \| null` | `null` | Bucket; `JSKELET_LOG_BUCKET` overrides |
-| `s3.prefix` | `string` | `"jskelet/logs/"` | Object key prefix |
-| `s3.region` | `string \| null` | `null` | Region; falls back to `AWS_REGION` / `AWS_DEFAULT_REGION` when unset |
-| `s3.endpoint` | `string \| null` | `null` | Path-style endpoint for MinIO etc. |
+| `s3.bucket` | `string \| null` | `null` | Bucket or a `bucket/prefix/…` path; `JSKELET_LOG_BUCKET` overrides |
+| `s3.prefix` | `string` | `"jskelet/logs/"` | Object key prefix (when not given in the path) |
+| `s3.region` | `string \| null` | `null` | Region; falls back to `JSKELET_S3_REGION`, or `auto` when an endpoint is set |
+| `s3.endpoint` | `string \| null` | `null` | R2 / MinIO API URL; `JSKELET_S3_API_URL` overrides |
 | `s3.flushIntervalMs` | `number` | `5000` | Batch flush interval |
 | `s3.maxBatch` | `number` | `100` | Flush early after this many lines |
 
-S3 credentials are not written in the config: `AWS_ACCESS_KEY_ID`,
-`AWS_SECRET_ACCESS_KEY`, optional `AWS_SESSION_TOKEN`. Missing bucket/region/
-credentials warn and disable the S3 sink; the site still starts. The framework
-does not ship `@aws-sdk` — PutObject is embedded with SigV4.
+S3 credentials are not written in the config: `JSKELET_S3_ACCESS_KEY_ID`,
+`JSKELET_S3_SECRET_ACCESS_KEY`, optional `JSKELET_S3_SESSION_TOKEN`. Missing
+bucket/region/credentials warn and disable the S3 sink; the site still starts.
+The framework does not ship `@aws-sdk` — PutObject is embedded with SigV4.
 
 ```js
 logs: {
@@ -803,7 +803,8 @@ logs: {
     enabled: process.env.NODE_ENV === "production",
     bucket: process.env.JSKELET_LOG_BUCKET,
     prefix: "my-app/logs/",
-    region: process.env.AWS_REGION,
+    region: process.env.JSKELET_S3_REGION,
+    endpoint: process.env.JSKELET_S3_API_URL,
   },
 }
 ```
@@ -994,11 +995,12 @@ and no warning is printed.
 | `JSKELET_SECRET` | `jskelet/cookies` | — | The signed cookie secret. Read when `security.cookieSecret` is not set; if neither exists, the signed cookie API throws. [12](./12-dashboards-and-sessions.md) |
 | `DEV_TOKEN` | `devGate`, `prewarm` | — | If set, every request without a token gets a 404. Prewarming carries the token as a cookie. [09](./09-dev-tools.md) |
 | `JSKELET_ADMIN` | `createApp` | — | When set, turns the admin panel on; `0` turns off a panel enabled in the config. The env wins because the panel is usually opened once during an incident. [06](./06-caching.md) |
-| `JSKELET_LOG_BUCKET` | `logs.s3` | — | S3 log bucket; overrides `logs.s3.bucket` |
-| `AWS_ACCESS_KEY_ID` | `logs.s3` | — | Signs S3 PutObject. Missing when `s3.enabled` disables the sink |
-| `AWS_SECRET_ACCESS_KEY` | `logs.s3` | — | S3 signing secret |
-| `AWS_SESSION_TOKEN` | `logs.s3` | — | Optional, for temporary credentials |
-| `AWS_REGION` / `AWS_DEFAULT_REGION` | `logs.s3` | — | Read when `logs.s3.region` is unset |
+| `JSKELET_LOG_BUCKET` | `logs.s3` | — | S3 bucket or a `bucket/prefix` path like `ayberkenis/jskelet/logs`; overrides `logs.s3.bucket` (`JSKELET_S3_BUCKET` is an alias) |
+| `JSKELET_S3_ACCESS_KEY_ID` | `logs.s3` | — | Signs S3 PutObject. Missing when `s3.enabled` disables the sink |
+| `JSKELET_S3_SECRET_ACCESS_KEY` | `logs.s3` | — | S3 signing secret |
+| `JSKELET_S3_SESSION_TOKEN` | `logs.s3` | — | Optional, for temporary credentials |
+| `JSKELET_S3_REGION` | `logs.s3` | — | Used when `logs.s3.region` is unset; defaults to `auto` when an endpoint is set |
+| `JSKELET_S3_API_URL` | `logs.s3` | — | R2 / MinIO endpoint; overrides `logs.s3.endpoint` |
 | `JSKELET_CLOUDFLARE_KEY` | Cloudflare cache surface | — | API token. Until it is set, CDN purging and edge analytics stay off; it overrides `apiToken` in the config. The token is never returned in a response. [06](./06-caching.md) |
 | `JSKELET_CLOUDFLARE_ZONE_ID` | Cloudflare cache surface | — | Zone identifier. No Cloudflare endpoint is called unless it is set alongside the token |
 | `JSKELET_CLOUDFLARE_HOSTNAME` | Cloudflare cache surface | — | The root for purge URLs. Required when the panel is opened over an internal address |

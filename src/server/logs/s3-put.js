@@ -3,9 +3,9 @@
  *
  * `@aws-sdk/client-s3` taşınmıyor: tek operasyon için SDK'nın maliyeti ve
  * peer yüzeyi gereksiz. Credential zinciri env'den okunur
- * (`AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_SESSION_TOKEN`);
- * IAM role / instance metadata yok — container'a key vermeyen kurulumlar
- * için sink zaten açılışta no-op'a düşer.
+ * (`JSKELET_S3_ACCESS_KEY_ID` / `JSKELET_S3_SECRET_ACCESS_KEY` /
+ * `JSKELET_S3_SESSION_TOKEN`); IAM role / instance metadata yok —
+ * container'a key vermeyen kurulumlar için sink zaten açılışta no-op'a düşer.
  */
 import crypto from "node:crypto";
 

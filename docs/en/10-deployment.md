@@ -48,7 +48,7 @@ considering in production:
 | `PREWARM_MAX` | Depends on site size | Number of pages warmed at startup |
 | `PREWARM_INTERVAL_SECONDS` | `0` or a long value | If you want to keep never-visited pages warm |
 | `DEV_TOKEN` | Staging only | Hides an environment that is not public yet |
-| `JSKELET_LOG_BUCKET` + `AWS_*` | If you write access logs to S3 | `logs.s3` credentials and bucket; details in [07](./07-configuration.md) |
+| `JSKELET_S3_*` | If you write access logs to S3 | Bucket + credentials; details in [07](./07-configuration.md) |
 
 When a file or S3 sink is enabled in production, the HTTP access log middleware
 mounts automatically (if `http` is in `logs.kinds`). The admin panel ring is

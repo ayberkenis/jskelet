@@ -47,7 +47,7 @@ ayarlamayı düşünmeniz gerekenler:
 | `PREWARM_MAX` | Site boyutuna göre | Açılışta ısıtılacak sayfa sayısı |
 | `PREWARM_INTERVAL_SECONDS` | `0` ya da uzun bir değer | Hiç ziyaret edilmeyen sayfaları sıcak tutmak isterseniz |
 | `DEV_TOKEN` | Yalnızca staging'de | Yayına açılmamış ortamı gizler |
-| `JSKELET_LOG_BUCKET` + `AWS_*` | Access log'u S3'e yazıyorsanız | `logs.s3` credential ve bucket; ayrıntı [07](./07-yapilandirma.md) |
+| `JSKELET_S3_*` | Access log'u S3'e yazıyorsanız | Bucket + credential; ayrıntı [07](./07-yapilandirma.md) |
 
 Production'da dosya veya S3 sink açıldığında HTTP access log middleware
 otomatik mount edilir (`logs.kinds` içinde `http` varsa). Admin paneli ring'i

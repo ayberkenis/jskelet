@@ -26,7 +26,7 @@ export default {
    *   s3: {
    *     enabled: Boolean(process.env.JSKELET_LOG_BUCKET),
    *     bucket: process.env.JSKELET_LOG_BUCKET,
-   *     region: process.env.AWS_REGION,
+   *     endpoint: process.env.JSKELET_S3_API_URL,
    *   },
    * },
    */

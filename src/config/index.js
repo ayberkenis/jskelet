@@ -403,6 +403,34 @@ function normalizeCloudflare(raw) {
 const LOG_KINDS = new Set(["http", "event", "error"]);
 
 /**
+ * `bucket`, `JSKELET_LOG_BUCKET` veya `JSKELET_S3_BUCKET` değeri
+ * `ayberkenis/jskelet/logs` gibi bir yol olabilir: ilk segment bucket adı,
+ * kalanı nesne öneki. Böylece tek env ile hem kova hem klasör verilmiş olur.
+ *
+ * @param {string | null} value
+ * @returns {{ bucket: string | null, prefix: string | null }}
+ *   `prefix` null → yol öneki taşımıyor; config/varsayılan kalsın.
+ */
+export function splitS3BucketPath(value) {
+  if (!value) return { bucket: null, prefix: null };
+
+  const trimmed = value.replace(/^\/+|\/+$/g, "");
+  if (!trimmed) return { bucket: null, prefix: null };
+
+  const slash = trimmed.indexOf("/");
+  if (slash < 0) return { bucket: trimmed, prefix: null };
+
+  const bucket = trimmed.slice(0, slash);
+  const rest = trimmed.slice(slash + 1).replace(/^\/+|\/+$/g, "");
+  if (!bucket) return { bucket: null, prefix: null };
+
+  return {
+    bucket,
+    prefix: rest ? `${rest}/` : null,
+  };
+}
+
+/**
  * Kalıcı log sink'leri. Bozuk bir `kinds` listesi siteyi düşürmemeli —
  * bilinmeyen girdiler atılır; hiç geçerli tür kalmazsa varsayılana dönülür.
  *
@@ -436,8 +464,28 @@ export function normalizeLogs(raw) {
   /** @param {unknown} value */
   const text = (value) => (typeof value === "string" && value ? value : null);
 
-  const envBucket = process.env.JSKELET_LOG_BUCKET;
-  const envRegion = process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION;
+  const bucketPath = splitS3BucketPath(
+    text(process.env.JSKELET_LOG_BUCKET) ??
+      text(process.env.JSKELET_S3_BUCKET) ??
+      text(s3Raw.bucket),
+  );
+
+  const configPrefix =
+    typeof s3Raw.prefix === "string" && s3Raw.prefix
+      ? s3Raw.prefix.endsWith("/")
+        ? s3Raw.prefix
+        : `${s3Raw.prefix}/`
+      : DEFAULT_LOGS.s3.prefix;
+
+  const endpoint =
+    text(process.env.JSKELET_S3_API_URL) ?? text(s3Raw.endpoint);
+
+  // R2 / uyumlu API'lerde bölge çoğu zaman `auto`; endpoint varken region
+  // zorunlu tutulursa tek satırlık env kurulumu boşa düşer.
+  const region =
+    text(s3Raw.region) ??
+    text(process.env.JSKELET_S3_REGION) ??
+    (endpoint ? "auto" : null);
 
   return {
     console: source.console !== false,
@@ -452,13 +500,11 @@ export function normalizeLogs(raw) {
     },
     s3: {
       enabled: s3Raw.enabled === true,
-      bucket: text(envBucket) ?? text(s3Raw.bucket),
-      prefix:
-        typeof s3Raw.prefix === "string" && s3Raw.prefix
-          ? s3Raw.prefix
-          : DEFAULT_LOGS.s3.prefix,
-      region: text(s3Raw.region) ?? text(envRegion),
-      endpoint: text(s3Raw.endpoint),
+      bucket: bucketPath.bucket,
+      // Yoldaki önek tek env ile klasör vermeyi mümkün kılar; yoksa config.
+      prefix: bucketPath.prefix ?? configPrefix,
+      region,
+      endpoint,
       flushIntervalMs:
         Number.isFinite(flush) && flush >= 500
           ? Math.min(60_000, Math.floor(flush))
