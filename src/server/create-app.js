@@ -148,7 +148,10 @@ export async function createApp(options = {}) {
 
   app.use(async (req, res, next) => {
     try {
-      res.status(404).type("html").send(await renderNotFound());
+      // headersMiddleware `/assets/*` için immutable basmış olabilir; eksik bir
+      // hash'li dosyanın 404'ü CDN'de bir yıl zehirlenmesin.
+      res.status(404).setHeader("Cache-Control", "no-store");
+      res.type("html").send(await renderNotFound());
     } catch (error) {
       next(error);
     }
@@ -168,7 +171,8 @@ export async function createApp(options = {}) {
     }
 
     if (isNotFoundError(error)) {
-      res.status(404).type("html").send(await renderNotFound());
+      res.status(404).setHeader("Cache-Control", "no-store");
+      res.type("html").send(await renderNotFound());
       return;
     }
 

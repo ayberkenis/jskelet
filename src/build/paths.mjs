@@ -131,13 +131,23 @@ export function patchManifest(key, url) {
 /**
  * Eski hash'li çıktıları temizler.
  *
+ * Yeni dosya **önce** yazılmalı, prune sonra gelmeli: aynı içerik aynı hash'i
+ * üretir ve önce silmek `/assets/app.<hash>.css` için kısa bir 404 penceresi
+ * açar. CDN o 404'ü `immutable` ile saklarsa (eski headersMiddleware
+ * davranışı) tarayıcı bir yıl boyunca stilsiz kalır.
+ *
  * @param {string[]} prefixes
+ * @param {{ keep?: string[] }} [options] Korunacak dosya adları (ör. yeni
+ *   yazılan `app.<hash>.css`); `.br` / `.gz` sonekleri de eşleşir.
  */
-export function pruneAssets(prefixes) {
+export function pruneAssets(prefixes, { keep = [] } = {}) {
   if (!fs.existsSync(paths.assets)) return;
+
   for (const file of fs.readdirSync(paths.assets)) {
-    if (prefixes.some((prefix) => file.startsWith(prefix))) {
-      fs.rmSync(path.join(paths.assets, file), { force: true });
+    if (!prefixes.some((prefix) => file.startsWith(prefix))) continue;
+    if (keep.some((name) => file === name || file.startsWith(`${name}.`))) {
+      continue;
     }
+    fs.rmSync(path.join(paths.assets, file), { force: true });
   }
 }

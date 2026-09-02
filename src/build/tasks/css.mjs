@@ -64,9 +64,11 @@ export async function buildCss(config, { watch = false } = {}) {
 
   const run = async () => {
     const started = Date.now();
-    pruneAssets(["app."]);
     const css = await compile(input);
+    // Önce yaz, sonra eski hash'leri sil — aynı hash'e düşen içerikte 404
+    // penceresi olmasın (CDN immutable zehirlenmesi).
     const url = writeAsset("app.css", css);
+    pruneAssets(["app."], { keep: [path.basename(url)] });
     return { url, bytes: Buffer.byteLength(css), elapsed: Date.now() - started };
   };
 

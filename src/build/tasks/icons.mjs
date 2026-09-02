@@ -192,8 +192,6 @@ export async function buildIconSprite(config) {
     config.icons?.scan ?? ["views", "client", "routes", "lib", "features", "shared"]
   ).map((dir) => path.resolve(config.root, dir));
 
-  pruneAssets(["sprite."]);
-
   const used = [...scanUsedIcons(scanDirs)].sort();
   const symbols = [];
   const missing = [];
@@ -214,6 +212,7 @@ export async function buildIconSprite(config) {
 
   const sprite = `<svg xmlns="http://www.w3.org/2000/svg" style="display:none">${symbols.join("")}</svg>`;
   const url = writeAsset("sprite.svg", sprite);
+  pruneAssets(["sprite."], { keep: [path.basename(url)] });
 
   log.detail(`${symbols.length} symbols`);
   if (missing.length) {

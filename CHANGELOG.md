@@ -24,6 +24,13 @@ one is listed under a **Breaking** heading.
   query time and a default 24h lookback became `1d` plus network delay — Free
   zones reject anything wider than one day. Both ends are now pinned from the
   same clock (`datetime_leq` included).
+- Missing `/assets/*` responses no longer keep the long-lived `immutable`
+  Cache-Control that `headersMiddleware` stamps for static prefixes. A deploy
+  race (prune-before-write) could 404 a hashed CSS URL for a moment; a CDN then
+  cached that HTML 404 for a year and browsers refused it as a stylesheet
+  (`MIME type 'text/html'`). Catch-all and `notFound` handlers now set
+  `Cache-Control: no-store`. CSS and sprite builds write the new file before
+  pruning older hashes so the same content hash never has a gap.
 
 ### Added
 
