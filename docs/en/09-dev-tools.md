@@ -173,9 +173,10 @@ by clicking the backdrop. It is only emitted by the layout when
 ```
 
 The overlay file is **not part of the build.** The server serves it raw from the
-framework package; that is why there is no bundler involved, it works as a
-single file, and it adds nothing to the production output. The entire UI lives
-inside a shadow DOM and does not mix with the page's CSS.
+framework package; that is why there is no bundler involved. It loads sibling
+modules such as `seo.js` with native ESM imports, and it adds nothing to the
+production output. The entire UI lives inside a shadow DOM and does not mix with
+the page's CSS.
 
 What it shows:
 
@@ -183,6 +184,14 @@ What it shows:
   (`img`/`script`/`link`), and the server's `console.error` / `console.warn`
   output. On the server side `console` is wrapped so warnings do not get lost in
   the terminal.
+- **SEO:** a client-side scan of the current page — title and meta description
+  length, `html lang`, viewport, canonical, robots/`noindex`, Open Graph and
+  Twitter tags, H1/outline, image `alt`, empty links, and JSON-LD parse errors.
+  Findings appear in the panel; turning on **Highlight issues on the page**
+  draws red (error) or yellow (warning) boxes on the elements, with a short
+  title on the border. Clicking the label (or a row in the panel) opens the
+  full explanation. The scan lives in `/seo.js` next to the overlay and is not
+  part of the production bundle.
 - **Requests:** the method, path, status, duration and `X-JSkelet-Cache` value
   of every HTML request. The same lines are printed to the terminal too.
 - **Web Vitals:** TTFB, FCP, LCP, CLS, INP, DCL, load, long task count and
@@ -265,6 +274,7 @@ Under `brand.devBasePath` (default `/__jskelet/dev`):
 | Path | Method | Job |
 | --- | --- | --- |
 | `/overlay.js` | GET | The overlay script |
+| `/seo.js` | GET | SEO scan + page highlight helper (imported by the overlay) |
 | `/logo.png` | GET | The overlay logo |
 | `/ws` | GET (upgrade) | Live channel: statistics, live reload and CSS hot-swap events |
 | `/events` | GET | SSE: the fallback event stream, used only when WebSocket cannot be established |

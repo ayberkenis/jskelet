@@ -170,9 +170,9 @@ basılır:
 ```
 
 Overlay dosyası **build'e dâhil değildir.** Sunucu onu framework paketinden ham
-olarak servis eder; bu yüzden içinde bundler yoktur, tek dosya olarak çalışır ve
-prod çıktısına hiçbir şey eklemez. Tüm arayüz shadow DOM içinde durur, sayfanın
-CSS'i ile karışmaz.
+olarak servis eder; bundler yoktur. Aynı dizindeki `seo.js` gibi kardeş
+modüller native ESM import ile yüklenir ve prod çıktısına hiçbir şey eklenmez.
+Tüm arayüz shadow DOM içinde durur, sayfanın CSS'i ile karışmaz.
 
 Gösterdikleri:
 
@@ -180,6 +180,14 @@ Gösterdikleri:
   (`img`/`script`/`link`), ve sunucudaki `console.error` / `console.warn`
   çıktıları. Sunucu tarafında `console` sarılır, böylece uyarılar terminalde
   kaybolmaz.
+- **SEO:** açık sayfanın istemci tarafı taraması — title ve meta description
+  uzunluğu, `html lang`, viewport, canonical, robots/`noindex`, Open Graph ve
+  Twitter etiketleri, H1/outline, görsel `alt`, boş linkler ve JSON-LD parse
+  hataları. Bulgular panelde listelenir; **Highlight issues on the page**
+  açılınca sorunlu elemanların üzerine kırmızı (error) veya sarı (warning)
+  dikdörtgenler çizilir, kenarda kısa başlık durur. Etikete (ya da panel
+  satırına) tıklanınca ayrıntılı açıklama açılır. Tarama overlay'in yanındaki
+  `/seo.js` dosyasındadır; production paketine girmez.
 - **İstekler:** her HTML isteğinin metodu, yolu, durumu, süresi ve
   `X-JSkelet-Cache` değeri. Aynı satırlar terminale de basılır.
 - **Web Vitals:** TTFB, FCP, LCP, CLS, INP, DCL, load, uzun task sayısı ve
@@ -261,6 +269,7 @@ Rapor katmanı yalnızca development'ta yüklenir, üretim çıktısına hiç gi
 | Yol | Metot | İşi |
 | --- | --- | --- |
 | `/overlay.js` | GET | Overlay script'i |
+| `/seo.js` | GET | SEO tarama + sayfa highlight yardımcısı (overlay import eder) |
 | `/logo.png` | GET | Overlay logosu |
 | `/ws` | GET (upgrade) | Canlı kanal: istatistikler, live reload ve CSS hot-swap olayları |
 | `/events` | GET | SSE: yalnızca WebSocket kurulamazsa kullanılan yedek olay akışı |

@@ -1,14 +1,16 @@
 /**
- * Dev overlay: sağ altta yüzen baloncuk; hataları ve performans
- * istatistiklerini gösterir.
+ * Dev overlay: sağ altta yüzen baloncuk; hataları, performans
+ * istatistiklerini ve SEO taramasını gösterir.
  *
  * Bu dosya **build'e dahil değildir**. `npm run dev` sırasında sunucu onu
  * `/__jskelet/dev/overlay.js` altından ham olarak servis eder, layout da
- * script etiketini yalnızca development'ta basar. Bu yüzden burada bundler
- * yok: import yapmadan, tek dosya olarak çalışır.
+ * script etiketini yalnızca development'ta basar. Bundler yok: yalnızca aynı
+ * dizindeki `seo.js` gibi native ESM import'ları kullanılır.
  *
  * Tüm arayüz shadow DOM içinde durur; sayfanın CSS'i ile karışmaz.
  */
+
+import { scanSeo, SeoHighlighter } from "./seo.js";
 
 const BASE = "/__jskelet/dev";
 /** Soket kurulamadığında düşülen yedek yoklama sıklığı. */
@@ -40,6 +42,19 @@ let open = false;
 /** Açık bırakılan yığın izleri; panel her poll'da yeniden çizildiği için gerekir. */
 let expanded = new Set();
 
+/** Sayfa üzeri SEO dikdörtgenleri; panel kapalıyken de açık kalabilir. */
+let seoHighlight = false;
+/** Panel listesinde açılan sorun açıklaması. */
+let seoExpandedId = null;
+/** @type {import('./seo.js').SeoIssue[]} */
+let seoIssues = [];
+const seoLayer = new SeoHighlighter();
+seoLayer.onSelect = (id) => {
+  seoExpandedId = id;
+  lastBody = "";
+  render();
+};
+
 /**
  * Sunucu `node --watch` ile yeniden başladığında ya da sayfa tazelendiğinde
  * panelin kapanmaması için görünüm durumu ve tarayıcı hata günlüğü sekme
@@ -60,6 +75,8 @@ function saveState() {
         open,
         activeTab,
         aboutSection,
+        seoHighlight,
+        seoExpandedId,
         expanded: [...expanded],
         errors: clientErrors.slice(0, 30),
       }),
@@ -77,6 +94,8 @@ function loadState() {
     open = Boolean(saved.open);
     activeTab = saved.activeTab ?? "errors";
     aboutSection = saved.aboutSection ?? "framework";
+    seoHighlight = Boolean(saved.seoHighlight);
+    seoExpandedId = saved.seoExpandedId ?? null;
     expanded = new Set(saved.expanded ?? []);
     clientErrors.push(...(saved.errors ?? []));
     nextId = Math.max(nextId, ...clientErrors.map((item) => item.id + 1));
@@ -826,12 +845,43 @@ h4:first-child { margin-top: 0; }
   padding: 9px 11px; margin-bottom: 8px;
 }
 .item.warn { border-inline-start-color: var(--mid); }
+.item.selected { border-color: rgba(255,255,255,.22); background: var(--surface-hover); }
 .item .meta { color: var(--muted); font-size: 10.5px; display: flex; align-items: center; gap: 8px; margin-bottom: 3px; }
 .tag { border: 1px solid var(--line); border-radius: 999px; padding: 0 7px; text-transform: uppercase; letter-spacing: .05em; font-weight: 600; font-size: 9.5px; }
 .msg { word-break: break-word; color: var(--text); }
 .item pre { margin: 8px 0 0; padding: 8px 10px; background: rgba(0,0,0,.4); border-radius: 8px; white-space: pre-wrap; word-break: break-word; color: #b8c0cb; font-size: 11px; font-family: ui-monospace, SFMono-Regular, monospace; max-height: 150px; overflow: auto; }
+.item .detail-text { margin: 8px 0 0; color: #b8c0cb; font-size: 12px; line-height: 1.55; }
 .link { background: none; border: 0; padding: 0; margin-top: 6px; color: var(--muted); font-size: 11px; font-weight: 600; cursor: pointer; }
 .link:hover { color: var(--text); }
+.item.clickable { cursor: pointer; }
+.item.clickable:hover { border-color: var(--line); }
+
+.toggle-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  margin: 12px 0 4px; padding: 10px 12px; border-radius: 12px;
+  background: var(--surface); border: 1px solid var(--line);
+}
+.toggle-row span { color: #c6ced9; font-size: 12px; }
+.toggle {
+  position: relative; width: 36px; height: 20px; border-radius: 999px; border: 0;
+  background: rgba(255,255,255,.12); cursor: pointer; flex: none;
+  transition: background .15s ease;
+}
+.toggle.on { background: rgba(52,211,153,.45); }
+.toggle i {
+  position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%;
+  background: #fff; transition: transform .15s ease;
+}
+.toggle.on i { transform: translateX(16px); }
+
+.seo-chip {
+  display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+  padding: 5px 11px; border-radius: 999px; border: 1px solid var(--line);
+  background: rgba(12,14,18,.92); color: #cfd6de; font-size: 11.5px; font-weight: 600;
+  box-shadow: 0 8px 24px rgba(0,0,0,.4); cursor: pointer;
+}
+.seo-chip.bad { color: #ffd7de; border-color: rgba(251,113,133,.4); }
+.seo-chip.warn { color: #ffeec2; border-color: rgba(251,191,36,.4); }
 
 .copy {
   display: inline-flex; align-items: center; gap: 5px; cursor: pointer;
@@ -891,6 +941,7 @@ let shadow = null;
  */
 const TAB_ICONS = {
   errors: `<svg viewBox="0 0 16 16"><path d="M8 5.5v4M8 11.5h.01M8 1.8 1.8 13.2h12.4L8 1.8Z"/></svg>`,
+  seo: `<svg viewBox="0 0 16 16"><circle cx="7.2" cy="7.2" r="4.4"/><path d="M10.4 10.4 13.6 13.6M5.2 7.2h4M7.2 5.2v4"/></svg>`,
   perf: `<svg viewBox="0 0 16 16"><path d="M2 13V8m4 5V3m4 10V6m4 7v-3"/></svg>`,
   server: `<svg viewBox="0 0 16 16"><path d="M2.5 3.5h11v3h-11zM2.5 9.5h11v3h-11zM5 5h.01M5 11h.01"/></svg>`,
   warm: `<svg viewBox="0 0 16 16"><path d="M8 14c2.5 0 4.2-1.7 4.2-3.9C12.2 6.5 8 2 8 2S3.8 6.5 3.8 10.1C3.8 12.3 5.5 14 8 14Z"/></svg>`,
@@ -916,6 +967,7 @@ const SKELETON = `
         </div>
         <div class="rail">
           <button class="tab" data-tab="errors">${TAB_ICONS.errors} Errors<span class="chip" data-part="chip" hidden></span></button>
+          <button class="tab" data-tab="seo">${TAB_ICONS.seo} SEO<span class="chip" data-part="seo-chip" hidden></span></button>
           <button class="tab" data-tab="perf">${TAB_ICONS.perf} Performance</button>
           <button class="tab" data-tab="server">${TAB_ICONS.server} Server<span class="chip neutral" data-part="version-chip" hidden>update</span></button>
           <button class="tab" data-tab="warm">${TAB_ICONS.warm} Prewarming<span class="chip neutral" data-part="warm-chip" hidden></span></button>
@@ -931,6 +983,7 @@ const SKELETON = `
       </div>
     </div>
     <div class="dock">
+      <button type="button" class="seo-chip" data-part="seo-dock" data-action="seo-focus" hidden></button>
       <span class="warm" data-part="warm" hidden>
         <span class="ring"></span>
         <span data-part="warm-text"></span>
@@ -1148,6 +1201,86 @@ function errorsTab() {
       server.map((item) => ({ ...item, source: "server" })),
       "server",
     )}
+  `;
+}
+
+/**
+ * DOM'u yeniden tarar; highlight açıksa katmanı da günceller.
+ * @param {{ select?: string | null }} [opts]
+ */
+function refreshSeo(opts = {}) {
+  seoIssues = scanSeo(document);
+  if (seoHighlight) {
+    seoLayer.show(seoIssues, { select: opts.select ?? seoExpandedId });
+  } else if (seoLayer.active) {
+    seoLayer.hide();
+  }
+}
+
+function seoTab() {
+  refreshSeo();
+
+  const errors = seoIssues.filter((item) => item.severity === "error").length;
+  const warns = seoIssues.length - errors;
+  const tone = errors ? "bad" : warns ? "mid" : "good";
+
+  clipboard.set(
+    "seo",
+    seoIssues
+      .map(
+        (item) =>
+          `[${item.severity}] ${item.category} · ${item.title}\n${item.detail}`,
+      )
+      .join("\n\n") || "No SEO issues on this page.",
+  );
+
+  const groups = new Map();
+  for (const issue of seoIssues) {
+    const list = groups.get(issue.category) ?? [];
+    list.push(issue);
+    groups.set(issue.category, list);
+  }
+
+  const body = seoIssues.length
+    ? [...groups.entries()]
+        .map(
+          ([category, list]) => `
+      <h4>${escapeHtml(category)}</h4>
+      ${list
+        .map((issue) => {
+          const openIssue = seoExpandedId === issue.id;
+          return `<div class="item clickable ${issue.severity === "warn" ? "warn" : ""} ${openIssue ? "selected" : ""}"
+            data-action="seo-issue" data-id="${escapeHtml(issue.id)}">
+            <div class="meta">
+              <span class="tag">${escapeHtml(issue.severity)}</span>
+              <span class="spacer"></span>
+              <span>${openIssue ? "▾ details" : "▸ details"}</span>
+            </div>
+            <div class="msg">${escapeHtml(issue.title)}</div>
+            ${openIssue ? `<p class="detail-text">${escapeHtml(issue.detail)}</p>` : ""}
+          </div>`;
+        })
+        .join("")}`,
+        )
+        .join("")
+    : `<div class="empty">No SEO issues on this page.</div>`;
+
+  return `
+    ${lede(
+      tone,
+      errors || warns
+        ? `This page has <strong>${errors} SEO errors</strong> and <strong>${warns} warnings</strong>. Turn on page highlights to see red/yellow boxes on the offending elements; click a label for the full explanation.`
+        : "Document title, description, headings, images and social tags look fine on this page.",
+    )}
+    <div class="toggle-row">
+      <span>Highlight issues on the page</span>
+      <button type="button" class="toggle ${seoHighlight ? "on" : ""}" data-action="seo-toggle"
+        aria-pressed="${seoHighlight}" title="Draw boxes around SEO issues">
+        <i></i>
+      </button>
+    </div>
+    <h4>Findings<span class="head-action">${copyButton("seo", "copy all")}<button class="btn mini" data-action="seo-rescan" style="margin-inline-start:6px">${REFRESH_ICON} Rescan</button></span></h4>
+    ${body}
   `;
 }
 
@@ -1740,22 +1873,37 @@ function paint() {
   const warnCount =
     clientErrors.length + (serverStats?.errors ?? []).length - errorCount;
 
-  const tone = errorCount ? "bad" : warnCount ? "warn" : "";
-  const badgeCount = errorCount || warnCount;
+  const seoErrors = seoIssues.filter((item) => item.severity === "error").length;
+  const seoWarns = seoIssues.length - seoErrors;
+
+  const tone = errorCount || seoErrors ? "bad" : warnCount || seoWarns ? "warn" : "";
+  const badgeCount = errorCount || warnCount || seoErrors || seoWarns;
   const lcpLabel = metrics.lcp ? `${Math.round(metrics.lcp)} ms` : "measuring";
 
   const bubble = root.querySelector(".bubble");
   bubble.className = `bubble ${tone}`;
   bubble.title = `JSkelet dev tools — LCP ${lcpLabel}${
-    badgeCount ? `, ${errorCount} errors, ${warnCount} warnings` : ""
+    badgeCount
+      ? `, ${errorCount} errors, ${warnCount} warnings, ${seoIssues.length} SEO`
+      : ""
   }`;
 
   const badge = root.querySelector(".badge");
   badge.hidden = !badgeCount;
-  badge.className = `badge ${errorCount ? "" : "warn"}`;
+  badge.className = `badge ${errorCount || seoErrors ? "" : "warn"}`;
   badge.textContent = badgeCount > 99 ? "99+" : String(badgeCount);
 
   paintPrewarm(root);
+
+  const seoDock = root.querySelector("[data-part='seo-dock']");
+  if (seoHighlight && seoIssues.length) {
+    seoDock.hidden = false;
+    seoDock.className = `seo-chip ${seoErrors ? "bad" : "warn"}`;
+    seoDock.textContent = `${seoIssues.length} SEO`;
+    seoDock.title = "Open SEO tab · page highlights are on";
+  } else {
+    seoDock.hidden = true;
+  }
 
   const backdrop = root.querySelector(".backdrop");
   backdrop.hidden = !open;
@@ -1765,13 +1913,18 @@ function paint() {
   pill.className = `pill ${offline ? "warn" : tone}`;
   pill.querySelector("[data-part='pill']").textContent = offline
     ? "server restarting…"
-    : errorCount || warnCount
-      ? `${errorCount} errors · ${warnCount} warnings`
+    : errorCount || warnCount || seoIssues.length
+      ? `${errorCount} errors · ${warnCount} warnings · ${seoIssues.length} SEO`
       : "all good";
 
   const chip = root.querySelector("[data-part='chip']");
   chip.hidden = !errorCount;
   chip.textContent = String(errorCount);
+
+  const seoChip = root.querySelector("[data-part='seo-chip']");
+  seoChip.hidden = !seoIssues.length;
+  seoChip.className = `chip ${seoErrors ? "" : "neutral"}`;
+  seoChip.textContent = String(seoIssues.length);
 
   const version = serverStats?.version;
   paintVersion(root, version);
@@ -1798,13 +1951,15 @@ function paint() {
   const html =
     activeTab === "errors"
       ? errorsTab()
-      : activeTab === "perf"
-        ? perfTab()
-        : activeTab === "about"
-          ? aboutTab()
-          : activeTab === "warm"
-            ? warmTab()
-            : serverTab();
+      : activeTab === "seo"
+        ? seoTab()
+        : activeTab === "perf"
+          ? perfTab()
+          : activeTab === "about"
+            ? aboutTab()
+            : activeTab === "warm"
+              ? warmTab()
+              : serverTab();
 
   if (html !== lastBody) {
     const body = root.querySelector(".body");
@@ -1921,6 +2076,45 @@ function bind(root) {
       return;
     }
 
+    if (target.dataset.action === "seo-toggle") {
+      seoHighlight = !seoHighlight;
+      if (!seoHighlight) seoExpandedId = null;
+      refreshSeo();
+      saveState();
+      lastBody = "";
+      render();
+      return;
+    }
+
+    if (target.dataset.action === "seo-rescan") {
+      refreshSeo();
+      lastBody = "";
+      render();
+      return;
+    }
+
+    if (target.dataset.action === "seo-focus") {
+      activeTab = "seo";
+      setOpen(true);
+      return;
+    }
+
+    if (target.dataset.action === "seo-issue") {
+      const id = target.dataset.id;
+      seoExpandedId = seoExpandedId === id ? null : id;
+      if (seoExpandedId) {
+        seoHighlight = true;
+        refreshSeo({ select: seoExpandedId });
+        seoLayer.select(seoExpandedId);
+      } else if (seoHighlight) {
+        seoLayer.select(null);
+      }
+      saveState();
+      lastBody = "";
+      render();
+      return;
+    }
+
     if (target.dataset.action === "copy") {
       copy(target.dataset.key);
       return;
@@ -1936,6 +2130,7 @@ function start() {
   captureMetrics();
   captureFetch();
   bind(ensureRoot());
+  refreshSeo();
   render();
 
   // Panel kapalıyken de rozet güncel kalsın diye kanal her zaman açılır;
@@ -1949,13 +2144,33 @@ function start() {
   });
   window.addEventListener("pagehide", () => sendPageReport(true));
 
+  // Island'lar ve lazy img'ler geç gelebilir; highlight açıksa bir kez daha tara.
+  setTimeout(() => {
+    if (!seoHighlight && activeTab !== "seo") return;
+    refreshSeo();
+    lastBody = "";
+    render();
+  }, 2500);
+
   window.addEventListener("keydown", (event) => {
     if (event.altKey && event.code === "KeyD") {
       setOpen(!open);
       return;
     }
 
-    if (event.key === "Escape" && open) setOpen(false);
+    if (event.key === "Escape") {
+      if (open) {
+        setOpen(false);
+        return;
+      }
+      if (seoExpandedId) {
+        seoExpandedId = null;
+        if (seoHighlight) seoLayer.select(null);
+        saveState();
+        lastBody = "";
+        render();
+      }
+    }
   });
 }
 

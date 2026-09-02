@@ -34,6 +34,11 @@ one is listed under a **Breaking** heading.
 
 ### Added
 
+- Devtools SEO check: an **SEO** tab in the overlay lists document, heading,
+  image, link and social-tag issues with error/warning severity. Optional page
+  highlights draw red or yellow boxes around the offending elements; the label
+  shows the short title and a click opens the full explanation. Served only in
+  development as `/__jskelet/dev/seo.js` beside the overlay.
 - Marketing homepage ops storyboard: Redis L2, `/_jskelet/admin` panel mock and
   Cloudflare purge flow, with tabbed visual scenes animated by the vanilla
   `motion` API (Framer Motion’s non-React package) via an `ops-story` island.

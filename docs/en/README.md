@@ -27,7 +27,7 @@ change one, change the other.
 | [06-caching.md](./06-caching.md) | `withHtmlCache`, `revalidate`, stale-while-revalidate, the cache key, `X-JSkelet-Cache`, in-request cache, degraded render, prewarm |
 | [07-configuration.md](./07-configuration.md) | Full `jskelet.config.mjs` reference, the `source` pattern syntax, environment variable table |
 | [08-build.md](./08-build.md) | The build pipeline, the manifest, hashed assets, CSS/Tailwind `@source`, fonts, icon sprite, image optimization, precompress |
-| [09-dev-tools.md](./09-dev-tools.md) | The `jskelet dev` flow, watch directories, CSS hot-swap, devtools overlay (Alt+D), the report page, the dev gate |
+| [09-dev-tools.md](./09-dev-tools.md) | The `jskelet dev` flow, watch directories, CSS hot-swap, devtools overlay (Alt+D, SEO highlight), the report page, the dev gate |
 | [10-deployment.md](./10-deployment.md) | Prod build + start, environment variables, Docker, reverse proxy, health check |
 | [11-migration.md](./11-migration.md) | Migrating from Next.js: the equivalence table and a step-by-step plan |
 | [12-dashboards-and-sessions.md](./12-dashboards-and-sessions.md) | Per-visitor pages: `private: true`, signed cookie sessions, CSRF, `fragment()`, swapping regions and the form loop |

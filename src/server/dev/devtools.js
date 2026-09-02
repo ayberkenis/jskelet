@@ -339,6 +339,13 @@ function router() {
     fs.createReadStream(OVERLAY_FILE).pipe(res);
   });
 
+  // Overlay'in SEO taraması; native ESM import ile yüklenir.
+  api.get("/seo.js", (req, res) => {
+    res.type("application/javascript");
+    res.setHeader("Cache-Control", "no-store");
+    fs.createReadStream(path.join(DEVTOOLS_DIR, "seo.js")).pipe(res);
+  });
+
   api.get("/logo.png", (req, res) => {
     res.type("image/png");
     // Logo geliştirme sırasında değişmiyor; her gezinmede yeniden indirmesin.

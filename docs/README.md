@@ -24,7 +24,7 @@ eşlenik tutuluyor; birini değiştiriyorsan diğerini de değiştir.
 | [06-cache.md](./06-cache.md) | `withHtmlCache`, `revalidate`, stale-while-revalidate, cache anahtarı, `X-JSkelet-Cache`, istek içi cache, degraded render, prewarm |
 | [07-yapilandirma.md](./07-yapilandirma.md) | `jskelet.config.mjs` tam referansı, `source` desen sözdizimi, ortam değişkenleri tablosu |
 | [08-build.md](./08-build.md) | Build hattı, manifest, hash'li varlıklar, CSS/Tailwind `@source`, fontlar, ikon sprite, görsel optimizasyonu, precompress |
-| [09-dev-araclari.md](./09-dev-araclari.md) | `jskelet dev` akışı, watch dizinleri, CSS hot-swap, devtools overlay (Alt+D), rapor sayfası, dev gate |
+| [09-dev-araclari.md](./09-dev-araclari.md) | `jskelet dev` akışı, watch dizinleri, CSS hot-swap, devtools overlay (Alt+D, SEO highlight), rapor sayfası, dev gate |
 | [10-dagitim.md](./10-dagitim.md) | Prod build + start, ortam değişkenleri, Docker, ters proxy, sağlık kontrolü |
 | [11-tasima.md](./11-tasima.md) | Next.js'ten taşıma: karşılık tablosu ve adım adım plan |
 | [12-panel-ve-oturum.md](./12-panel-ve-oturum.md) | Kişiye özel sayfalar: `private: true`, imzalı cookie oturumu, CSRF, `fragment()`, parça takası ve form döngüsü |
