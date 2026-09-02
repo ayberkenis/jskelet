@@ -155,10 +155,11 @@ one is listed under a **Breaking** heading.
   “no targeted invalidation” claim), Redis / admin / data-cache callouts, and
   bilingual doc links under `docs/` and `docs/en/`.
 - Marketing compare live latency demo now measures two same-sized fragments
-  (cached vs `no-store`) instead of the full homepage against a tiny partial —
-  so transfer size cannot make a fresh render look “faster” than a HIT. The
-  island also prints transferred bytes, and a View Source section contrasts
-  `__NEXT_DATA__` payload tax with plain JSkelet HTML.
+  (cached vs `no-store`) with an explicit 80 ms simulated upstream inside the
+  shared producer — a hit skips that wait so the gap is visible even when RTT
+  dominates the wall clock. The island prints transferred bytes, Server-Timing
+  `produce` duration, and a View Source section contrasts `__NEXT_DATA__`
+  payload tax with plain JSkelet HTML.
 - Duplicate component named exports (or the same PascalCase tag in two files)
   now **fail** at build and at server startup instead of warning and letting
   the second definition win. Overwriting `components/index.js` barrel exports

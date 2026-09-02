@@ -460,21 +460,23 @@ export default {
     live: {
       eyebrow: "Right now, in this browser",
       title: "Watch the cache difference live.",
-      lead: "Two requests, the same template, the same network. The only difference: one is served from memory, the other is rendered from scratch every time.",
+      lead: "Same template, same bytes, same network — and an 80 ms simulated API inside the producer. A hit skips that wait; a miss pays it every time.",
       cachedLabel: "Served from cache",
       cachedBadge: "live",
-      cachedNote: "Same HTML body, from memory; the producer never runs on a hit.",
+      cachedNote: "HIT skips the 80 ms upstream sleep; only the round trip remains.",
       freshLabel: "Rendered every time",
       freshBadge: "every request",
-      freshNote: "Same template, marked no-store — the engine runs on every request.",
+      freshNote: "no-store — pays the simulated API on every request, then renders.",
       measuring: "measuring…",
       bytesLabel: "%s transferred",
+      produceLabel: "server produce %s",
       status:
         "This section measures nothing when JavaScript is disabled; the rest of the page is unaffected.",
-      statusDone: "%s requests, median. Measured in this browser, on this network.",
+      statusDone:
+        "%s requests, median. ~%ums simulated upstream; cache saved ~%dms wall time on this network.",
       statusFailed: "Measurement failed.",
       footnote:
-        "Both sides transfer the same number of bytes — otherwise a tiny fresh fragment can look “faster” than a large cached page, and the demo lies. Locally the gap is small; what matters is that a hit never pays for your API or database. Put the slow work in the controller and the cache stops charging visitors for it.",
+        "Round trip dominates both totals — that is why two empty renders looked tied. The honest signal is server produce: ~0 ms on a hit, ~80 ms+ when the producer runs. On a real page that sleep is your database or CMS; the cache stops charging visitors for it.",
     },
     source: {
       eyebrow: "View Source",

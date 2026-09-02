@@ -449,21 +449,23 @@ export default {
     live: {
       eyebrow: "Şimdi, bu tarayıcıda",
       title: "Cache farkını canlı izle.",
-      lead: "İki istek, aynı şablon, aynı ağ. Tek fark: biri bellekten gelir, diğeri her seferinde sıfırdan render edilir.",
+      lead: "Aynı şablon, aynı bayt, aynı ağ — ve üreticinin içinde 80 ms’lik simüle API. HIT o beklemeyi atlar; miss her seferinde öder.",
       cachedLabel: "Cache'ten hazır gelen",
       cachedBadge: "canlı",
-      cachedNote: "Aynı HTML gövdesi, bellekten; HIT'te üretici hiç çalışmaz.",
+      cachedNote: "HIT 80 ms’lik upstream uykusunu atlar; geriye yalnızca gidiş-dönüş kalır.",
       freshLabel: "Her seferinde render edilen",
       freshBadge: "her istekte",
-      freshNote: "Aynı şablon, no-store — motor her istekte çalışır.",
+      freshNote: "no-store — her istekte simüle API’yi öder, sonra render eder.",
       measuring: "ölçülüyor…",
       bytesLabel: "%s aktarıldı",
+      produceLabel: "sunucu produce %s",
       status:
         "JavaScript kapalıysa bu bölüm ölçüm yapmaz; sayfanın kalanı etkilenmez.",
-      statusDone: "%s istek, medyan. Bu tarayıcıda ve bu ağda ölçüldü.",
+      statusDone:
+        "%s istek, medyan. ~%ums simüle upstream; cache bu ağda ~%dms kazandırdı.",
       statusFailed: "Ölçüm yapılamadı.",
       footnote:
-        "İki taraf da aynı bayt sayısını aktarır — aksi hâlde küçük bir fresh fragment, büyük cache'li sayfadan “daha hızlı” görünüp demoyu yalanlar. Yerelde fark küçüktür; önemli olan HIT'in API ya da veritabanı maliyetini hiç ödememesidir. Yavaş işi controller'a koyun, cache ziyaretçiyi o maliyetten kurtarır.",
+        "Gidiş-dönüş iki toplamı da ezer — bu yüzden boş render’lar berabere görünüyordu. Dürüst sinyal sunucu produce: HIT’te ~0 ms, üretici çalışınca ~80 ms+. Gerçek sayfada o uyku veritabanın ya da CMS’indir; cache ziyaretçiyi o maliyetten kurtarır.",
     },
     source: {
       eyebrow: "View Source",

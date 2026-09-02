@@ -32,9 +32,11 @@
         runs: 6,
         cachedUrl: "/_fragment/render-demo-cached",
         freshUrl: "/_fragment/render-demo",
+        upstreamMs: 80,
         done: t.compare.live.statusDone,
         failed: t.compare.live.statusFailed,
         bytesLabel: t.compare.live.bytesLabel,
+        produceLabel: t.compare.live.produceLabel,
       }) %>'
     >
       <div class="relative overflow-hidden rounded-3xl border border-cyan-200 bg-gradient-to-br from-cyan-50 to-white p-7 shadow-xl shadow-cyan-950/5 dark:border-cyan-400/20 dark:from-cyan-400/10 dark:to-white/[0.03]">
@@ -43,6 +45,7 @@
         </span>
         <p class="m-0 text-sm font-semibold"><%= t.compare.live.cachedLabel %></p>
         <p class="mt-5 mb-0 font-mono text-4xl font-bold tracking-tight tabular-nums" data-latency-value="cached"><%= t.compare.live.measuring %></p>
+        <p class="mt-2 mb-0 font-mono text-xs text-emerald-700 dark:text-emerald-300" data-latency-produce="cached">&nbsp;</p>
         <p class="mt-2 mb-0 font-mono text-xs text-slate-600 dark:text-slate-400" data-latency-cache="cached">&nbsp;</p>
         <p class="mt-1 mb-0 font-mono text-xs text-slate-500 dark:text-slate-500" data-latency-bytes="cached">&nbsp;</p>
         <p class="mt-3 mb-0 text-xs/5 text-slate-600 dark:text-slate-400">
@@ -54,6 +57,7 @@
         <span class="absolute top-5 right-5 text-[10px] font-bold tracking-wider text-slate-600 uppercase dark:text-slate-400"><%= t.compare.live.freshBadge %></span>
         <p class="m-0 text-sm font-semibold"><%= t.compare.live.freshLabel %></p>
         <p class="mt-5 mb-0 font-mono text-4xl font-bold tracking-tight tabular-nums" data-latency-value="fresh"><%= t.compare.live.measuring %></p>
+        <p class="mt-2 mb-0 font-mono text-xs text-amber-700 dark:text-amber-300" data-latency-produce="fresh">&nbsp;</p>
         <p class="mt-2 mb-0 font-mono text-xs text-slate-600 dark:text-slate-400" data-latency-cache="fresh">&nbsp;</p>
         <p class="mt-1 mb-0 font-mono text-xs text-slate-500 dark:text-slate-500" data-latency-bytes="fresh">&nbsp;</p>
         <p class="mt-3 mb-0 text-xs/5 text-slate-600 dark:text-slate-400">
