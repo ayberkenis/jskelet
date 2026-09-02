@@ -6,6 +6,7 @@
  */
 import process from "node:process";
 import * as log from "../../log.mjs";
+import { readS3CredentialsFromEnv } from "../../config/index.js";
 import { createFileSink } from "./file-sink.js";
 import { createS3Sink } from "./s3-sink.js";
 
@@ -22,20 +23,6 @@ let sinks = [];
 /** @type {Set<string>} */
 let kindSet = new Set();
 let accessMounted = false;
-
-/**
- * @returns {import('./s3-put.js').AwsCredentials | null}
- */
-function readCredentials() {
-  const accessKeyId = process.env.JSKELET_S3_ACCESS_KEY_ID;
-  const secretAccessKey = process.env.JSKELET_S3_SECRET_ACCESS_KEY;
-  if (!accessKeyId || !secretAccessKey) return null;
-  return {
-    accessKeyId,
-    secretAccessKey,
-    sessionToken: process.env.JSKELET_S3_SESSION_TOKEN || null,
-  };
-}
 
 /**
  * Access middleware mount edilmeli mi?
@@ -79,25 +66,22 @@ export async function configureLogs(config) {
   }
 
   if (logs.s3.enabled) {
-    const credentials = readCredentials();
+    const credentials = readS3CredentialsFromEnv();
     if (!logs.s3.bucket) {
       console.warn(
-        "[logs] s3.enabled but no bucket (set JSKELET_LOG_BUCKET or logs.s3.bucket)",
-      );
-    } else if (!logs.s3.region) {
-      console.warn(
-        "[logs] s3.enabled but no region (set JSKELET_S3_REGION or logs.s3.region)",
+        "[logs] s3.enabled but no bucket (set JSKELET_LOG_BUCKET, JSKELET_S3_BUCKET or logs.s3.bucket)",
       );
     } else if (!credentials) {
       console.warn(
-        "[logs] s3.enabled but JSKELET_S3_ACCESS_KEY_ID / JSKELET_S3_SECRET_ACCESS_KEY missing — S3 sink disabled",
+        "[logs] s3.enabled but credentials missing — set JSKELET_S3_ACCESS_KEY_ID and JSKELET_S3_SECRET_ACCESS_KEY",
       );
     } else {
+      const region = logs.s3.region || "auto";
       next.push(
         createS3Sink({
           bucket: logs.s3.bucket,
           prefix: logs.s3.prefix,
-          region: logs.s3.region,
+          region,
           endpoint: logs.s3.endpoint,
           credentials,
           flushIntervalMs: logs.s3.flushIntervalMs,

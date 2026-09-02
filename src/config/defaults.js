@@ -203,7 +203,7 @@ export const DEFAULT_REDIS = {
  * `JSKELET_S3_SECRET_ACCESS_KEY` (ve isteğe bağlı `JSKELET_S3_SESSION_TOKEN`).
  * Bucket için `JSKELET_LOG_BUCKET` (veya `JSKELET_S3_BUCKET`) env'i config'i
  * ezer ve `ayberkenis/jskelet/logs` gibi `bucket/prefix` yolunu kabul eder.
- * Uyumlu API adresi `JSKELET_S3_API_URL` (R2 / MinIO).
+ * Uyumlu API adresi `JSKELET_S3_API_URL` (S3-compatible endpoint).
  */
 export const DEFAULT_LOGS = {
   console: true,

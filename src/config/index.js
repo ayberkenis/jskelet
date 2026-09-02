@@ -431,6 +431,48 @@ export function splitS3BucketPath(value) {
 }
 
 /**
+ * @param {unknown} value
+ * @returns {string | null}
+ */
+function envText(value) {
+  return typeof value === "string" && value ? value : null;
+}
+
+/**
+ * @returns {{ accessKeyId: string, secretAccessKey: string,
+ *   sessionToken: string | null } | null}
+ */
+export function readS3CredentialsFromEnv() {
+  const accessKeyId = envText(process.env.JSKELET_S3_ACCESS_KEY_ID);
+  const secretAccessKey =
+    envText(process.env.JSKELET_S3_SECRET_ACCESS_KEY) ??
+    envText(process.env.JSKELET_S3_ACCESS_SECRET);
+  if (!accessKeyId || !secretAccessKey) return null;
+  return {
+    accessKeyId,
+    secretAccessKey,
+    sessionToken: envText(process.env.JSKELET_S3_SESSION_TOKEN),
+  };
+}
+
+/**
+ * Log hedefi. Öncelik: `JSKELET_LOG_BUCKET` → `JSKELET_S3_BUCKET`
+ * (+ isteğe bağlı `JSKELET_S3_KEY_PREFIX`).
+ *
+ * @returns {string | null}
+ */
+function resolveLogBucketEnv() {
+  const logPath = envText(process.env.JSKELET_LOG_BUCKET);
+  if (logPath) return logPath;
+
+  const bucket = envText(process.env.JSKELET_S3_BUCKET);
+  if (!bucket) return null;
+
+  const prefix = envText(process.env.JSKELET_S3_KEY_PREFIX);
+  return prefix ? `${bucket}/${prefix}` : bucket;
+}
+
+/**
  * Kalıcı log sink'leri. Bozuk bir `kinds` listesi siteyi düşürmemeli —
  * bilinmeyen girdiler atılır; hiç geçerli tür kalmazsa varsayılana dönülür.
  *
@@ -461,13 +503,8 @@ export function normalizeLogs(raw) {
   const flush = Number(s3Raw.flushIntervalMs);
   const batch = Number(s3Raw.maxBatch);
 
-  /** @param {unknown} value */
-  const text = (value) => (typeof value === "string" && value ? value : null);
-
   const bucketPath = splitS3BucketPath(
-    text(process.env.JSKELET_LOG_BUCKET) ??
-      text(process.env.JSKELET_S3_BUCKET) ??
-      text(s3Raw.bucket),
+    resolveLogBucketEnv() ?? envText(s3Raw.bucket),
   );
 
   const configPrefix =
@@ -478,14 +515,28 @@ export function normalizeLogs(raw) {
       : DEFAULT_LOGS.s3.prefix;
 
   const endpoint =
-    text(process.env.JSKELET_S3_API_URL) ?? text(s3Raw.endpoint);
+    envText(process.env.JSKELET_S3_API_URL) ?? envText(s3Raw.endpoint);
 
-  // R2 / uyumlu API'lerde bölge çoğu zaman `auto`; endpoint varken region
-  // zorunlu tutulursa tek satırlık env kurulumu boşa düşer.
+  // Uyumlu API'lerde (Cloudflare R2 vb.) imza bölgesi çoğu zaman `auto`.
+  // Region hiçbir kurulumda zorunlu değil.
   const region =
-    text(s3Raw.region) ??
-    text(process.env.JSKELET_S3_REGION) ??
-    (endpoint ? "auto" : null);
+    envText(s3Raw.region) ??
+    envText(process.env.JSKELET_S3_REGION) ??
+    "auto";
+
+  const credentials = readS3CredentialsFromEnv();
+  // `JSKELET_LOG_BUCKET` (veya S3 bucket) + credential varsa config'te
+  // `enabled: true` unutulmuş olsa bile aç. Açık `enabled: false` ezer.
+  const envWantsLogs = Boolean(
+    envText(process.env.JSKELET_LOG_BUCKET) ||
+      envText(process.env.JSKELET_S3_BUCKET),
+  );
+  const enabled =
+    s3Raw.enabled === true ||
+    (s3Raw.enabled !== false &&
+      envWantsLogs &&
+      Boolean(credentials) &&
+      Boolean(bucketPath.bucket));
 
   return {
     console: source.console !== false,
@@ -499,7 +550,7 @@ export function normalizeLogs(raw) {
       rotate: "daily",
     },
     s3: {
-      enabled: s3Raw.enabled === true,
+      enabled,
       bucket: bucketPath.bucket,
       // Yoldaki önek tek env ile klasör vermeyi mümkün kılar; yoksa config.
       prefix: bucketPath.prefix ?? configPrefix,

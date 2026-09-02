@@ -80,19 +80,31 @@ test("normalizeLogs: bucket path splits into bucket + prefix", () => {
   assert.equal(fromConfig.s3.prefix, "jskelet/logs/");
 });
 
-test("normalizeLogs: JSKELET_S3_API_URL sets endpoint and defaults region to auto", () => {
+test("normalizeLogs: JSKELET_S3_API_URL sets endpoint; region defaults to auto", () => {
   process.env.JSKELET_LOG_BUCKET = "ayberkenis/jskelet/logs";
   process.env.JSKELET_S3_API_URL =
-    "https://95b2c4d0d4558018edfad72708f1bc90.r2.cloudflarestorage.com";
+    "https://example.r2.cloudflarestorage.com";
+  process.env.JSKELET_S3_ACCESS_KEY_ID = "key";
+  process.env.JSKELET_S3_SECRET_ACCESS_KEY = "secret";
 
-  const logs = normalizeLogs({ s3: { enabled: true } });
+  const logs = normalizeLogs({});
+  assert.equal(logs.s3.enabled, true);
   assert.equal(logs.s3.bucket, "ayberkenis");
   assert.equal(logs.s3.prefix, "jskelet/logs/");
-  assert.equal(
-    logs.s3.endpoint,
-    "https://95b2c4d0d4558018edfad72708f1bc90.r2.cloudflarestorage.com",
-  );
+  assert.equal(logs.s3.endpoint, "https://example.r2.cloudflarestorage.com");
   assert.equal(logs.s3.region, "auto");
+});
+
+test("normalizeLogs: JSKELET_S3_BUCKET + KEY_PREFIX", () => {
+  process.env.JSKELET_S3_BUCKET = "ayberkenis";
+  process.env.JSKELET_S3_KEY_PREFIX = "jskelet/logs";
+  process.env.JSKELET_S3_ACCESS_KEY_ID = "key";
+  process.env.JSKELET_S3_ACCESS_SECRET = "secret";
+
+  const logs = normalizeLogs({});
+  assert.equal(logs.s3.enabled, true);
+  assert.equal(logs.s3.bucket, "ayberkenis");
+  assert.equal(logs.s3.prefix, "jskelet/logs/");
 });
 
 test("normalizeLogs: console false and file dir", () => {

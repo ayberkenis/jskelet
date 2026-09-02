@@ -768,8 +768,8 @@ mevcut davranışını korur. Açıldığında HTTP access log ile framework ola
 | `s3.enabled` | `boolean` | `false` | S3 batch PutObject sink'i |
 | `s3.bucket` | `string \| null` | `null` | Bucket ya da `bucket/prefix/…` yolu; `JSKELET_LOG_BUCKET` ezer |
 | `s3.prefix` | `string` | `"jskelet/logs/"` | Nesne anahtarı öneki (yolda verilmediyse) |
-| `s3.region` | `string \| null` | `null` | Bölge; verilmezse `JSKELET_S3_REGION`, endpoint varken `auto` |
-| `s3.endpoint` | `string \| null` | `null` | R2 / MinIO API adresi; `JSKELET_S3_API_URL` ezer |
+| `s3.region` | `string \| null` | `"auto"` | Bölge; verilmezse `JSKELET_S3_REGION`, yoksa `auto` |
+| `s3.endpoint` | `string \| null` | `null` | S3-uyumlu API adresi; `JSKELET_S3_API_URL` ezer |
 | `s3.flushIntervalMs` | `number` | `5000` | Batch flush aralığı |
 | `s3.maxBatch` | `number` | `100` | Bu kadar satırda erken flush |
 
@@ -975,12 +975,14 @@ basılmaz.
 | `JSKELET_SECRET` | `jskelet/cookies` | — | İmzalı cookie sırrı. `security.cookieSecret` verilmediğinde buradan okunur; ikisi de yoksa imzalı cookie API'si hata verir. [12](./12-panel-ve-oturum.md) |
 | `DEV_TOKEN` | `devGate`, `prewarm` | — | Ayarlıysa token taşımayan her isteğe 404 döner. Isıtma token'ı çerez olarak taşır. [09](./09-dev-araclari.md) |
 | `JSKELET_ADMIN` | `createApp` | — | Ayarlıysa yönetim panelini açar; `0` config'te açık olan paneli kapatır. Env config'i ezer, çünkü panel genelde bir arıza sırasında tek seferlik açılır. [06](./06-cache.md) |
-| `JSKELET_LOG_BUCKET` | `logs.s3` | — | S3 bucket ya da `ayberkenis/jskelet/logs` gibi `bucket/prefix` yolu; `logs.s3.bucket`'ı ezer (`JSKELET_S3_BUCKET` yedek ad) |
-| `JSKELET_S3_ACCESS_KEY_ID` | `logs.s3` | — | S3 PutObject imzası. Yoksa ve `s3.enabled` ise sink kapanır |
-| `JSKELET_S3_SECRET_ACCESS_KEY` | `logs.s3` | — | S3 imza sırrı |
-| `JSKELET_S3_SESSION_TOKEN` | `logs.s3` | — | Geçici credential'lar için isteğe bağlı |
-| `JSKELET_S3_REGION` | `logs.s3` | — | `logs.s3.region` verilmezse; endpoint varken varsayılan `auto` |
-| `JSKELET_S3_API_URL` | `logs.s3` | — | R2 / MinIO endpoint; `logs.s3.endpoint`'i ezer |
+| `JSKELET_LOG_BUCKET` | `logs.s3` | — | Log hedefi: bucket ya da `bucket/prefix` yolu. Credential ile birlikte varsa sink otomatik açılır |
+| `JSKELET_S3_BUCKET` | `logs.s3` | — | `JSKELET_LOG_BUCKET` yoksa bucket; `JSKELET_S3_KEY_PREFIX` ile birleşir |
+| `JSKELET_S3_KEY_PREFIX` | `logs.s3` | — | `JSKELET_S3_BUCKET` ile kullanılır (`bucket/prefix`) |
+| `JSKELET_S3_ACCESS_KEY_ID` | `logs.s3` | — | PutObject imzası |
+| `JSKELET_S3_SECRET_ACCESS_KEY` | `logs.s3` | — | İmza sırrı (`JSKELET_S3_ACCESS_SECRET` yedek ad) |
+| `JSKELET_S3_SESSION_TOKEN` | `logs.s3` | — | Geçici credential için isteğe bağlı |
+| `JSKELET_S3_REGION` | `logs.s3` | `auto` | Verilmezse `auto` |
+| `JSKELET_S3_API_URL` | `logs.s3` | — | S3-uyumlu endpoint; `logs.s3.endpoint`'i ezer |
 | `JSKELET_CLOUDFLARE_KEY` | Cloudflare cache yüzeyi | — | API token. Verilene kadar CDN purge'ü ve edge analitiği kapalıdır; config'teki `apiToken`'ı ezer. Token hiçbir cevapta dönmez. [06](./06-cache.md) |
 | `JSKELET_CLOUDFLARE_ZONE_ID` | Cloudflare cache yüzeyi | — | Zone kimliği. Token'la birlikte verilmedikçe hiçbir Cloudflare ucu çağrılmaz |
 | `JSKELET_CLOUDFLARE_HOSTNAME` | Cloudflare cache yüzeyi | — | Purge URL'lerinin kökü. Panel iç bir adresten açılıyorsa gerekir |
