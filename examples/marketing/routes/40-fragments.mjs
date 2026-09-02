@@ -71,10 +71,9 @@ export default function register(app) {
 
       res.status(result.status ?? 200);
       res.setHeader(cacheHeader, label);
-      res.setHeader(
-        "Cache-Control",
-        `public, max-age=0, s-maxage=${TTL}, stale-while-revalidate=60`,
-      );
+      // CDN bu demoyu saklamasın: aksi hâlde ilk MISS'in Server-Timing'i
+      // edge'de donar ve HIT/produce=0 hiç görünmez. L1 withHtmlCache yeter.
+      res.setHeader("Cache-Control", "no-store");
       writeTiming(res, label, spent, cacheHeader);
       res.type("html").send(result.html);
     } catch (error) {
