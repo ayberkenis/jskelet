@@ -60,21 +60,24 @@ async function loadDir(dir, components, origin) {
   ];
 
   for (const file of files) {
-    const relative = path.relative(dir, file).split(path.sep).join("/");
+    const isBarrel = path.basename(file) === BARREL;
+    // Kimlik mutlak yol — çoklu components kökünde göreli ad çakışmasın.
+    const fileId = isBarrel ? BARREL : file.split(path.sep).join("/");
     const module = await import(pathToFileURL(file).href);
 
     for (const [name, value] of Object.entries(module)) {
       if (name === "default") continue;
 
       const previous = origin.get(name);
-      if (previous && previous !== BARREL && previous !== relative) {
-        console.warn(
-          `[components] '${name}' is defined twice: ${previous} and ${relative} — the second one wins.`,
+      // Barrel üzerine yazmak bilinçli; iki gerçek bileşen dosyası çakışması hata.
+      if (previous && previous !== BARREL && previous !== fileId) {
+        throw new Error(
+          `[components] '${name}' is defined twice: ${previous} and ${fileId}`,
         );
       }
 
       components[name] = value;
-      origin.set(name, relative);
+      origin.set(name, fileId);
     }
   }
 }

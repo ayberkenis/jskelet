@@ -71,8 +71,34 @@ controller data → imported render(data, helpers) → HTML
 | Built-ins | `Link`, `Image`, `Icon`, `CsrfField`, `PreloadImage` |
 
 The expression language is intentionally small (access, compare, ternary,
-`.length`). No assignments or arbitrary calls — keep logic in controllers or JS
-components.
+`.length`). No assignments, object literals, or arbitrary calls — keep logic in
+controllers or JS components.
+
+#### Template or component?
+
+When moving off EJS, draw the line early:
+
+| Stay in `.jsk` | Move to a JS component |
+| --- | --- |
+| Text, conditionals, lists, prop binding | Function calls, object construction, formatting |
+| Built-in tags (`Link`, `Image`, …) | Composing HTML from several helpers |
+| Ready-made data from the controller | Upstream / error-aware UI (`LoadErrorState`) |
+
+If the template cannot write `format(x)` or `{ a: 1 }`, that is intentional: the
+work belongs in `views/components/*.js` or the controller. Prefer a clear
+component boundary over widening the expression language when complex pages
+“escape” into JS.
+
+### Editor support
+
+`extensions/vscode-jsk` is a VS Code / Cursor extension in this repo: syntax
+highlighting, language configuration, and snippets. Local install:
+
+```bash
+code --install-extension extensions/vscode-jsk
+```
+
+See the extension README for details.
 
 ### Coexistence with EJS
 
@@ -244,14 +270,20 @@ Rules:
 
 - The scan is recursive; subdirectories are covered too.
 - `default` exports are ignored — only named exports are registered.
+- The compile-time known-component set is read from **named exports in the
+  source**, not from the file basename. `sectionHead` in `ui.js` →
+  `<SectionHead />` in the template (runtime already adds a PascalCase alias
+  for camelCase exports). You do not need a stub re-export named after the
+  file.
 - `loader.js` and `index.js` do not count as component files.
 - If `views/components/index.js` exists it is loaded first as a **barrel**,
   with the lowest priority. Its only purpose is to turn `lib/` re-exports into
   template locals; the components' own files come later and silently overwrite
   it.
-- If the same name is defined in two different component files a warning is
-  printed and **the second one wins**: `[components] 'card' is defined twice:
-  a.js and b.js — the second one wins.`
+- If the same name (or the same PascalCase tag) is defined in two different
+  component files, that is an **error, not a warning**: build and server
+  startup stop with `Component 'card' is defined twice: …`. Overwriting the
+  barrel is the deliberate exception.
 - If the `views/components` directory does not exist the component registry
   stays empty; a project that uses no components works fine too.
 

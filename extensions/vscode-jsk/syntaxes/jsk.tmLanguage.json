@@ -1,0 +1,357 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "JSK",
+  "scopeName": "text.html.jsk",
+  "patterns": [
+    { "include": "#jsk-comment" },
+    { "include": "#jsk-directive" },
+    { "include": "#jsk-interpolation" },
+    { "include": "#jsk-component" },
+    { "include": "text.html.basic" }
+  ],
+  "repository": {
+    "jsk-comment": {
+      "name": "comment.block.jsk",
+      "begin": "\\{#(?!(?:if|each|include|else)\\b)",
+      "end": "#\\}",
+      "beginCaptures": {
+        "0": { "name": "punctuation.definition.comment.begin.jsk" }
+      },
+      "endCaptures": {
+        "0": { "name": "punctuation.definition.comment.end.jsk" }
+      }
+    },
+    "jsk-directive": {
+      "patterns": [
+        { "include": "#jsk-if" },
+        { "include": "#jsk-else" },
+        { "include": "#jsk-endif" },
+        { "include": "#jsk-each" },
+        { "include": "#jsk-endeach" },
+        { "include": "#jsk-include" }
+      ]
+    },
+    "jsk-if": {
+      "name": "meta.directive.if.jsk",
+      "begin": "(\\{#)(if)\\b",
+      "end": "(\\})",
+      "beginCaptures": {
+        "1": { "name": "punctuation.definition.directive.begin.jsk" },
+        "2": { "name": "keyword.control.conditional.if.jsk" }
+      },
+      "endCaptures": {
+        "1": { "name": "punctuation.definition.directive.end.jsk" }
+      },
+      "patterns": [{ "include": "#jsk-expression" }]
+    },
+    "jsk-else": {
+      "name": "meta.directive.else.jsk",
+      "match": "(\\{#)(else)(\\})",
+      "captures": {
+        "1": { "name": "punctuation.definition.directive.begin.jsk" },
+        "2": { "name": "keyword.control.conditional.else.jsk" },
+        "3": { "name": "punctuation.definition.directive.end.jsk" }
+      }
+    },
+    "jsk-endif": {
+      "name": "meta.directive.endif.jsk",
+      "match": "(\\{/)(if)(\\})",
+      "captures": {
+        "1": { "name": "punctuation.definition.directive.begin.jsk" },
+        "2": { "name": "keyword.control.conditional.endif.jsk" },
+        "3": { "name": "punctuation.definition.directive.end.jsk" }
+      }
+    },
+    "jsk-each": {
+      "name": "meta.directive.each.jsk",
+      "begin": "(\\{#)(each)\\b",
+      "end": "(\\})",
+      "beginCaptures": {
+        "1": { "name": "punctuation.definition.directive.begin.jsk" },
+        "2": { "name": "keyword.control.loop.each.jsk" }
+      },
+      "endCaptures": {
+        "1": { "name": "punctuation.definition.directive.end.jsk" }
+      },
+      "patterns": [
+        {
+          "match": "\\b(as)\\b",
+          "name": "keyword.control.as.jsk"
+        },
+        { "include": "#jsk-expression" }
+      ]
+    },
+    "jsk-endeach": {
+      "name": "meta.directive.endeach.jsk",
+      "match": "(\\{/)(each)(\\})",
+      "captures": {
+        "1": { "name": "punctuation.definition.directive.begin.jsk" },
+        "2": { "name": "keyword.control.loop.endeach.jsk" },
+        "3": { "name": "punctuation.definition.directive.end.jsk" }
+      }
+    },
+    "jsk-include": {
+      "name": "meta.directive.include.jsk",
+      "begin": "(\\{#)(include)\\b",
+      "end": "(\\})",
+      "beginCaptures": {
+        "1": { "name": "punctuation.definition.directive.begin.jsk" },
+        "2": { "name": "keyword.control.include.jsk" }
+      },
+      "endCaptures": {
+        "1": { "name": "punctuation.definition.directive.end.jsk" }
+      },
+      "patterns": [
+        {
+          "name": "string.quoted.double.jsk",
+          "begin": "\"",
+          "end": "\"",
+          "beginCaptures": {
+            "0": { "name": "punctuation.definition.string.begin.jsk" }
+          },
+          "endCaptures": {
+            "0": { "name": "punctuation.definition.string.end.jsk" }
+          }
+        },
+        {
+          "name": "string.quoted.single.jsk",
+          "begin": "'",
+          "end": "'",
+          "beginCaptures": {
+            "0": { "name": "punctuation.definition.string.begin.jsk" }
+          },
+          "endCaptures": {
+            "0": { "name": "punctuation.definition.string.end.jsk" }
+          }
+        }
+      ]
+    },
+    "jsk-interpolation": {
+      "patterns": [
+        {
+          "name": "meta.interpolation.raw.jsk",
+          "begin": "(\\{\\{\\{)",
+          "end": "(\\}\\}\\})",
+          "beginCaptures": {
+            "1": { "name": "punctuation.definition.interpolation.begin.jsk" }
+          },
+          "endCaptures": {
+            "1": { "name": "punctuation.definition.interpolation.end.jsk" }
+          },
+          "contentName": "source.js.embedded.jsk",
+          "patterns": [{ "include": "#jsk-expression" }]
+        },
+        {
+          "name": "meta.interpolation.escaped.jsk",
+          "begin": "(\\{\\{)",
+          "end": "(\\}\\})",
+          "beginCaptures": {
+            "1": { "name": "punctuation.definition.interpolation.begin.jsk" }
+          },
+          "endCaptures": {
+            "1": { "name": "punctuation.definition.interpolation.end.jsk" }
+          },
+          "contentName": "source.js.embedded.jsk",
+          "patterns": [{ "include": "#jsk-expression" }]
+        }
+      ]
+    },
+    "jsk-expression": {
+      "patterns": [
+        {
+          "name": "constant.language.boolean.jsk",
+          "match": "\\b(?:true|false|null)\\b"
+        },
+        {
+          "name": "constant.numeric.jsk",
+          "match": "\\b\\d+(?:\\.\\d+)?\\b"
+        },
+        {
+          "name": "string.quoted.double.jsk",
+          "begin": "(\")",
+          "end": "(\")",
+          "beginCaptures": {
+            "1": {
+              "name": "punctuation.definition.string.begin.jsk"
+            }
+          },
+          "endCaptures": {
+            "1": {
+              "name": "punctuation.definition.string.end.jsk"
+            }
+          },
+          "patterns": [
+            {
+              "name": "constant.character.escape.jsk",
+              "match": "\\\\."
+            }
+          ]
+        },
+        {
+          "name": "string.quoted.single.jsk",
+          "begin": "(')",
+          "end": "(')",
+          "beginCaptures": {
+            "1": {
+              "name": "punctuation.definition.string.begin.jsk punctuation.definition.string.begin.single.jsk"
+            }
+          },
+          "endCaptures": {
+            "1": {
+              "name": "punctuation.definition.string.end.jsk punctuation.definition.string.end.single.jsk"
+            }
+          },
+          "patterns": [
+            {
+              "name": "constant.character.escape.jsk",
+              "match": "\\\\."
+            }
+          ]
+        },
+        {
+          "name": "keyword.operator.ternary.jsk",
+          "match": "[?:]"
+        },
+        {
+          "name": "keyword.operator.comparison.jsk",
+          "match": "===|!==|==|!=|<=|>=|<|>"
+        },
+        {
+          "name": "keyword.operator.logical.jsk",
+          "match": "&&|\\|\\||!"
+        },
+        {
+          "name": "keyword.operator.arithmetic.jsk",
+          "match": "[+\\-*/%]"
+        },
+        {
+          "name": "punctuation.accessor.optional.jsk",
+          "match": "\\?\\."
+        },
+        {
+          "name": "punctuation.accessor.jsk",
+          "match": "\\."
+        },
+        {
+          "name": "variable.other.jsk",
+          "match": "\\b[A-Za-z_$][A-Za-z0-9_$]*\\b"
+        }
+      ]
+    },
+    "jsk-component": {
+      "patterns": [
+        {
+          "name": "meta.tag.component.jsk",
+          "begin": "(</?)([A-Z][A-Za-z0-9]*)",
+          "beginCaptures": {
+            "1": { "name": "punctuation.definition.tag.begin.jsk" },
+            "2": { "name": "entity.name.tag.component.jsk" }
+          },
+          "end": "(/?>)",
+          "endCaptures": {
+            "1": { "name": "punctuation.definition.tag.end.jsk" }
+          },
+          "patterns": [
+            { "include": "#jsk-component-attr" },
+            { "include": "#jsk-interpolation" },
+            { "include": "#jsk-comment" }
+          ]
+        }
+      ]
+    },
+    "jsk-bound-attr": {
+      "name": "meta.attribute.bound.jsk",
+      "begin": "(:)([A-Za-z_][\\w:-]*)(=)",
+      "beginCaptures": {
+        "1": { "name": "punctuation.definition.binding.jsk" },
+        "2": { "name": "entity.other.attribute-name.bound.jsk" },
+        "3": { "name": "punctuation.separator.key-value.jsk" }
+      },
+      "end": "(?=/?>|\\s)",
+      "patterns": [
+        {
+          "name": "meta.embedded.expression.jsk",
+          "begin": "\"",
+          "end": "\"",
+          "beginCaptures": {
+            "0": { "name": "punctuation.definition.string.begin.jsk" }
+          },
+          "endCaptures": {
+            "0": { "name": "punctuation.definition.string.end.jsk" }
+          },
+          "contentName": "source.js.embedded.jsk",
+          "patterns": [{ "include": "#jsk-expression" }]
+        },
+        {
+          "name": "meta.embedded.expression.jsk",
+          "begin": "'",
+          "end": "'",
+          "beginCaptures": {
+            "0": { "name": "punctuation.definition.string.begin.jsk" }
+          },
+          "endCaptures": {
+            "0": { "name": "punctuation.definition.string.end.jsk" }
+          },
+          "contentName": "source.js.embedded.jsk",
+          "patterns": [{ "include": "#jsk-expression" }]
+        }
+      ]
+    },
+    "jsk-component-attr": {
+      "patterns": [
+        { "include": "#jsk-bound-attr" },
+        {
+          "name": "meta.attribute.literal.jsk",
+          "begin": "([A-Za-z_][\\w:-]*)(=)",
+          "beginCaptures": {
+            "1": { "name": "entity.other.attribute-name.jsk" },
+            "2": { "name": "punctuation.separator.key-value.jsk" }
+          },
+          "end": "(?=/?>|\\s)",
+          "patterns": [
+            {
+              "name": "string.quoted.double.jsk",
+              "begin": "\"",
+              "end": "\"",
+              "beginCaptures": {
+                "0": { "name": "punctuation.definition.string.begin.jsk" }
+              },
+              "endCaptures": {
+                "0": { "name": "punctuation.definition.string.end.jsk" }
+              },
+              "patterns": [
+                { "include": "#jsk-interpolation" },
+                {
+                  "name": "constant.character.escape.jsk",
+                  "match": "\\\\."
+                }
+              ]
+            },
+            {
+              "name": "string.quoted.single.jsk",
+              "begin": "'",
+              "end": "'",
+              "beginCaptures": {
+                "0": { "name": "punctuation.definition.string.begin.jsk" }
+              },
+              "endCaptures": {
+                "0": { "name": "punctuation.definition.string.end.jsk" }
+              },
+              "patterns": [
+                { "include": "#jsk-interpolation" },
+                {
+                  "name": "constant.character.escape.jsk",
+                  "match": "\\\\."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "entity.other.attribute-name.boolean.jsk",
+          "match": "\\b([A-Za-z_][\\w:-]*)\\b(?!=)"
+        }
+      ]
+    }
+  }
+}

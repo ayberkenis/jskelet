@@ -158,8 +158,8 @@ export default {
           text: "Her yanıt kendi cache durumunu bir başlıkta taşır; ölçmek için ayrı bir araç gerekmez.",
         },
         {
-          tone: "bad",
-          text: "Nokta atışı geçersizleme yok: TTL ve tümünü boşaltma var.",
+          tone: "good",
+          text: "Nokta atışı geçersizleme yerleşik: invalidateHtmlCache() bir yolu, deseni veya listeyi tümünü boşaltmadan bayatlatır.",
         },
       ],
       codeLabel: "routes/10-pages.mjs",
@@ -312,7 +312,7 @@ export default {
       {
         label: "Nokta atışı geçersizleme",
         values: [
-          { text: "Eksik — yalnızca TTL ve tümünü boşaltma", tone: "bad" },
+          { text: "Yol, desen veya RegExp — invalidateHtmlCache()", tone: "good" },
           { text: "Etiket ve yol bazında destekli", tone: "good" },
           { text: "Yeniden build ya da adapter ne veriyorsa", tone: "neutral" },
           { text: "Yok", tone: "bad" },
@@ -599,7 +599,7 @@ export default {
     },
     {
       q: "Cache süreç belleğinde: birden fazla instance'ta ne olur?",
-      a: "Her instance kendi önbelleğini tutar, yani ilk ısınma her instance'ta bir kez yaşanır ve TTL sınırları birbirinden kayabilir. Isıtma bu boşluğun çoğunu açılışta kapatır. Nokta atışı geçersizleme gerekiyorsa bu model yetmez.",
+      a: "Her instance kendi L1 önbelleğini tutar, yani soğuk açılışta ısınma gerekir ve TTL sınırları kayabilir. Isıtma bu boşluğun çoğunu kapatır; isteğe bağlı Redis katmanı HTML'i paylaşır ve invalidateHtmlCache() / clearHtmlCache() çağrılarını pub/sub ile her kopyaya yayar. Nokta atışı geçersizleme her iki modelde de birinci sınıf.",
     },
     {
       q: "Build çıktısı olmadan çalışır mı?",

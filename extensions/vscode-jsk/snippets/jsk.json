@@ -1,0 +1,96 @@
+{
+  "if": {
+    "prefix": "if",
+    "body": [
+      "{#if ${1:condition}}",
+      "\t$0",
+      "{/if}"
+    ],
+    "description": "Conditional block"
+  },
+  "if-else": {
+    "prefix": "ifel",
+    "body": [
+      "{#if ${1:condition}}",
+      "\t$2",
+      "{#else}",
+      "\t$0",
+      "{/if}"
+    ],
+    "description": "Conditional block with else"
+  },
+  "each": {
+    "prefix": "each",
+    "body": [
+      "{#each ${1:items} as ${2:item}}",
+      "\t$0",
+      "{/each}"
+    ],
+    "description": "Loop over a list"
+  },
+  "each-index": {
+    "prefix": "eachi",
+    "body": [
+      "{#each ${1:items} as ${2:item}, ${3:i}}",
+      "\t$0",
+      "{/each}"
+    ],
+    "description": "Loop with index"
+  },
+  "include": {
+    "prefix": "inc",
+    "body": [
+      "{#include \"${1:partials/header}\"}$0"
+    ],
+    "description": "Include a compiled .jsk partial"
+  },
+  "interp": {
+    "prefix": "var",
+    "body": [
+      "{{ ${1:expr} }}$0"
+    ],
+    "description": "Escaped interpolation"
+  },
+  "interp-raw": {
+    "prefix": "raw",
+    "body": [
+      "{{{ ${1:trustedHtml} }}}$0"
+    ],
+    "description": "Raw HTML interpolation"
+  },
+  "comment": {
+    "prefix": "cmt",
+    "body": [
+      "{# ${1:comment} #}$0"
+    ],
+    "description": "JSK comment"
+  },
+  "component": {
+    "prefix": "comp",
+    "body": [
+      "<${1:Name} :${2:prop}=\"${3:expr}\" />$0"
+    ],
+    "description": "Self-closing component"
+  },
+  "Link": {
+    "prefix": "Link",
+    "body": [
+      "<Link href=\"${1:/}\" text=\"${2:Label}\" />$0"
+    ],
+    "description": "Built-in Link component"
+  },
+  "Image": {
+    "prefix": "Image",
+    "body": [
+      "<Image src=\"${1:path}\" alt=\"${2:}\" />$0"
+    ],
+    "description": "Built-in Image component"
+  },
+  "island": {
+    "prefix": "island",
+    "body": [
+      "<div data-island=\"${1:name}\" data-island-props='${2:{\\}}'></div>$0"
+    ],
+    "description": "Island mount point"
+  }
+}

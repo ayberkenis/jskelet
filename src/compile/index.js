@@ -11,5 +11,7 @@ export {
   discoverJskFiles,
   componentNameFromViewId,
   collectKnownComponents,
+  toComponentTag,
 } from "./resolve.js";
+export { scanNamedExports } from "./scan-exports.js";
 export { compileAll, compileSource, ensureTemplatesCompiled } from "./compile-all.js";

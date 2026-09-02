@@ -1,0 +1,98 @@
+{
+  "name": "jsk",
+  "displayName": "JSK",
+  "description": "Syntax highlighting and snippets for JSkelet .jsk templates.",
+  "version": "0.1.1",
+  "publisher": "ayberkenis",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Snippets"
+  ],
+  "keywords": [
+    "jsk",
+    "jskelet",
+    "templates",
+    "ssr"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ayberkenis/jskelet.git",
+    "directory": "extensions/vscode-jsk"
+  },
+  "homepage": "https://github.com/ayberkenis/jskelet/tree/main/extensions/vscode-jsk",
+  "bugs": {
+    "url": "https://github.com/ayberkenis/jskelet/issues"
+  },
+  "contributes": {
+    "languages": [
+      {
+        "id": "jsk",
+        "aliases": [
+          "JSK",
+          "jsk"
+        ],
+        "extensions": [
+          ".jsk"
+        ],
+        "configuration": "./language-configuration.json",
+        "icon": {
+          "light": "./icons/jsk-light.svg",
+          "dark": "./icons/jsk-dark.svg"
+        }
+      }
+    ],
+    "grammars": [
+      {
+        "language": "jsk",
+        "scopeName": "text.html.jsk",
+        "path": "./syntaxes/jsk.tmLanguage.json",
+        "embeddedLanguages": {
+          "source.js.embedded.jsk": "javascript"
+        }
+      },
+      {
+        "scopeName": "text.html.jsk.injection",
+        "path": "./syntaxes/jsk.injection.tmLanguage.json",
+        "injectTo": ["text.html.jsk"],
+        "embeddedLanguages": {
+          "source.js.embedded.jsk": "javascript"
+        }
+      }
+    ],
+    "snippets": [
+      {
+        "language": "jsk",
+        "path": "./snippets/jsk.json"
+      }
+    ],
+    "configurationDefaults": {
+      "editor.tokenColorCustomizations": {
+        "textMateRules": [
+          {
+            "scope": [
+              "string.quoted.single.jsk",
+              "source.js.embedded.jsk string.quoted.single.jsk"
+            ],
+            "settings": {
+              "foreground": "#D97706"
+            }
+          },
+          {
+            "scope": [
+              "punctuation.definition.string.begin.single.jsk",
+              "punctuation.definition.string.end.single.jsk"
+            ],
+            "settings": {
+              "foreground": "#B45309",
+              "fontStyle": "bold"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

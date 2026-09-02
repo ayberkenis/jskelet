@@ -7,6 +7,17 @@
 import fs from "node:fs";
 import path from "node:path";
 import { toPascalCase } from "./codegen.js";
+import { CompileError } from "./errors.js";
+import { scanNamedExports } from "./scan-exports.js";
+
+/**
+ * Runtime'ın camelCase → PascalCase alias'ı ile aynı kural.
+ * @param {string} name
+ * @returns {string}
+ */
+export function toComponentTag(name) {
+  return name.charAt(0).toUpperCase() + name.slice(1);
+}
 
 /**
  * @param {{ root: string, dirs: Record<string, string> }} config
@@ -106,6 +117,9 @@ export function componentNameFromViewId(viewId) {
  * Bilinen bileşen adları: JS named export'lar + derlenecek `.jsk` bileşenleri
  * + yerleşik etiketler.
  *
+ * JS tarafında dosya adı varsayılmaz; kaynak metinden `export` adları okunur.
+ * Aynı export (veya aynı PascalCase etiket) iki dosyada varsa derleme hatası.
+ *
  * @param {string[]} componentDirs
  * @param {Map<string, string>} jskFiles
  * @returns {Set<string>}
@@ -119,41 +133,76 @@ export function collectKnownComponents(componentDirs, jskFiles) {
     "PreloadImage",
   ]);
 
+  /** @type {Map<string, string>} export adı → göreli yol */
+  const byName = new Map();
+  /** @type {Map<string, string>} PascalCase etiket → göreli yol */
+  const byTag = new Map();
+
   for (const [viewId] of jskFiles) {
     const name = componentNameFromViewId(viewId);
-    if (name) known.add(name);
+    if (!name) continue;
+    known.add(name);
+    byTag.set(name, `${viewId}.jsk`);
   }
 
   for (const dir of componentDirs) {
-    collectJsComponentNames(dir, dir, known);
+    collectJsComponentNames(dir, known, byName, byTag);
   }
 
   return known;
 }
 
 /**
- * @param {string} dir
- * @param {string} root
- * @param {Set<string>} out
+ * @param {string} name
+ * @param {string} origin
+ * @param {Map<string, string>} byName
+ * @param {Map<string, string>} byTag
  */
-function collectJsComponentNames(dir, root, out) {
+function registerExportOrigin(name, origin, byName, byTag) {
+  const previousName = byName.get(name);
+  if (previousName && previousName !== origin) {
+    throw new CompileError(
+      `Component '${name}' is defined twice: ${previousName} and ${origin}`,
+    );
+  }
+  byName.set(name, origin);
+
+  const tag = toComponentTag(name);
+  const previousTag = byTag.get(tag);
+  if (previousTag && previousTag !== origin) {
+    throw new CompileError(
+      `Component '${tag}' is defined twice: ${previousTag} and ${origin}`,
+    );
+  }
+  byTag.set(tag, origin);
+}
+
+/**
+ * @param {string} dir
+ * @param {Set<string>} out
+ * @param {Map<string, string>} byName
+ * @param {Map<string, string>} byTag
+ */
+function collectJsComponentNames(dir, out, byName, byTag) {
   if (!fs.existsSync(dir)) return;
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) {
-      collectJsComponentNames(full, root, out);
+      collectJsComponentNames(full, out, byName, byTag);
       continue;
     }
     if (!entry.name.endsWith(".js")) continue;
-    if (entry.name === "loader.js") continue;
-    // Dosya adından PascalCase tahmin — export adı dosya içinde olabilir;
-    // bilinmeyen bileşen uyarısını azaltmak için her iki biçimi ekle.
-    const base = entry.name.replace(/\.js$/, "");
-    if (base === "index") continue;
-    out.add(toPascalCase(base));
-    // camelCase export'lar da yaygın: `list` → List ve list
-    out.add(base);
-    const pascal = toPascalCase(base);
-    out.add(pascal.charAt(0).toLowerCase() + pascal.slice(1));
+    if (entry.name === "loader.js" || entry.name === "index.js") continue;
+
+    // Kimlik mutlak yol: çoklu kökte iki `list.js` aynı göreli ada sahip olabilir.
+    const origin = full.split(path.sep).join("/");
+    const source = fs.readFileSync(full, "utf8");
+    const exports = scanNamedExports(source);
+
+    for (const name of exports) {
+      registerExportOrigin(name, origin, byName, byTag);
+      out.add(name);
+      out.add(toComponentTag(name));
+    }
   }
 }

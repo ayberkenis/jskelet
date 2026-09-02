@@ -27,6 +27,17 @@ one is listed under a **Breaking** heading.
 
 ### Added
 
+- VS Code / Cursor extension skeleton under `extensions/vscode-jsk`: `.jsk`
+  language id, TextMate highlighting (`{{ }}` / `{#if}` / `{#each}` /
+  components), language config, and snippets. Install from that folder or
+  launch **JSK: Extension** from the repo root. Bound attrs on HTML tags
+  (`:src="… + '/path'"`) highlight nested single-quoted strings.
+- Compile-time known components are discovered from **named exports** in
+  `views/components/**/*.js` (plus `.jsk` component files), not from the file
+  basename — so `<SectionHead />` resolves when `sectionHead` lives in
+  `ui.js` without a stub re-export. Docs cover the `.jsk` template-vs-component
+  boundary and a `{ items, error }` loader / `LoadErrorState` pattern so
+  upstream failures are not mistaken for empty data.
 - Build-time `.jsk` templates: declarative HTML-like syntax compiled to ESM
   render modules under `.jskelet/templates/` (no request-time parse, `eval`, or
   `new Function`). Coexists with EJS; compiled `.jsk` wins when both exist.
@@ -127,8 +138,14 @@ one is listed under a **Breaking** heading.
 
 ### Changed
 
+- Duplicate component named exports (or the same PascalCase tag in two files)
+  now **fail** at build and at server startup instead of warning and letting
+  the second definition win. Overwriting `components/index.js` barrel exports
+  remains allowed.
 - `examples/minimal` pages moved to `.jsk`; adds `features/demo` as a
   co-located route + view sample.
+- Marketing compare/FAQ copy no longer claims targeted invalidation is missing;
+  it points at `invalidateHtmlCache()` (and Redis pub/sub for multi-instance).
 
 - An adaptive per-host rate limit for upstream calls, `cache().upstream`. It sits
   in the `fetch` wrapper rather than in the prewarm pass, because what spends the

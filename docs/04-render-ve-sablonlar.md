@@ -70,8 +70,34 @@ controller data → import edilmiş render(data, helpers) → HTML
 | Yerleşikler | `Link`, `Image`, `Icon`, `CsrfField`, `PreloadImage` |
 
 İfade dili kasıtlı olarak dardır (erişim, karşılaştırma, ternary, `.length`).
-Atama ve rastgele fonksiyon çağrısı yok — mantık controller veya JS bileşende
-kalır.
+Atama, object literal ve rastgele fonksiyon çağrısı yok — mantık controller
+veya JS bileşende kalır.
+
+#### Şablon mu, bileşen mi?
+
+EJS’den geçerken sınırı erken çizmek işe yarar:
+
+| Burada kalsın (`.jsk`) | JS bileşene taşı |
+| --- | --- |
+| Metin, koşul, liste, prop bağlama | Fonksiyon çağrısı, nesne üretimi, biçimlendirme |
+| Yerleşik etiketler (`Link`, `Image`, …) | Birden fazla yardımcıdan HTML birleştirme |
+| Controller’dan gelen hazır veri | Upstream / hata ayırt eden UI (`LoadErrorState`) |
+
+Şablonda `format(x)` veya `{ a: 1 }` yazılamıyorsa bu bir eksik değil: o iş
+`views/components/*.js` veya controller’ındır. Karmaşık sayfalar bileşene
+kaçıyorsa ifade dilini genişletmek yerine bileşen sınırını net tutmak tercih
+edilir.
+
+### Editör desteği
+
+Repo içinde `extensions/vscode-jsk` VS Code / Cursor uzantısı vardır: sözdizimi
+renklendirme, dil yapılandırması ve snippet'ler. Yerel kurulum:
+
+```bash
+code --install-extension extensions/vscode-jsk
+```
+
+Ayrıntılar uzantı README'sinde.
 
 ### EJS ile birlikte yaşam
 
@@ -243,13 +269,18 @@ Kurallar:
 
 - Tarama özyinelemelidir; alt dizinler de kapsanır.
 - `default` export'lar yok sayılır — yalnızca named export'lar kaydedilir.
+- Compile-time bilinen bileşen listesi **dosya adından değil**, kaynak
+  metindeki named export'lardan okunur. `ui.js` içindeki `sectionHead` →
+  şablonda `<SectionHead />` (runtime zaten camelCase export'a PascalCase
+  alias ekler). Dosya adına göre stub re-export eklemeye gerek yoktur.
 - `loader.js` ve `index.js` bileşen dosyası sayılmaz.
 - `views/components/index.js` varsa **barrel** olarak, en düşük öncelikle en
   önce yüklenir. Tek amacı `lib/` yeniden ihraçlarını şablon local'i yapmak;
   bileşenlerin kendi dosyaları sonradan gelip sessizce üzerine yazar.
-- Aynı ad iki farklı bileşen dosyasında tanımlıysa uyarı basılır ve **ikincisi
-  kazanır**: `[components] 'card' is defined twice: a.js and b.js — the second
-  one wins.`
+- Aynı ad (veya aynı PascalCase etiket) iki farklı bileşen dosyasında
+  tanımlıysa **uyarı değil hata**: build ve sunucu açılışı
+  `Component 'card' is defined twice: …` ile durur. Barrel üzerine yazmak
+  bilinçli istisnadır.
 - `views/components` dizini yoksa bileşen kaydı boş kalır; bileşen kullanmayan
   bir proje de çalışır.
 

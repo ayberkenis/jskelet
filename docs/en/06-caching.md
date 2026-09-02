@@ -390,6 +390,68 @@ export async function apiGet(path) {
 }
 ```
 
+### Loader contract: empty list ≠ error
+
+Swallowing an upstream failure with `catch → []` (or `null`) looks the same as
+a wrong mapping: empty UI. Even when rate limits are logged correctly, the
+visitor sees “no data”. Widget loaders should separate the result instead of
+burying a silent `[]`:
+
+```js
+/**
+ * @returns {Promise<{ items: object[], error: Error | null }>}
+ */
+export async function loadTickerItems() {
+  try {
+    const items = await apiGet("/ticker");
+    if (!items) {
+      return { items: [], error: new Error("Upstream returned no data") };
+    }
+    return { items, error: null };
+  } catch (error) {
+    return {
+      items: [],
+      error: error instanceof Error ? error : new Error(String(error)),
+    };
+  }
+}
+```
+
+An app-level shared `LoadErrorState` (or equivalent) should render that `error`
+field so each widget does not fall back to its own empty state:
+
+```js
+// views/components/load-error-state.js
+import { esc } from "jskelet/html";
+
+/**
+ * @param {{ message?: string, title?: string }} props
+ * @returns {string}
+ */
+export function LoadErrorState({ message, title = "Could not load data" }) {
+  return `<div role="alert" data-load-error class="…">
+    <p>${esc(title)}</p>
+    ${message ? `<p>${esc(message)}</p>` : ""}
+  </div>`;
+}
+```
+
+```html
+{#if error}
+  <LoadErrorState :message="error.message" />
+{#else if items.length}
+  {#each items as item}
+    …
+  {/each}
+{#else}
+  <p>No records</p>
+{/if}
+```
+
+The framework does not ship brand-specific UI; `LoadErrorState` is an
+application component. What matters is the contract: `{ items, error }` (or
+equivalent) and separate template branches for failure vs truly empty.
+
 ### Distinguishing transient and permanent failures
 
 | State | Counts as | Result |

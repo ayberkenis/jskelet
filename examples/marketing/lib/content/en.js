@@ -165,8 +165,8 @@ export default {
           text: "Every response carries its own cache status header, so measuring needs no extra tooling.",
         },
         {
-          tone: "bad",
-          text: "There is no targeted invalidation: you get TTLs and a full flush.",
+          tone: "good",
+          text: "Targeted invalidation is built in: invalidateHtmlCache() stales a path, a pattern or a list without flushing everything.",
         },
       ],
       codeLabel: "routes/10-pages.mjs",
@@ -323,7 +323,7 @@ export default {
       {
         label: "Targeted invalidation",
         values: [
-          { text: "Missing — TTLs and a full flush only", tone: "bad" },
+          { text: "Path, pattern or RegExp via invalidateHtmlCache()", tone: "good" },
           { text: "Supported by tag and by path", tone: "good" },
           { text: "A rebuild, or whatever the adapter offers", tone: "neutral" },
           { text: "None", tone: "bad" },
@@ -610,7 +610,7 @@ export default {
     },
     {
       q: "The cache lives in process memory. What happens with multiple instances?",
-      a: "Each instance keeps its own cache, so the initial warm-up happens once per instance and TTL boundaries can drift apart. Prewarming closes most of that gap at boot. If you need targeted invalidation, this model is not enough.",
+      a: "Each instance keeps its own L1 cache, so a cold boot still needs a warm-up and TTLs can drift. Prewarming closes most of that gap; an optional Redis tier shares HTML and broadcasts invalidateHtmlCache() / clearHtmlCache() to every replica over pub/sub. Targeted invalidation itself is first-class either way.",
     },
     {
       q: "Does it run without a build?",

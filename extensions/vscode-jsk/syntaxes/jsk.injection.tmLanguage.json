@@ -1,0 +1,10 @@
+{
+  "scopeName": "text.html.jsk.injection",
+  "injectionSelector": "L:meta.tag -comment.block.jsk -meta.attribute.bound.jsk",
+  "patterns": [
+    { "include": "text.html.jsk#jsk-bound-attr" },
+    { "include": "text.html.jsk#jsk-interpolation" },
+    { "include": "text.html.jsk#jsk-comment" },
+    { "include": "text.html.jsk#jsk-directive" }
+  ]
+}

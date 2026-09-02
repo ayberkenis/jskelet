@@ -380,6 +380,68 @@ export async function apiGet(path) {
 }
 ```
 
+### Loader sözleşmesi: boş liste ≠ hata
+
+`catch → []` (veya `null`) ile yutulan bir upstream hatası, yanlış mapping ile
+aynı görünür: boş UI. Rate limit ve geçici hatalar logda doğru yönde
+işaretlense bile ziyaretçi “veri yok” sanır. Widget loader’ları sessiz
+`[]`’ye gömülmek yerine sonucu ayırsın:
+
+```js
+/**
+ * @returns {Promise<{ items: object[], error: Error | null }>}
+ */
+export async function loadTickerItems() {
+  try {
+    const items = await apiGet("/ticker");
+    if (!items) {
+      return { items: [], error: new Error("Upstream returned no data") };
+    }
+    return { items, error: null };
+  } catch (error) {
+    return {
+      items: [],
+      error: error instanceof Error ? error : new Error(String(error)),
+    };
+  }
+}
+```
+
+Uygulama tarafında ortak bir `LoadErrorState` bileşeni (veya eşdeğeri) bu
+`error` alanını göstersin; her widget kendi boş hâline düşmesin:
+
+```js
+// views/components/load-error-state.js
+import { esc } from "jskelet/html";
+
+/**
+ * @param {{ message?: string, title?: string }} props
+ * @returns {string}
+ */
+export function LoadErrorState({ message, title = "Veri yüklenemedi" }) {
+  return `<div role="alert" data-load-error class="…">
+    <p>${esc(title)}</p>
+    ${message ? `<p>${esc(message)}</p>` : ""}
+  </div>`;
+}
+```
+
+```html
+{#if error}
+  <LoadErrorState :message="error.message" />
+{#else if items.length}
+  {#each items as item}
+    …
+  {/each}
+{#else}
+  <p>Kayıt yok</p>
+{/if}
+```
+
+Framework markaya özel UI taşımaz; `LoadErrorState` uygulama bileşenidir.
+Önemli olan sözleşme: `{ items, error }` (veya eşdeğeri) ve hata ile “gerçekten
+boş”un şablonda ayrı kolları.
+
 ### Geçici ve kalıcı hata ayrımı
 
 | Durum | Sayılır | Sonuç |
