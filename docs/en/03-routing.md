@@ -400,6 +400,12 @@ Behaviour:
 - If `source` or `destination` is invalid, the rule does not drop silently; a
   warning is printed.
 
+## Config: `trailingSlash`
+
+With `trailingSlash: true`, canonical page URLs end with `/` and return **200**;
+a request without the slash is sent to the slashed form with a **308**. Details
+and exceptions: [07-configuration.md](./07-configuration.md#trailingslash).
+
 ## Config: `rewrites()`
 
 A rewrite moves a request somewhere else without changing the browser's address

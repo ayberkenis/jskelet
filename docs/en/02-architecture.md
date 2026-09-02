@@ -35,6 +35,7 @@ Request
  ├─ headers                        static cache + config headers()
  ├─ devGate                        if DEV_TOKEN is set, 404 without a token
  ├─ redirects                      config redirects(), first match wins
+ ├─ trailingSlash                  308 when config trailingSlash is true
  ├─ staticPrecompressed            .br/.gz copies produced at build (quality 11)
  ├─ express.static                 files under public/
  ├─ (dev) devtools                 only when NODE_ENV=development
@@ -60,9 +61,11 @@ position has a reason, and moving things around leads to silent breakage.
   because `express.static` answers the request first.
 - **`compression` before static.** If it came after, static files would never be
   compressed.
-- **`headers` → `devGate` → `redirects`.** The gate's 404 must come before the
-  redirects: an environment that has not gone live should not leak even its
-  redirect rules to the outside.
+- **`headers` → `devGate` → `redirects` → `trailingSlash`.** The gate's 404 must
+  come before the redirects: an environment that has not gone live should not
+  leak even its redirect rules to the outside. `trailingSlash` sits after config
+  redirects so explicit rules see the requested path first; the canonical slash
+  form is enforced as a second step.
 - **`staticPrecompressed` before `express.static`.** If there are `.br`/`.gz`
   copies produced at build time, those are served (brotli quality 11);
   otherwise the request falls through to the `static` below it and the

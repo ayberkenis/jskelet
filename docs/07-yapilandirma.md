@@ -53,6 +53,7 @@ export default {
 
   layout: "views/layout.ejs",
   routes: ["./routes/10-pages.mjs", "./routes/99-catch-all.mjs"],
+  trailingSlash: false,
 
   static: {
     extensions: [".svg", ".png", ".webp", ".avif", ".ico", ".woff2"],
@@ -212,6 +213,29 @@ Ayrıntı: [03-routing.md](./03-routing.md).
 
 ```js
 routes: ["./routes/api.js", "./routes/pages.js", "./routes/catch-all.js"]
+```
+
+## `trailingSlash`
+
+**Tip:** `boolean` — **Varsayılan:** `false`
+
+`true` iken kanonik URL'ler `/` ile biter: `/hakkinda/` doğrudan **200**
+döner; slash'sız `/hakkinda` **308** ile `/hakkinda/` adresine gider (301
+değil — metodu koruyan kalıcı yönlendirme, framework'ün diğer `permanent`
+redirect'leriyle aynı). Query string korunur.
+
+İstisnalar: kök `/`, uzantılı dosya yolları (`/robots.txt`, `/assets/app.js`)
+ve `/.well-known/**`. Bunlara slash eklenmez.
+
+`false` iken (varsayılan) slash dayatılmaz. Express non-strict eşleşme ile
+`/x` ve `/x/` ikisi de 200 olabilir — Next.js'in varsayılan "slash'ı kırp"
+davranışından bilinçli fark; mevcut siteleri kırmamak için.
+
+Açıkken şablonlardaki `href`, sitemap ve `redirects()` hedeflerini de
+slash'lı yazın; aksi hâlde tarayıcı her tıklamada ekstra bir 308 görür.
+
+```js
+trailingSlash: true
 ```
 
 ## `static`

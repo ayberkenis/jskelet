@@ -17,6 +17,7 @@ will feel familiar. The *reasons* behind the differences are in
 | `next.config.mjs` | `jskelet.config.mjs` | Same spirit, smaller surface ([07](./07-configuration.md)) |
 | `headers()` | `headers()` | Same shape: `{ source, headers: [{ key, value }] }` |
 | `redirects()` | `redirects()` | `permanent` → 308, otherwise 307; can be overridden with `statusCode` |
+| `trailingSlash` | `trailingSlash` | `true` → canonical URLs end with `/` (308); default `false` does not strip ([07](./07-configuration.md)) |
 | `rewrites()` | `rewrites()` | There are `beforeFiles` / `afterFiles` phases; no `fallback` |
 | `compress: true` | Automatic | brotli + gzip via `node:zlib` |
 | `images.deviceSizes` | `images.widths` | Build-time webp generation ([08](./08-build.md)) |

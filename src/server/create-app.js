@@ -7,7 +7,9 @@
  *   1. rewrites(beforeFiles) — statik dosyalardan da önce çalışmalı, yoksa
  *      `/assets/x.js` yolunu başka bir yere taşıyan kural işlemez.
  *   2. compression — static'ten önce; sonra gelirse statik dosyalar sıkışmaz.
- *   3. headers → devGate → redirects — gate'in 404'ü redirect'ten önce.
+ *   3. headers → devGate → redirects → trailingSlash — gate'in 404'ü
+ *      redirect'ten önce; trailingSlash config redirects'ten sonra, böylece
+ *      açık kurallar istenen yolu önce görür.
  *   4. staticPrecompressed → express.static — build'de üretilmiş `.br`/`.gz`
  *      kopyalar varsa onlar servis edilir (kalite 11), yoksa istek altındaki
  *      static'e düşer ve middleware anında sıkıştırır (kalite 5).
@@ -29,6 +31,7 @@ import { csrf } from "./middleware/csrf.js";
 import { staticPrecompressed } from "./middleware/static-precompressed.js";
 import { devGate } from "./middleware/dev-gate.js";
 import { redirects } from "./middleware/redirects.js";
+import { trailingSlash } from "./middleware/trailing-slash.js";
 import { configRewrites } from "./middleware/upstream-proxy.js";
 import { getConfig, loadConfig } from "../config/index.js";
 import { IMMUTABLE_CACHE } from "../config/defaults.js";
@@ -85,6 +88,7 @@ export async function createApp(options = {}) {
   app.use(headersMiddleware());
   app.use(devGate());
   app.use(redirects());
+  app.use(trailingSlash());
 
   app.use(staticPrecompressed(config.dirs.public));
   app.use(

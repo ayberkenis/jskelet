@@ -57,6 +57,7 @@ export default {
 
   layout: "views/layout.ejs",
   routes: ["./routes/10-pages.mjs", "./routes/99-catch-all.mjs"],
+  trailingSlash: false,
 
   static: {
     extensions: [".svg", ".png", ".webp", ".avif", ".ico", ".woff2"],
@@ -217,6 +218,29 @@ alphabetically and recursively. Details: [03-routing.md](./03-routing.md).
 
 ```js
 routes: ["./routes/api.js", "./routes/pages.js", "./routes/catch-all.js"]
+```
+
+## `trailingSlash`
+
+**Type:** `boolean` — **Default:** `false`
+
+When `true`, canonical URLs end with `/`: `/about/` returns **200** directly;
+bare `/about` is sent to `/about/` with a **308** (not 301 — a permanent
+redirect that preserves the method, same as the framework's other `permanent`
+redirects). The query string is kept.
+
+Exceptions: the root `/`, paths with a file extension (`/robots.txt`,
+`/assets/app.js`) and `/.well-known/**`. Those do not get a slash appended.
+
+When `false` (the default) no slash is enforced. Express non-strict matching may
+serve both `/x` and `/x/` as 200 — a deliberate difference from Next.js's
+default "strip the slash" behaviour, so existing sites are not broken.
+
+With the option on, write `href`s, sitemap entries and `redirects()` destinations
+with a trailing slash too; otherwise every click pays an extra 308.
+
+```js
+trailingSlash: true
 ```
 
 ## `static`

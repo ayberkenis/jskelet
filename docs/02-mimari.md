@@ -35,6 +35,7 @@ JSkelet bu gözlemi mimarinin merkezine alır:
  ├─ headers                        statik cache + config headers()
  ├─ devGate                        DEV_TOKEN varsa token yoksa 404
  ├─ redirects                      config redirects(), ilk eşleşen kazanır
+ ├─ trailingSlash                  config trailingSlash: true ise 308
  ├─ staticPrecompressed            build'de üretilmiş .br/.gz kopyalar (kalite 11)
  ├─ express.static                 public/ altındaki dosyalar
  ├─ (dev) devtools                 yalnızca NODE_ENV=development
@@ -60,9 +61,11 @@ sebebi var ve yer değiştirmek sessiz bozulmalara yol açıyor.
   `express.static` isteği önce yanıtlar.
 - **`compression`, static'ten önce.** Sonra gelirse statik dosyalar hiç
   sıkışmaz.
-- **`headers` → `devGate` → `redirects`.** Gate'in 404'ü redirect'ten önce
-  gelmeli: yayına açılmamış bir ortam, yönlendirme kurallarını bile dışarıya
-  sızdırmamalı.
+- **`headers` → `devGate` → `redirects` → `trailingSlash`.** Gate'in 404'ü
+  redirect'ten önce gelmeli: yayına açılmamış bir ortam, yönlendirme kurallarını
+  bile dışarıya sızdırmamalı. `trailingSlash` config redirects'ten sonra durur,
+  böylece açık kurallar istenen yolu önce görür; kanonik slash biçimi ikinci
+  adımda dayatılır.
 - **`staticPrecompressed`, `express.static`ten önce.** Build'de üretilmiş
   `.br`/`.gz` kopyalar varsa onlar servis edilir (brotli kalite 11); yoksa
   istek altındaki `static`e düşer ve middleware anında sıkıştırır (kalite 5).

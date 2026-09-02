@@ -16,6 +16,7 @@ alt kümesine benzetildi — `next.config` sözdizimi, Metadata API, `notFound()
 | `next.config.mjs` | `jskelet.config.mjs` | Aynı ruh, daha küçük yüzey ([07](./07-yapilandirma.md)) |
 | `headers()` | `headers()` | Aynı şekil: `{ source, headers: [{ key, value }] }` |
 | `redirects()` | `redirects()` | `permanent` → 308, aksi hâlde 307; `statusCode` ile ezilebilir |
+| `trailingSlash` | `trailingSlash` | `true` → kanonik URL `/` ile biter (308); varsayılan `false` slash kırpmaz ([07](./07-yapilandirma.md)) |
 | `rewrites()` | `rewrites()` | `beforeFiles` / `afterFiles` fazları var; `fallback` yok |
 | `compress: true` | Otomatik | `node:zlib` ile brotli + gzip |
 | `images.deviceSizes` | `images.widths` | Build zamanı webp üretimi ([08](./08-build.md)) |

@@ -104,6 +104,7 @@ const CONFIG_FILE = "jskelet.config.mjs";
  * @property {Record<string, Function>} hooks
  * @property {string} layout Layout `.ejs` dosyasının mutlak yolu.
  * @property {string[] | null} routes Açık route modülü listesi.
+ * @property {boolean} trailingSlash URL'ler `/` ile bitsin mi (Next `trailingSlash`).
  * @property {{ extensions: Set<string>, prefixes: string[] }} static
  * @property {string[]} devGateBypass
  * @property {string[]} preconnect
@@ -718,6 +719,11 @@ export async function loadConfig(options = {}) {
     hooks: source.hooks ?? {},
     layout: resolveLayout(dirs, source.layout),
     routes: Array.isArray(source.routes) ? source.routes : null,
+    // Varsayılan kapalı: açıkken `/hakkinda` → 308 `/hakkinda/` ve kanonik
+    // yanıt 200'dir. Kapalıyken slash dayatılmaz — Express'in non-strict
+    // eşleşmesi her iki biçimi de 200 ile servis eder (Next'in varsayılan
+    // "slash'ı kırp" davranışından bilinçli fark).
+    trailingSlash: source.trailingSlash === true,
     static: {
       extensions: new Set(source.static?.extensions ?? DEFAULT_STATIC.extensions),
       prefixes: source.static?.prefixes ?? DEFAULT_STATIC.prefixes,

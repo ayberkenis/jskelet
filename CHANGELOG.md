@@ -18,6 +18,11 @@ one is listed under a **Breaking** heading.
 
 ### Added
 
+- `trailingSlash` in `jskelet.config.mjs` (default `false`). When `true`,
+  canonical page URLs end with `/` and return 200; a request without the slash
+  is sent to the slashed form with a 308 (not 301). File URLs and
+  `/.well-known/**` are left alone. When `false`, no slash is enforced — unlike
+  Next.js, the default does not strip trailing slashes.
 - `cache().query`, a pattern → allowlist mapping that decides which query
   parameters belong to the HTML cache key. An allowlist caches one entry per
   distinct value of the listed parameters and ignores the rest, so every

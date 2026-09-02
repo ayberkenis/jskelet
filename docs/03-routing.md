@@ -388,6 +388,12 @@ Davranış:
   için 301.
 - `source` ya da `destination` geçersizse kural sessizce düşmez, uyarı basılır.
 
+## Config: `trailingSlash`
+
+`trailingSlash: true` iken kanonik sayfa URL'leri `/` ile biter ve **200**
+döner; slash'sız istek **308** ile slash'lıya gider. Ayrıntı ve istisnalar:
+[07-yapilandirma.md](./07-yapilandirma.md#trailingslash).
+
 ## Config: `rewrites()`
 
 Rewrite, tarayıcının adres çubuğunu değiştirmeden isteği başka bir yere taşır.
