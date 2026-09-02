@@ -10,7 +10,8 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "jskelet": "file:../.."
+    "jskelet": "file:../..",
+    "motion": "^13.2.0"
   },
   "devDependencies": {
     "@phosphor-icons/core": "^2.1.1",

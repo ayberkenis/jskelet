@@ -14,6 +14,7 @@ registerAll({
   "changelog-jump": () => import("../islands/changelog-jump.js"),
   bars: () => import("../islands/bars.js"),
   latency: () => import("../islands/latency.js"),
+  "ops-story": () => import("../islands/ops-story.js"),
 });
 
 start();

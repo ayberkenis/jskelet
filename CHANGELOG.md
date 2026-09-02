@@ -27,6 +27,9 @@ one is listed under a **Breaking** heading.
 
 ### Added
 
+- Marketing homepage ops storyboard: Redis L2, `/_jskelet/admin` panel mock and
+  Cloudflare purge flow, with tabbed visual scenes animated by the vanilla
+  `motion` API (Framer Motion’s non-React package) via an `ops-story` island.
 - VS Code / Cursor extension skeleton under `extensions/vscode-jsk`: `.jsk`
   language id, TextMate highlighting (`{{ }}` / `{#if}` / `{#each}` /
   components), language config, and snippets. Install from that folder or

@@ -385,6 +385,328 @@ html.dark {
 }
 
 /**
+ * Ops hikâyesi (Redis / admin / Cloudflare). Koyu bant: ana sayfada cache
+ * anlatımından sonra gelen görsel sahne; metin her zaman açık renkte.
+ */
+.ops-aurora {
+  background:
+    radial-gradient(ellipse 70% 50% at 15% 20%, rgb(34 184 199 / 0.28), transparent 55%),
+    radial-gradient(ellipse 55% 45% at 85% 15%, rgb(56 189 248 / 0.18), transparent 50%),
+    radial-gradient(ellipse 50% 40% at 50% 100%, rgb(99 102 241 / 0.16), transparent 55%);
+}
+
+.ops-head h2 {
+  color: white;
+}
+
+.ops-head [class*="text-cyan"] {
+  color: rgb(103 232 249);
+}
+
+.ops-head > div > p:last-of-type {
+  color: rgb(203 213 225);
+}
+
+.ops-head .bg-cyan-500,
+.ops-head [class*="bg-cyan"] {
+  background-color: rgb(34 184 199);
+}
+
+.ops-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.ops-tab {
+  border-radius: 9999px;
+  border: 1px solid rgb(255 255 255 / 0.12);
+  background: rgb(255 255 255 / 0.04);
+  padding: 0.55rem 1rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: rgb(203 213 225);
+  transition:
+    background 180ms ease,
+    border-color 180ms ease,
+    color 180ms ease;
+}
+
+.ops-tab:hover {
+  border-color: rgb(34 184 199 / 0.45);
+  color: white;
+}
+
+.ops-tab.is-active {
+  border-color: rgb(34 184 199 / 0.55);
+  background: rgb(34 184 199 / 0.18);
+  color: white;
+}
+
+.ops-panel-story h3 {
+  color: white;
+}
+
+.ops-tiers {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 0.75rem;
+}
+
+.ops-tier {
+  display: flex;
+  min-width: 8.5rem;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.25rem;
+  border-radius: 1.25rem;
+  border-width: 1px;
+  padding: 1.1rem 1.15rem;
+}
+
+.ops-tier-title {
+  font-family: var(--font-mono);
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: white;
+}
+
+.ops-tier-sub {
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgb(148 163 184);
+}
+
+.ops-pipe {
+  position: relative;
+  display: flex;
+  width: 2.5rem;
+  flex-shrink: 0;
+  align-items: center;
+  align-self: center;
+  overflow: hidden;
+}
+
+.ops-pipe::before {
+  content: "";
+  display: block;
+  height: 2px;
+  width: 100%;
+  background: linear-gradient(90deg, rgb(34 184 199 / 0.15), rgb(56 189 248 / 0.7), rgb(34 184 199 / 0.15));
+}
+
+.ops-packet {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  height: 0.55rem;
+  width: 0.55rem;
+  translate: 0 -50%;
+  border-radius: 9999px;
+  background: rgb(125 211 252);
+  box-shadow: 0 0 12px rgb(56 189 248 / 0.85);
+}
+
+.ops-panel {
+  overflow: hidden;
+  border-radius: 1.25rem;
+  border: 1px solid rgb(255 255 255 / 0.1);
+  background: rgb(9 13 29 / 0.92);
+  box-shadow: 0 24px 60px rgb(0 0 0 / 0.35);
+}
+
+.ops-panel-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  border-bottom: 1px solid rgb(255 255 255 / 0.08);
+  padding: 0.7rem 0.9rem;
+}
+
+.ops-dot {
+  display: inline-block;
+  height: 0.45rem;
+  width: 0.45rem;
+  border-radius: 9999px;
+}
+
+.ops-panel-body {
+  display: grid;
+  gap: 0;
+}
+
+@media (min-width: 768px) {
+  .ops-panel-body {
+    grid-template-columns: 9.5rem 1fr;
+  }
+}
+
+.ops-panel-nav {
+  display: flex;
+  flex-direction: row;
+  gap: 0.25rem;
+  overflow-x: auto;
+  border-bottom: 1px solid rgb(255 255 255 / 0.08);
+  padding: 0.65rem;
+}
+
+@media (min-width: 768px) {
+  .ops-panel-nav {
+    flex-direction: column;
+    border-right: 1px solid rgb(255 255 255 / 0.08);
+    border-bottom: 0;
+  }
+}
+
+.ops-panel-link {
+  border-radius: 0.65rem;
+  padding: 0.45rem 0.65rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: rgb(148 163 184);
+  white-space: nowrap;
+}
+
+.ops-panel-link.is-active {
+  background: rgb(34 184 199 / 0.14);
+  color: rgb(165 243 252);
+}
+
+.ops-panel-main {
+  display: grid;
+  gap: 0.85rem;
+  padding: 0.85rem;
+}
+
+.ops-panel-cards {
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (min-width: 640px) {
+  .ops-panel-cards {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.ops-stat {
+  border-radius: 0.9rem;
+  border: 1px solid rgb(255 255 255 / 0.08);
+  background: rgb(255 255 255 / 0.03);
+  padding: 0.7rem 0.75rem;
+}
+
+.ops-log {
+  display: grid;
+  gap: 0.35rem;
+  border-radius: 0.9rem;
+  border: 1px solid rgb(255 255 255 / 0.08);
+  background: rgb(0 0 0 / 0.25);
+  padding: 0.55rem 0.65rem;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+}
+
+.ops-log-row {
+  display: grid;
+  grid-template-columns: 3.2rem minmax(0, 1fr) 3.2rem 2.4rem;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.ops-flow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 0.55rem;
+}
+
+.ops-flow-step {
+  display: flex;
+  min-width: 7.5rem;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.2rem;
+  border-radius: 1rem;
+  border: 1px solid rgb(255 255 255 / 0.1);
+  background: rgb(255 255 255 / 0.04);
+  padding: 0.9rem 0.95rem;
+}
+
+.ops-flow-index {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: rgb(34 184 199);
+}
+
+.ops-flow-label {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: white;
+}
+
+.ops-flow-detail {
+  font-size: 0.75rem;
+  color: rgb(148 163 184);
+}
+
+.ops-flow-arrow {
+  display: flex;
+  align-items: center;
+  align-self: center;
+  font-size: 1.35rem;
+  color: rgb(56 189 248);
+}
+
+.ops-purge {
+  margin-top: 1.1rem;
+  display: grid;
+  gap: 0.55rem;
+}
+
+.ops-purge-track {
+  position: relative;
+  height: 0.35rem;
+  overflow: hidden;
+  border-radius: 9999px;
+  background: rgb(255 255 255 / 0.08);
+}
+
+.ops-purge-beam {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 35%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, transparent, rgb(56 189 248), transparent);
+}
+
+.ops-story .rounded-xl {
+  border-color: rgb(255 255 255 / 0.1);
+  background: rgb(255 255 255 / 0.04);
+}
+
+.ops-story .rounded-xl p.text-slate-500,
+.ops-story .rounded-xl p.text-slate-900 {
+  color: rgb(148 163 184);
+}
+
+.ops-story .rounded-xl p.font-semibold {
+  color: white;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ops-packet,
+  .ops-purge-beam {
+    display: none;
+  }
+}
+
+/**
  * Sayfa geçişi. Varsayılan davranış tüm belgeyi tek parça olarak çapraz
  * geçirmek, yani gezinme boyunca hiç değişmeyen header ve footer da titriyor.
  * Bu ikisine bir ad vermek onları kendi grubuna alır; tarayıcı aynı adı iki

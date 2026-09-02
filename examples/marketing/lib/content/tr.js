@@ -478,7 +478,7 @@ export default {
       "SEO'nun gelir kalemi olduğu her sayfa",
     ],
     bad: [
-      "Dashboard ve yönetim panelleri",
+      "Ziyaretçiye açık dashboard ve uygulama arayüzleri",
       "Editör benzeri, durum ağırlıklı arayüzler",
       "Her oturum açan kullanıcıya göre değişen sayfalar",
       "Saniyede güncellenen gerçek zamanlı ekranlar",

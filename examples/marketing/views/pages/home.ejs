@@ -181,6 +181,23 @@
   </div>
 </section>
 
+<section class="relative isolate overflow-hidden border-y border-slate-200 bg-slate-950 py-16 text-white sm:py-24 dark:border-white/10">
+  <div class="ops-aurora pointer-events-none absolute inset-0 -z-10" aria-hidden="true"></div>
+  <div class="wrapper">
+    <div class="ops-head max-w-3xl">
+      <%- sectionHead({
+        eyebrow: t.home.ops.eyebrow,
+        title: t.home.ops.title,
+        lead: t.home.ops.lead,
+      }) %>
+    </div>
+
+    <div class="mt-10">
+      <%- opsStory(t.home.ops) %>
+    </div>
+  </div>
+</section>
+
 <section class="border-t border-slate-200 py-16 sm:py-20 dark:border-white/10">
   <div class="wrapper">
     <%- sectionHead(t.home.fit) %>

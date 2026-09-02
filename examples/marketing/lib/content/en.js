@@ -489,7 +489,7 @@ export default {
       "Any page where SEO is a revenue line",
     ],
     bad: [
-      "Dashboards and admin panels",
+      "Visitor-facing dashboards and app UIs",
       "Editor-like, state-heavy interfaces",
       "Pages that change with every signed-in user",
       "Real-time screens that update every second",
