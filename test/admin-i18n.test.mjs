@@ -1,5 +1,5 @@
 /**
- * Panel sözlüğü.
+ * Admin panel sözlüğü.
  *
  * Elle yazılmış bir sözlükte iki hata sessizce panelde görünüyor: bir dilde
  * eksik kalan anahtar (metin yerine anahtarın kendisi çıkar) ve şablonda geçip
@@ -10,14 +10,14 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
-import { MESSAGES, t } from "../src/client/cache-panel/i18n.js";
+import { MESSAGES, t } from "../src/client/admin/i18n.js";
 
 const PANEL_DIR = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
   "..",
   "src",
   "client",
-  "cache-panel",
+  "admin",
 );
 
 /**
@@ -76,10 +76,8 @@ test("keys used from the client script exist", () => {
 });
 
 test("server action codes have a message in both languages", () => {
-  // Sunucu metin değil kod dönüyor; kodun karşılığı yoksa panel kullanıcıya
-  // `msg.cf.purgedUrls` gibi bir dize gösterir.
   const source = fs.readFileSync(
-    path.join(PANEL_DIR, "..", "..", "server", "cache-panel.js"),
+    path.join(PANEL_DIR, "..", "..", "server", "admin", "actions.js"),
     "utf8",
   );
   const codes = [...source.matchAll(/code: "([\w.]+)"/g)].map((match) => match[1]);
@@ -96,7 +94,5 @@ test("server action codes have a message in both languages", () => {
 test("placeholders are filled and unknown keys fall back to themselves", () => {
   assert.equal(t("card.limit", { count: 500 }), "limit 500");
   assert.equal(t("entries.shown", { total: 7 }), "7 shown");
-  // Bilinmeyen anahtar boş metin değil, anahtarın kendisi: eksik çeviri
-  // panelde görünür olmalı, sessizce kaybolmamalı.
   assert.equal(t("nope.missing"), "nope.missing");
 });

@@ -752,33 +752,38 @@ redis: {
 }
 ```
 
-### `cache().panel`
+### `admin()`
 
-Önbellek yönetim paneli. Bellek içi kademenin ve Redis kademesinin durumunu
-gösterir; hedefli invalidation, tek girdi silme ve ısıtma tetikler.
+Framework yönetim paneli (`/_jskelet/admin`). Bellek içi / Redis / Cloudflare
+önbelleğini yönetir; route ve view envanteri ile canlı log kuyruğu sunar.
 
 Ortama bakmaz: `enabled` verilmedikçe **hiç mount edilmez** ve yol da yoktur.
 Açıkken production'da da çalışır — asıl sorular ("bu sayfa neden bayat",
-"webhook purge'ü geçti mi") orada soruluyor.
+"webhook purge'ü geçti mi") orada soruluyor. `cache()` bölümünden ayrıdır.
 
 | Alan | Tip | Varsayılan | Anlamı |
 | --- | --- | --- | --- |
-| `enabled` | `boolean` | `false` | Yalnızca açıkça `true` verildiğinde açılır (`JSKELET_CACHE_PANEL` ezer) |
-| `basePath` | `string` | `"/_jskelet/cache"` | Panelin kökü |
+| `enabled` | `boolean` | `false` | Yalnızca açıkça `true` verildiğinde açılır (`JSKELET_ADMIN` ezer) |
+| `basePath` | `string` | `"/_jskelet/admin"` | Panelin kökü |
+| `allowIps` | `string[]` | `[]` | Exact IP veya CIDR; boş = kısıt yok. Listede olmayan her istek 404 |
+| `blockBots` | `boolean` | `true` | Bilinen crawler UA'ları 404 |
 | `banAttempts` | `number` | `3` | Kaç başarısız denemeden sonra IP yasaklanır |
 | `banHours` | `number` | `24` | Yasağın süresi |
 | `sessionHours` | `number` | `12` | Oturum çerezinin ömrü |
+| `logSize` | `number` | `500` | Canlı log ring boyutu |
 
-Şifre **her süreç başlangıcında** üretilir ve yalnızca sunucu logunda görünür:
+Şifre **her süreç başlangıcında** üretilir ve yalnızca sunucu logundaki
+`ADMIN` kutusunda görünür. Yasaklı ve yetkisiz her cevap `404`'tür. Kullanım
+ve ekran ayrıntıları: [06-cache.md](./06-cache.md).
 
+```js
+admin() {
+  return {
+    enabled: process.env.JSKELET_ADMIN === "1",
+    allowIps: ["203.0.113.10", "10.0.0.0/8"],
+  };
+}
 ```
-[cache-panel] http://localhost:3000/_jskelet/cache — password for this run: 3f9c…
-```
-
-Kalıcı bir sır (config alanı ya da env) tutulmaz; sızması önbelleği boşaltma
-yetkisi demek ve her deploy eski erişimi kendiliğinden iptal etmeli. Yasaklı ve
-yetkisiz her cevap `404`'tür. Kullanım ve ekran ayrıntıları:
-[06-cache.md](./06-cache.md).
 
 ### `cache().cloudflare`
 
@@ -803,12 +808,6 @@ Zone bağlı değilse panel bir uyarı değil kurulum önerisi gösterir; Cloudf
 hata dönerse ilgili bölüm hatayı yazar ve panelin kalanı çalışmaya devam eder.
 Neyin sorulabildiği — özellikle "bu sayfa kaç edge'de cache'li" sorusunun neden
 tam cevabı olmadığı — [06-cache.md](./06-cache.md) içinde.
-
-```js
-panel: {
-  enabled: process.env.CACHE_PANEL === "1",
-}
-```
 
 ### `cache().prewarm`
 
@@ -933,7 +932,7 @@ basılmaz.
 | `HOST` | `startServer` | `::` | Bağlanılacak arayüz. Varsayılan çift yığın dinler (IPv6 + IPv4); IPv6 yoksa `0.0.0.0`'a düşer |
 | `JSKELET_SECRET` | `jskelet/cookies` | — | İmzalı cookie sırrı. `security.cookieSecret` verilmediğinde buradan okunur; ikisi de yoksa imzalı cookie API'si hata verir. [12](./12-panel-ve-oturum.md) |
 | `DEV_TOKEN` | `devGate`, `prewarm` | — | Ayarlıysa token taşımayan her isteğe 404 döner. Isıtma token'ı çerez olarak taşır. [09](./09-dev-araclari.md) |
-| `JSKELET_CACHE_PANEL` | `createApp` | — | Ayarlıysa önbellek panelini açar; `0` config'te açık olan paneli kapatır. Env config'i ezer, çünkü panel genelde bir arıza sırasında tek seferlik açılır. [06](./06-cache.md) |
+| `JSKELET_ADMIN` | `createApp` | — | Ayarlıysa yönetim panelini açar; `0` config'te açık olan paneli kapatır. Env config'i ezer, çünkü panel genelde bir arıza sırasında tek seferlik açılır. [06](./06-cache.md) |
 | `JSKELET_CLOUDFLARE_KEY` | Cloudflare cache yüzeyi | — | API token. Verilene kadar CDN purge'ü ve edge analitiği kapalıdır; config'teki `apiToken`'ı ezer. Token hiçbir cevapta dönmez. [06](./06-cache.md) |
 | `JSKELET_CLOUDFLARE_ZONE_ID` | Cloudflare cache yüzeyi | — | Zone kimliği. Token'la birlikte verilmedikçe hiçbir Cloudflare ucu çağrılmaz |
 | `JSKELET_CLOUDFLARE_HOSTNAME` | Cloudflare cache yüzeyi | — | Purge URL'lerinin kökü. Panel iç bir adresten açılıyorsa gerekir |

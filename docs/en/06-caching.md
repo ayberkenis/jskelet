@@ -786,13 +786,23 @@ the dev overlay: the overlay only exists while `NODE_ENV=development`, while the
 panel does not look at the environment — "why is this page stale", "did the
 webhook purge land", "is Redis actually connected" are production questions.
 
+The panel is enabled with top-level `admin()` (not inside `cache()`) at
+`/_jskelet/admin`, with Overview, Cache, Routes, Views, Logs and System pages.
+The Cache page carries the same operations as the former single-page panel.
+
 ```js
 // jskelet.config.mjs
 export default {
+  admin() {
+    return {
+      enabled: process.env.JSKELET_ADMIN === "1",
+      allowIps: ["10.0.0.0/8"], // empty = no IP restriction
+      blockBots: true,
+    };
+  },
   cache() {
     return {
       html: { "/news/:slug": 300 },
-      panel: { enabled: process.env.CACHE_PANEL === "1" },
     };
   },
 };
@@ -800,49 +810,38 @@ export default {
 
 Without `enabled` **nothing is mounted**: the path does not exist, the module is
 never loaded and it costs the production process nothing. The environment
-variable (`JSKELET_CACHE_PANEL=1`) overrides the config, because the panel is
+variable (`JSKELET_ADMIN=1`) overrides the config, because the panel is
 usually opened once during an incident and editing the config file and
 redeploying is the last thing you want at that moment.
 
-When the panel is on, the server log prints the password:
-
-```
-[cache-panel] http://localhost:3000/_jskelet/cache — password for this run: 3f9c…
-```
+When the panel is on, the server log prints the password in an `ADMIN` box at
+`http://localhost:3000/_jskelet/admin`.
 
 ### Access and hardening
 
 - **The password is regenerated on every process start** (32 hex characters) and
-  only ever appears in the log. There is no persistent secret to leak: leaking
-  one means handing out the right to flush the cache, and a deploy should revoke
-  old access on its own.
-- **The password is not accepted in the query string,** so access logs, browser
-  history and the `Referer` header never carry it. Sign-in goes through the form.
+  only ever appears in the log. There is no persistent secret to leak.
+- **The password is not accepted in the query string.**
+- **`allowIps`** (exact IP or CIDR), when set, returns `404` for every request
+  outside the list — including the login page.
+- **`blockBots`** (default `true`) rejects known crawler UAs with `404`.
 - **Three failed attempts ban the IP for 24 hours** (`banAttempts`, `banHours`).
-  Requests without a session count just like a wrong password; a successful
-  sign-in resets the counter.
-- **Banned and unauthorised requests get a `404`.** A 401 or 403 confirms the
-  panel exists; a 404 behaves as if it never did. The rest of the site is
-  untouched.
-- **Nothing is indexable:** every response carries `X-Robots-Tag: noindex,
-  nofollow, noarchive, nosnippet`, `Cache-Control: no-store` and
-  `Referrer-Policy: no-referrer`. The path is also exempt from prewarming and
-  from navigation speculation.
-- Actions require an `X-JSkelet-Cache-Panel` header — a header a cross-site form
-  cannot send, which is the panel's own CSRF brake.
-- Sessions and ban counters live in process memory; persisting them to disk
-  would be the wrong trade for a panel whose password changes on every restart.
+- **Banned and unauthorised requests get a `404`.**
+- **Nothing is indexable:** `X-Robots-Tag`, `Cache-Control: no-store`,
+  `Referrer-Policy: no-referrer`; exempt from prewarming and navigation speculation.
+- Actions require an `X-JSkelet-Admin` header — the panel's own CSRF brake.
+- Sessions and ban counters live in process memory.
 
 ### What the panel shows
 
 | Area | Contents |
 | --- | --- |
-| Top bar | Version, environment, pid, uptime, RSS and the language picker (Turkish / English) |
-| Cards | HTML entry count and limit, HTML bytes in memory, stale entry count, data entry count, Redis state (`connected` / `bypassed` / `off`), prewarm progress |
-| Shared tier | **Where** the connection points (address, TLS, database), the key prefix and `namespace`, the `buildId`, which kinds are shared, the state of compressed bodies and the purge broadcast, the command timeout and the error count. When it is off, a Redis recommendation with an install snippet takes its place. |
-| Cloudflare | Zone, plan, cache related zone settings, how long development mode has left, Tiered Cache / Cache Reserve state and the cache hit ratio. When no zone is connected, a setup snippet takes its place. |
-| Host | The machine's memory usage and how full the disk holding the project is |
-| Entry list | HTML: path (opens in a new tab), fresh/stale, size, status code, remaining TTL, dependency count, precompressed bodies. Data: key (click to copy), fresh/stale, remaining TTL |
+| Overview | HTML/data/Redis/prewarm cards and upstream limiter summary |
+| Cache | Shared tier, Cloudflare, actions, entry list (former panel) |
+| Routes | Express path/method inventory, route modules, last-request summary |
+| Views | Template inventory under `views/` |
+| Logs | Live SSE queue with method/status/cache/kind/path and text filters |
+| System | Host RAM / disk |
 
 The list is **filtered by key** and the filter runs on the server: a data cache
 can hold tens of thousands of keys. At most 500 rows come back per request and

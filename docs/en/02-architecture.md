@@ -71,6 +71,9 @@ position has a reason, and moving things around leads to silent breakage.
   otherwise the request falls through to the `static` below it and the
   middleware compresses on the fly (quality 5). Recompressing a hashed,
   `immutable` file on every request is wasted CPU.
+- **Admin panel** (when `admin().enabled` / `JSKELET_ADMIN`): after static,
+  before body parsers and routes. Carries its own body parsers so the app
+  cannot shadow the path. When off, the module is never loaded.
 - **Body parsers after static.** Image requests should not pay the cost of body
   parsing.
 - **`rewrites(afterFiles)` after static has been tried and before pages.** The

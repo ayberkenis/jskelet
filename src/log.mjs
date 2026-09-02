@@ -253,6 +253,14 @@ export function event({ symbol = symbols.ok, scope, message, note, time = null }
     `${message}${note ? `  ${c.dim(note)}` : ""}${padding}` +
     `${c.gray((time == null ? "" : ms(time)).padStart(TIME))}\n`,
   );
+
+  emitLog({
+    kind: "event",
+    scope,
+    message,
+    note: note ?? null,
+    ms: time ?? null,
+  });
 }
 
 /**
@@ -271,6 +279,15 @@ export function http(info) {
     `${tint(String(info.status))} ${c.gray(ms(info.ms).padStart(TIME))}` +
     `${info.cache === "HIT" ? ` ${c.dim("cached")}` : ""}\n`,
   );
+
+  emitLog({
+    kind: "http",
+    method: info.method,
+    url: info.url,
+    status: info.status,
+    ms: info.ms,
+    cache: info.cache ?? null,
+  });
 }
 
 /**
@@ -337,6 +354,14 @@ export function errorBox({ title, name, message, lines = [] }) {
   }
   line("");
   write(`${c.red(bottom)}\n\n`);
+
+  emitLog({
+    kind: "error",
+    scope: title,
+    message: `${name}: ${message}`,
+    note: lines.length ? lines.join(" · ") : null,
+    ms: null,
+  });
 }
 
 /**
@@ -360,4 +385,37 @@ function wrap(text, max) {
 
   if (current) out.push(current);
   return out.length ? out : [""];
+}
+
+/* -------------------------------------------------------------- aboneler */
+
+/**
+ * Admin paneli gibi dinleyiciler. Abone yokken `emitLog` boş Set üzerinde
+ * döner — stdout yoluna maliyet eklemez.
+ *
+ * @type {Set<(entry: Record<string, unknown>) => void>}
+ */
+const listeners = new Set();
+
+/**
+ * @param {(entry: Record<string, unknown>) => void} listener
+ * @returns {() => void} Aboneliği iptal eden fonksiyon.
+ */
+export function subscribe(listener) {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
+/**
+ * @param {Record<string, unknown>} entry
+ */
+function emitLog(entry) {
+  if (!listeners.size) return;
+  for (const listener of listeners) {
+    try {
+      listener(entry);
+    } catch {
+      // Dinleyici paneli düşürmesin.
+    }
+  }
 }

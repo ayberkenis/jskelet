@@ -192,27 +192,36 @@ export const DEFAULT_REDIS = {
 };
 
 /**
- * Önbellek yönetim paneli.
+ * Framework yönetim paneli (`/_jskelet/admin`).
  *
  * `enabled` varsayılan olarak **kapalı** ve ortama bakmaz: panel açıldığında
  * production'da da çalışır, ama açılması bilinçli bir karar olmalı. Kapalıyken
  * router hiç mount edilmez — yolun kendisi de yok, yani 404 dönen bir uç bile
  * ortaya çıkmaz.
  *
- * Şifre her süreç başlangıcında yeniden üretilir (bkz.
- * `src/server/cache-panel.js`): panelin ömrü sürecin ömrü kadardır ve bir
- * deploy eski erişimi otomatik olarak iptal eder. Bu yüzden config'te şifre
- * alanı yok.
+ * Şifre her süreç başlangıcında yeniden üretilir (bkz. `src/server/admin/`):
+ * panelin ömrü sürecin ömrü kadardır ve bir deploy eski erişimi otomatik
+ * olarak iptal eder. Bu yüzden config'te şifre alanı yok.
  */
-export const DEFAULT_CACHE_PANEL = {
+export const DEFAULT_ADMIN = {
   enabled: false,
-  basePath: "/_jskelet/cache",
+  basePath: "/_jskelet/admin",
+  /**
+   * Boş dizi = IP kısıtı yok. Exact IP veya CIDR (`10.0.0.0/8`); listede
+   * olmayan her istek 404 (login dahil).
+   * @type {string[]}
+   */
+  allowIps: [],
+  /** Bilinen crawler / bot UA'ları 404 ile reddedilsin mi. */
+  blockBots: true,
   /** Kaç başarısız denemeden sonra IP yasaklanır. */
   banAttempts: 3,
   /** Yasağın süresi. */
   banHours: 24,
   /** Oturumun ömrü; süreç yeniden başladığında zaten sıfırlanır. */
   sessionHours: 12,
+  /** Canlı log ring boyutu (HTTP + framework olayları). */
+  logSize: 500,
 };
 
 /**

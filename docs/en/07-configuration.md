@@ -768,35 +768,40 @@ redis: {
 }
 ```
 
-### `cache().panel`
+### `admin()`
 
-The cache admin panel. It shows the state of the in-process tier and the Redis
-tier, and it triggers targeted invalidation, single-entry drops and prewarming.
+The framework admin panel (`/_jskelet/admin`). It manages the in-process /
+Redis / Cloudflare caches and exposes route and view inventories plus a live
+log queue.
 
 It does not look at the environment: without `enabled` **nothing is mounted**
 and the path does not exist. When it is on it also works in production — that is
 where the real questions ("why is this page stale", "did the webhook purge
-land") get asked.
+land") get asked. It is separate from the `cache()` section.
 
 | Field | Type | Default | Meaning |
 | --- | --- | --- | --- |
-| `enabled` | `boolean` | `false` | Only turns on when explicitly `true` (`JSKELET_CACHE_PANEL` overrides it) |
-| `basePath` | `string` | `"/_jskelet/cache"` | Root of the panel |
+| `enabled` | `boolean` | `false` | Only turns on when explicitly `true` (`JSKELET_ADMIN` overrides it) |
+| `basePath` | `string` | `"/_jskelet/admin"` | Root of the panel |
+| `allowIps` | `string[]` | `[]` | Exact IP or CIDR; empty = no restriction. Anyone outside gets 404 |
+| `blockBots` | `boolean` | `true` | Known crawler UAs get 404 |
 | `banAttempts` | `number` | `3` | How many failed attempts ban an IP |
 | `banHours` | `number` | `24` | How long the ban lasts |
 | `sessionHours` | `number` | `12` | Lifetime of the session cookie |
+| `logSize` | `number` | `500` | Live log ring size |
 
 The password is generated **on every process start** and only appears in the
-server log:
-
-```
-[cache-panel] http://localhost:3000/_jskelet/cache — password for this run: 3f9c…
-```
-
-There is no persistent secret (no config field, no environment variable):
-leaking one means handing out the right to flush the cache, and a deploy should
-revoke old access on its own. Banned and unauthorised requests all get a `404`.
+server log `ADMIN` box. Banned and unauthorised requests all get a `404`.
 Usage and screens: [06-caching.md](./06-caching.md).
+
+```js
+admin() {
+  return {
+    enabled: process.env.JSKELET_ADMIN === "1",
+    allowIps: ["203.0.113.10", "10.0.0.0/8"],
+  };
+}
+```
 
 ### `cache().cloudflare`
 
@@ -823,12 +828,6 @@ and if Cloudflare returns an error that section reports it while the rest of the
 panel keeps working. What can actually be asked — in particular why "how many
 edges hold this page" has no exact answer — is in
 [06-caching.md](./06-caching.md).
-
-```js
-panel: {
-  enabled: process.env.CACHE_PANEL === "1",
-}
-```
 
 ### `cache().prewarm`
 
@@ -954,7 +953,7 @@ and no warning is printed.
 | `HOST` | `startServer` | `::` | Interface to bind to. The default listens dual-stack (IPv6 + IPv4); it falls back to `0.0.0.0` where IPv6 is unavailable |
 | `JSKELET_SECRET` | `jskelet/cookies` | — | The signed cookie secret. Read when `security.cookieSecret` is not set; if neither exists, the signed cookie API throws. [12](./12-dashboards-and-sessions.md) |
 | `DEV_TOKEN` | `devGate`, `prewarm` | — | If set, every request without a token gets a 404. Prewarming carries the token as a cookie. [09](./09-dev-tools.md) |
-| `JSKELET_CACHE_PANEL` | `createApp` | — | When set, turns the cache panel on; `0` turns off a panel enabled in the config. The env wins because the panel is usually opened once during an incident. [06](./06-caching.md) |
+| `JSKELET_ADMIN` | `createApp` | — | When set, turns the admin panel on; `0` turns off a panel enabled in the config. The env wins because the panel is usually opened once during an incident. [06](./06-caching.md) |
 | `JSKELET_CLOUDFLARE_KEY` | Cloudflare cache surface | — | API token. Until it is set, CDN purging and edge analytics stay off; it overrides `apiToken` in the config. The token is never returned in a response. [06](./06-caching.md) |
 | `JSKELET_CLOUDFLARE_ZONE_ID` | Cloudflare cache surface | — | Zone identifier. No Cloudflare endpoint is called unless it is set alongside the token |
 | `JSKELET_CLOUDFLARE_HOSTNAME` | Cloudflare cache surface | — | The root for purge URLs. Required when the panel is opened over an internal address |

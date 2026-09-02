@@ -177,12 +177,60 @@ header .spacer {
 
 .crumbs {
   display: flex;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 4px 10px;
   align-items: center;
   padding-left: 12px;
   border-left: 1px solid var(--line);
   color: var(--text);
   font-size: 13px;
+}
+
+.crumbs a {
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.crumbs a:hover {
+  color: var(--text);
+}
+
+.crumbs a[aria-current="page"] {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.page[hidden] {
+  display: none !important;
+}
+
+.filters {
+  flex-wrap: wrap;
+}
+
+.log-scroll {
+  max-height: min(70vh, 640px);
+}
+
+.log-list {
+  margin: 0;
+  padding: 12px 14px;
+  overflow: auto;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre;
+}
+
+button.linkish {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 /* ------------------------------------------------------------------ footer */

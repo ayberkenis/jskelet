@@ -13,7 +13,7 @@
  *   4. staticPrecompressed → express.static — build'de üretilmiş `.br`/`.gz`
  *      kopyalar varsa onlar servis edilir (kalite 11), yoksa istek altındaki
  *      static'e düşer ve middleware anında sıkıştırır (kalite 5).
- *   4b. cache paneli (açıksa) — statikten sonra, route'lardan önce: kendi
+ *   4b. admin paneli (açıksa) — statikten sonra, route'lardan önce: kendi
  *      gövde ayrıştırıcısını taşır ve uygulama yolunu gölgeleyemez.
  *   5. body parser'lar — statikten sonra: görsel isteklerinde gövde ayrıştırma
  *      maliyeti ödenmesin.
@@ -114,13 +114,13 @@ export async function createApp(options = {}) {
     mountDevtools(app);
   }
 
-  // Önbellek paneli ortama bakmaz, config'e bakar: açıkça etkinleştirilmedikçe
+  // Yönetim paneli ortama bakmaz, config'e bakar: açıkça etkinleştirilmedikçe
   // modül hiç yüklenmez ve yol da yoktur. Kendi gövde ayrıştırıcısını
   // taşıdığı için aşağıdaki parser'lardan önce durabiliyor; route'lardan
   // önce olması gerekiyor ki uygulama aynı yolu gölgeleyemesin.
-  if (config.cachePanel.enabled) {
-    const { mountCachePanel } = await import("./cache-panel.js");
-    mountCachePanel(app);
+  if (config.admin.enabled) {
+    const { mountAdmin } = await import("./admin/mount.js");
+    mountAdmin(app);
   }
 
   app.use(express.urlencoded({ extended: false, limit: "64kb" }));

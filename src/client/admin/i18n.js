@@ -1,5 +1,5 @@
 /**
- * Önbellek panelinin sözlüğü.
+ * Admin panelinin sözlüğü.
  *
  * Panel build hattından geçmiyor, bu yüzden hazır bir i18n kütüphanesi yok:
  * düz bir nesne, `{ad}` yer tutucusu ve `data-i18n` gezintisi kadarı yetiyor.
@@ -13,7 +13,7 @@
  * sunucuya taşınmasının bir karşılığı yok.
  */
 
-const STORAGE_KEY = "jskelet.cache-panel.lang";
+const STORAGE_KEY = "jskelet.admin.lang";
 
 /**
  * Sözlükler. Dışa açık, çünkü testler iki dilin anahtar kümesinin birebir
@@ -24,12 +24,20 @@ const STORAGE_KEY = "jskelet.cache-panel.lang";
 export const MESSAGES = {
   en: {
     /* --- kabuk --- */
+    "nav.overview": "Overview",
     "nav.cache": "Cache",
+    "nav.routes": "Routes",
+    "nav.views": "Views",
+    "nav.logs": "Logs",
+    "nav.system": "System",
     "shell.live": "live",
     "shell.refresh": "Refresh",
     "shell.signOut": "Sign out",
     "shell.language": "Language",
     "chip.up": "up {value}",
+    "chip.sse.live": "SSE live",
+    "chip.sse.off": "SSE off",
+    "chip.sse.error": "SSE error",
 
     /* --- kartlar --- */
     "card.htmlEntries": "HTML entries",
@@ -215,7 +223,7 @@ export const MESSAGES = {
     "entries.copyKey": "Copy key",
 
     /* --- alt bilgi --- */
-    "footer.panel": "Cache panel",
+    "footer.panel": "Admin panel",
     "footer.rotates": "Password rotates on restart",
 
     /* --- bildirimler --- */
@@ -268,13 +276,48 @@ export const MESSAGES = {
     "msg.action.unknown": "Unknown action: {type}",
 
     /* --- giriş --- */
-    "login.title": "Cache panel",
-    "login.lead": "This run's password is printed in the server log (<code>[cache-panel]</code>).",
+    "login.title": "Admin panel",
+    "login.lead": "This run's password is printed in the server log (<code>ADMIN</code> box).",
     "login.placeholder": "32-character password",
     "login.submit": "Unlock",
     "login.hint": "Three failed attempts block this address for 24 hours.",
     "login.tooMany": "Too many attempts.",
     "login.invalid": "Invalid password.",
+
+    "upstream.section": "Upstream",
+    "upstream.host": "Host",
+    "upstream.rate": "Rate",
+    "upstream.state": "State",
+    "upstream.empty": "No upstream hosts tracked.",
+
+    "routes.section": "Registered routes",
+    "routes.method": "Method",
+    "routes.path": "Path",
+    "routes.lastStatus": "Last status",
+    "routes.lastMs": "Last ms",
+    "routes.hits": "Hits",
+    "routes.empty": "No routes.",
+    "routes.modules": "Route modules",
+    "routes.file": "File",
+    "routes.openLogs": "Logs",
+
+    "views.section": "Views",
+    "views.path": "Path",
+    "views.kind": "Kind",
+    "views.search": "Filter views…",
+    "views.empty": "No views.",
+
+    "logs.section": "Live logs",
+    "logs.search": "Search url / message…",
+    "logs.kind.all": "all kinds",
+    "logs.method.all": "all methods",
+    "logs.status.all": "all status",
+    "logs.cache.all": "all cache",
+    "logs.path": "path / route…",
+    "logs.pause": "pause",
+    "logs.clear": "Clear view",
+    "logs.empty": "No log lines.",
+    "logs.shown": "{shown} shown · {total} buffered",
 
     /* --- birimler --- */
     "unit.second": "s",
@@ -285,12 +328,20 @@ export const MESSAGES = {
   },
 
   tr: {
+    "nav.overview": "Özet",
     "nav.cache": "Önbellek",
+    "nav.routes": "Rotalar",
+    "nav.views": "Şablonlar",
+    "nav.logs": "Loglar",
+    "nav.system": "Sistem",
     "shell.live": "canlı",
     "shell.refresh": "Yenile",
     "shell.signOut": "Çıkış",
     "shell.language": "Dil",
     "chip.up": "{value} açık",
+    "chip.sse.live": "SSE canlı",
+    "chip.sse.off": "SSE kapalı",
+    "chip.sse.error": "SSE hata",
 
     "card.htmlEntries": "HTML girdisi",
     "card.htmlMemory": "Bellekteki HTML",
@@ -466,7 +517,7 @@ export const MESSAGES = {
     "entries.drop": "düşür",
     "entries.copyKey": "Anahtarı kopyala",
 
-    "footer.panel": "Önbellek paneli",
+    "footer.panel": "Yönetim paneli",
     "footer.rotates": "Şifre her restart'ta değişir",
 
     "toast.keyCopied": "Anahtar kopyalandı",
@@ -516,13 +567,48 @@ export const MESSAGES = {
     "msg.prewarm.all": "Bütün yollar ısıtılıyor",
     "msg.action.unknown": "Bilinmeyen işlem: {type}",
 
-    "login.title": "Önbellek paneli",
-    "login.lead": "Bu turun şifresi sunucu logunda (<code>[cache-panel]</code>).",
+    "login.title": "Yönetim paneli",
+    "login.lead": "Bu turun şifresi sunucu logundaki <code>ADMIN</code> kutusunda.",
     "login.placeholder": "32 haneli şifre",
     "login.submit": "Aç",
     "login.hint": "Üç başarısız deneme bu adresi 24 saat engeller.",
     "login.tooMany": "Çok fazla deneme.",
     "login.invalid": "Şifre geçersiz.",
+
+    "upstream.section": "Upstream",
+    "upstream.host": "Host",
+    "upstream.rate": "Hız",
+    "upstream.state": "Durum",
+    "upstream.empty": "İzlenen upstream host yok.",
+
+    "routes.section": "Kayıtlı rotalar",
+    "routes.method": "Method",
+    "routes.path": "Yol",
+    "routes.lastStatus": "Son status",
+    "routes.lastMs": "Son ms",
+    "routes.hits": "İsabet",
+    "routes.empty": "Rota yok.",
+    "routes.modules": "Route modülleri",
+    "routes.file": "Dosya",
+    "routes.openLogs": "Loglar",
+
+    "views.section": "Şablonlar",
+    "views.path": "Yol",
+    "views.kind": "Tür",
+    "views.search": "Şablon ara…",
+    "views.empty": "Şablon yok.",
+
+    "logs.section": "Canlı loglar",
+    "logs.search": "url / mesaj ara…",
+    "logs.kind.all": "tüm türler",
+    "logs.method.all": "tüm methodlar",
+    "logs.status.all": "tüm status",
+    "logs.cache.all": "tüm cache",
+    "logs.path": "yol / rota…",
+    "logs.pause": "duraklat",
+    "logs.clear": "Görünümü temizle",
+    "logs.empty": "Log satırı yok.",
+    "logs.shown": "{shown} görünüyor · {total} tamponda",
 
     "unit.second": "sn",
     "unit.minute": "dk",

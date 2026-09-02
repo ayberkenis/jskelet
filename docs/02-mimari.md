@@ -70,6 +70,9 @@ sebebi var ve yer değiştirmek sessiz bozulmalara yol açıyor.
   `.br`/`.gz` kopyalar varsa onlar servis edilir (brotli kalite 11); yoksa
   istek altındaki `static`e düşer ve middleware anında sıkıştırır (kalite 5).
   Hash'li ve `immutable` bir dosyayı her istekte yeniden sıkıştırmak boşa CPU.
+- **Admin paneli** (açıksa, `admin().enabled` / `JSKELET_ADMIN`): statikten
+  sonra, body parser ve route'lardan önce. Kendi gövde ayrıştırıcısını taşır;
+  uygulama aynı yolu gölgeleyemez. Kapalıyken modül yüklenmez.
 - **Body parser'lar statikten sonra.** Görsel isteklerinde gövde ayrıştırma
   maliyeti ödenmesin.
 - **`rewrites(afterFiles)`, statik denendikten sonra ve sayfalardan önce.**

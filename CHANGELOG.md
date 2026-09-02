@@ -8,6 +8,15 @@ one is listed under a **Breaking** heading.
 
 ## [Unreleased]
 
+### Breaking
+
+- The cache admin panel moved to a top-level `admin()` config section at
+  `/_jskelet/admin` (was `cache().panel` at `/_jskelet/cache`). Enable with
+  `admin() { return { enabled: true } }` or `JSKELET_ADMIN=1`. `JSKELET_CACHE_PANEL` and
+  `cache().panel` are removed. Auth is unchanged (per-process password in the
+  server log, cookie session, 404 for strangers); the action CSRF header is now
+  `X-JSkelet-Admin`.
+
 ### Fixed
 
 - Cloudflare analytics in the cache panel no longer asks for an open-ended
@@ -18,6 +27,13 @@ one is listed under a **Breaking** heading.
 
 ### Added
 
+- Admin panel pages under `/_jskelet/admin`: Overview, Cache, Routes, Views,
+  Logs and System. Configurable `allowIps` (exact or CIDR), `blockBots` (default
+  on — crawler UAs get 404 before login), and `logSize`. Live Logs use an
+  in-process ring plus SSE (`/api/logs/stream`) with client-side filters for
+  method, status, cache, kind, path/route and text. Routes and Views are
+  read-only inventories; HTTP finish middleware records timings only while the
+  panel is enabled.
 - `trailingSlash` in `jskelet.config.mjs` (default `false`). When `true`,
   canonical page URLs end with `/` and return 200; a request without the slash
   is sent to the slashed form with a 308 (not 301). File URLs and
@@ -29,11 +45,10 @@ one is listed under a **Breaking** heading.
   `?utm_source=…` variant of a path shares one copy; `true` puts the whole query
   in the key and `[]` ignores it entirely. Parameters enter the key sorted, so
   `?a=1&b=2` and `?b=2&a=1` are one entry.
-- A cache admin panel at `/_jskelet/cache`, turned on with
-  `cache().panel: { enabled: true }` or `JSKELET_CACHE_PANEL=1`. It lists what
-  the in-process tier holds (key, size, status, remaining TTL, dependency count,
-  precompressed bodies for HTML; key and TTL for data), reports whether the
-  Redis tier is connected or bypassed, and runs the operations you would
+- A cache admin panel surface (now under `admin()` — see Breaking) that lists
+  what the in-process tier holds (key, size, status, remaining TTL, dependency
+  count, precompressed bodies for HTML; key and TTL for data), reports whether
+  the Redis tier is connected or bypassed, and runs the operations you would
   otherwise hand-write an admin route for: targeted invalidation with an
   optional hard mode, dropping a single entry, clearing either cache, unlinking
   the shared keys and triggering a prewarm pass. Unlike the dev overlay it does

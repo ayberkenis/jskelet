@@ -768,13 +768,24 @@ yalnızca `NODE_ENV=development` iken var, panel ise ortama bakmaz — "bu sayfa
 neden bayat", "webhook purge'ü geçti mi", "Redis gerçekten bağlı mı" soruları
 üretimde soruluyor.
 
+Panel üst düzey `admin()` ile açılır (`cache()` içinde değil) ve kökü
+`/_jskelet/admin`'dır. Altında Overview, Cache, Routes, Views, Logs ve System
+sayfaları vardır; Cache sayfası eski tek sayfalık panelle aynı işlemleri
+taşır.
+
 ```js
 // jskelet.config.mjs
 export default {
+  admin() {
+    return {
+      enabled: process.env.JSKELET_ADMIN === "1",
+      allowIps: ["10.0.0.0/8"], // boş = IP kısıtı yok
+      blockBots: true,
+    };
+  },
   cache() {
     return {
       html: { "/haber/:slug": 300 },
-      panel: { enabled: process.env.CACHE_PANEL === "1" },
     };
   },
 };
@@ -782,14 +793,20 @@ export default {
 
 `enabled` verilmedikçe **hiçbir şey mount edilmez**: yol yoktur, modül
 yüklenmez, üretim sürecinde hiçbir maliyeti olmaz. Ortam değişkeni
-(`JSKELET_CACHE_PANEL=1`) config'i ezer; panel genelde bir arıza sırasında tek
+(`JSKELET_ADMIN=1`) config'i ezer; panel genelde bir arıza sırasında tek
 seferlik açılıyor ve o an config dosyasını değiştirip yeniden dağıtmak
 istenmiyor.
 
 Panel açıldığında sunucu logu şifreyi basar:
 
 ```
-[cache-panel] http://localhost:3000/_jskelet/cache — password for this run: 3f9c…
+┌─ ADMIN ──────────────────────────────────────┐
+│  http://localhost:3000/_jskelet/admin        │
+│                                              │
+│  password  3f9c…                             │
+│                                              │
+│  Valid until this process restarts.          │
+└──────────────────────────────────────────────┘
 ```
 
 ### Erişim ve güvenlik
@@ -799,15 +816,20 @@ Panel açıldığında sunucu logu şifreyi basar:
   yetkisi demek ve bir deploy eski erişimi kendiliğinden iptal etmeli.
 - **Şifre query string ile kabul edilmez.** Erişim logları, tarayıcı geçmişi ve
   `Referer` başlığı sırrı taşımasın; giriş yalnızca form üzerinden.
+- **`allowIps`** verilirse (exact IP veya CIDR) listede olmayan her istek
+  login dahil `404` alır.
+- **`blockBots`** (varsayılan `true`) bilinen crawler UA'larını (Googlebot,
+  Bingbot, Ahrefs, …) `404` ile reddeder.
 - **Üç başarısız denemede IP 24 saat yasaklanır** (`banAttempts`, `banHours`).
-  Yanlış şifre kadar oturumsuz istek de sayılır; başarılı giriş sayacı sıfırlar.
+  Yanlış şifre kadar oturumsuz yazma isteği de sayılır; başarılı giriş sayacı
+  sıfırlar.
 - **Yasaklı ve yetkisiz her cevap `404`.** 401/403 panelin var olduğunu
   doğrular, 404 hiç yokmuş gibi davranır. Panelin dışındaki site etkilenmez.
 - **Hiçbir yeri indekslenmez:** her cevapta `X-Robots-Tag: noindex, nofollow,
   noarchive, nosnippet`, `Cache-Control: no-store` ve `Referrer-Policy:
   no-referrer`. Yol ayrıca ısıtma listesinden ve gezinme ipuçlarından muaftır.
-- Aksiyonlar `X-JSkelet-Cache-Panel` başlığı ister — çapraz siteden
-  gönderilemeyen bir başlık, yani panelin kendi CSRF freni.
+- Aksiyonlar `X-JSkelet-Admin` başlığı ister — çapraz siteden gönderilemeyen
+  bir başlık, yani panelin kendi CSRF freni.
 - Oturumlar ve yasak sayaçları süreç belleğinde durur; şifresi zaten her
   restart'ta değişen bir panel için diske yazmak yanlış takas olurdu.
 
@@ -815,12 +837,12 @@ Panel açıldığında sunucu logu şifreyi basar:
 
 | Bölüm | Gösterdiği |
 | --- | --- |
-| Üst satır | Sürüm, ortam, pid, uptime, RSS ve dil seçimi (Türkçe / İngilizce) |
-| Kartlar | HTML girdi sayısı ve sınırı, bellekteki HTML boyutu, bayat girdi sayısı, veri girdisi sayısı, Redis durumu (`connected` / `bypassed` / `off`), ısıtma turunun ilerlemesi |
-| Paylaşımlı kademe | Bağlantının **nereye** kurulduğu (adres, TLS, veritabanı), anahtar öneki ve `namespace`, `buildId`, hangi türlerin paylaşıldığı, sıkıştırılmış gövde ve purge yayını durumu, komut zaman aşımı ve hata sayısı. Kapalıysa yerine Redis önerisi ve kurulum parçacığı çıkar. |
-| Cloudflare | Zone, plan, cache ile ilgili zone ayarları, development mode'un kalan süresi, Tiered Cache / Cache Reserve durumu ve cache isabet oranı. Bağlı değilse kurulum parçacığı çıkar. |
-| Host | Makinenin RAM kullanımı ve projenin bulunduğu diskin doluluğu |
-| Girdi listesi | HTML: yol (yeni sekmede açılır), taze/bayat, boyut, durum kodu, kalan TTL, bağımlılık sayısı, hazır sıkıştırılmış gövdeler. Veri: anahtar (tıklayınca panoya kopyalanır), taze/bayat, kalan TTL |
+| Overview | HTML/data/Redis/prewarm kartları ve upstream freni özeti |
+| Cache | Paylaşımlı kademe, Cloudflare, aksiyonlar, girdi listesi (eski panel) |
+| Routes | Express'e kayıtlı path/method'lar, route modül dosyaları, son istek özeti |
+| Views | `views/` altındaki şablon envanteri |
+| Logs | Canlı SSE kuyruğu; method/status/cache/kind/path ve metin filtresi |
+| System | Makine RAM / disk |
 
 Liste **anahtar bazında filtrelenir** ve filtre sunucuda uygulanır: veri
 önbelleğinde on binlerce anahtar olabiliyor. Her istekte en fazla 500 satır

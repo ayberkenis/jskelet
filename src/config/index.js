@@ -17,8 +17,8 @@
  *   rewrites()  → [{ source, destination }] | { beforeFiles?, afterFiles? }
  *   cache()     → { html?: { [source]: saniye },
  *                   query?: { [source]: string[] | true }, maxEntries?: number,
- *                   data?: {...}, redis?: {...}, prewarm?: {...},
- *                   panel?: {...} }
+ *                   data?: {...}, redis?: {...}, prewarm?: {...} }
+ *   admin()     → { enabled?, basePath?, allowIps?, blockBots?, … }
  *
  * Fonksiyon olmayan bölümler (`brand`, `security`, `static`, `navigation`…)
  * düz nesne olarak okunur.
@@ -29,8 +29,8 @@ import process from "node:process";
 import { pathToFileURL } from "node:url";
 import { compilePattern, matchPattern } from "./pattern.js";
 import {
+  DEFAULT_ADMIN,
   DEFAULT_BRAND,
-  DEFAULT_CACHE_PANEL,
   DEFAULT_CLOUDFLARE,
   DEFAULT_DATA_CACHE,
   DEFAULT_DEV_GATE_BYPASS,
@@ -96,7 +96,7 @@ const CONFIG_FILE = "jskelet.config.mjs";
  * @property {{ attempts: number, delayMs: number }} transientRetry
  * @property {RedisConfig} redis Opsiyonel Redis ikinci kademesi.
  * @property {typeof DEFAULT_UPSTREAM_LIMIT} upstream Upstream hız freni.
- * @property {typeof DEFAULT_CACHE_PANEL} cachePanel Önbellek yönetim paneli.
+ * @property {typeof DEFAULT_ADMIN} admin Framework yönetim paneli.
  * @property {typeof DEFAULT_CLOUDFLARE} cloudflare Cloudflare cache yüzeyi.
  * @property {Record<string, unknown>} prewarm
  * @property {{ source: string, test: (pathname: string) => boolean }[]} prewarmPriority
@@ -302,46 +302,58 @@ function normalizeUpstream(raw) {
 }
 
 /**
- * Önbellek panelinin bölümü.
- *
- * `enabled` yalnızca açıkça `true` verildiğinde ya da `JSKELET_CACHE_PANEL`
- * ortam değişkeni ayarlandığında açılır: paneli yanlışlıkla açmanın bedeli,
- * önbelleği boşaltabilen bir ucu internete koymak.
+ * Yönetim paneli. `enabled` yalnızca açıkça `true` verildiğinde ya da
+ * `JSKELET_ADMIN` ortam değişkeni ayarlandığında açılır: paneli yanlışlıkla
+ * açmanın bedeli, önbelleği boşaltabilen bir ucu internete koymak.
  *
  * Ortam değişkeni config'in **üstünde** duruyor, çünkü paneli genelde bir
  * arıza sırasında tek seferlik açmak isteniyor ve o an config dosyasını
- * değiştirip yeniden dağıtmak istenmiyor. `JSKELET_CACHE_PANEL=0` aynı
- * mantıkla config'te açık olan paneli kapatır.
+ * değiştirip yeniden dağıtmak istenmiyor. `JSKELET_ADMIN=0` aynı mantıkla
+ * config'te açık olan paneli kapatır.
  *
  * @param {unknown} raw
- * @returns {typeof DEFAULT_CACHE_PANEL}
+ * @returns {typeof DEFAULT_ADMIN}
  */
-function normalizeCachePanel(raw) {
+function normalizeAdmin(raw) {
   const source = /** @type {Record<string, any>} */ (raw ?? {});
-  const env = process.env.JSKELET_CACHE_PANEL;
+  const env = process.env.JSKELET_ADMIN;
 
   const basePath =
     typeof source.basePath === "string" && source.basePath.startsWith("/")
       ? source.basePath.replace(/\/+$/, "")
-      : DEFAULT_CACHE_PANEL.basePath;
+      : DEFAULT_ADMIN.basePath;
 
   /** @param {string} key @param {number} min */
   const positive = (key, min) => {
     const value = Number(source[key]);
     return Number.isFinite(value) && value >= min
       ? value
-      : /** @type {any} */ (DEFAULT_CACHE_PANEL)[key];
+      : /** @type {any} */ (DEFAULT_ADMIN)[key];
   };
+
+  const allowIps = Array.isArray(source.allowIps)
+    ? source.allowIps
+        .filter((entry) => typeof entry === "string" && entry.trim())
+        .map((entry) => entry.trim())
+    : [...DEFAULT_ADMIN.allowIps];
+
+  const logSize = Number(source.logSize);
 
   return {
     enabled:
       env === undefined
         ? source.enabled === true
         : env !== "0" && env !== "false" && env !== "",
-    basePath: basePath || DEFAULT_CACHE_PANEL.basePath,
+    basePath: basePath || DEFAULT_ADMIN.basePath,
+    allowIps,
+    blockBots: source.blockBots !== false,
     banAttempts: Math.floor(positive("banAttempts", 1)),
     banHours: positive("banHours", 0),
     sessionHours: positive("sessionHours", 0),
+    logSize:
+      Number.isFinite(logSize) && logSize >= 50
+        ? Math.min(5000, Math.floor(logSize))
+        : DEFAULT_ADMIN.logSize,
   };
 }
 
@@ -424,7 +436,6 @@ function normalizeQueryRules(raw) {
  *   transientRetry: { attempts: number, delayMs: number },
  *   redis: RedisConfig,
  *   upstream: typeof DEFAULT_UPSTREAM_LIMIT,
- *   cachePanel: typeof DEFAULT_CACHE_PANEL,
  *   cloudflare: typeof DEFAULT_CLOUDFLARE,
  *   prewarm: Record<string, unknown>,
  *   prewarmPriority: ResolvedConfig["prewarmPriority"] }}
@@ -465,7 +476,6 @@ function normalizeCache(raw) {
         : { ...DEFAULT_TRANSIENT_RETRY, ...(raw?.transientRetry ?? {}) },
     redis: normalizeRedis(raw?.redis),
     upstream: normalizeUpstream(raw?.upstream),
-    cachePanel: normalizeCachePanel(raw?.panel),
     cloudflare: normalizeCloudflare(raw?.cloudflare),
     // Desenler derlenmiş hâlde ayrı alanda tutulur: `prewarm` sayısal
     // ayarların düz torbası olarak kalsın, her turda yeniden derlenmesin.
@@ -670,11 +680,12 @@ export async function loadConfig(options = {}) {
     }
   };
 
-  const [headers, redirects, rewrites, cache] = await Promise.all([
+  const [headers, redirects, rewrites, cache, admin] = await Promise.all([
     section("headers"),
     section("redirects"),
     section("rewrites"),
     section("cache"),
+    section("admin"),
   ]);
 
   const {
@@ -687,7 +698,6 @@ export async function loadConfig(options = {}) {
     transientRetry,
     redis,
     upstream,
-    cachePanel,
     cloudflare,
     prewarm,
     prewarmPriority,
@@ -711,7 +721,7 @@ export async function loadConfig(options = {}) {
     transientRetry,
     redis,
     upstream,
-    cachePanel,
+    admin: normalizeAdmin(admin),
     cloudflare,
     prewarm,
     prewarmPriority,

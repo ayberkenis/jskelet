@@ -1,12 +1,13 @@
 /**
- * Önbellek panelinin istemci tarafı.
+ * Admin panelinin istemci tarafı.
  *
  * Build hattından geçmez, doğrudan diskten servis edilir: panelin açık olduğu
  * bir kurulumda `jskelet build` hiç koşmamış olabilir ve panel yine çalışmalı.
  * Bu yüzden burada import edilen bir framework modülü yok.
  *
  * Yenileme WebSocket değil, kısa aralıklı `fetch` ile: panel nadiren ve kısa
- * süre açık kalıyor, kalıcı bir kanal açmanın karşılığı yok.
+ * süre açık kalıyor, kalıcı bir kanal açmanın karşılığı yok. Log sayfası
+ * ayrıca SSE kullanır.
  *
  * Bütün görünen metin `i18n.js` üzerinden geçiyor; sunucudan gelen cevaplar da
  * metin değil `code` taşıyor, yani dil değişimi tek yerden hallediliyor.
@@ -14,6 +15,7 @@
 import { applyTranslations, languageSelect, t } from "./i18n.js";
 
 const REFRESH_MS = 3000;
+const PAGES = new Set(["overview", "cache", "routes", "views", "logs", "system"]);
 
 const $ = (/** @type {string} */ id) => document.getElementById(id);
 
@@ -25,6 +27,17 @@ let latest = null;
 /** @type {number | null} */
 let timer = null;
 let busy = false;
+/** @type {string} */
+let page = "overview";
+/** @type {any} */
+let routesPayload = null;
+/** @type {any} */
+let viewsPayload = null;
+/** @type {any[]} */
+let logBuffer = [];
+/** @type {EventSource | null} */
+let logSource = null;
+let logsPaused = false;
 
 /* ------------------------------------------------------------ biçimlendirme */
 
@@ -118,7 +131,7 @@ async function act(body) {
     headers: {
       "Content-Type": "application/json",
       // Panelin CSRF freni: çapraz siteden gönderilemeyen bir başlık.
-      "X-JSkelet-Cache-Panel": "1",
+      "X-JSkelet-Admin": "1",
     },
     body: JSON.stringify(body),
   });
@@ -206,6 +219,7 @@ function render() {
 
   renderRedis(redis, redisState);
   renderHost(host, proc, redis);
+  renderUpstream(latest.upstream);
 
   const done = prewarm.done ?? 0;
   const total = prewarm.total ?? 0;
@@ -217,6 +231,49 @@ function render() {
       : t("prewarm.never");
 
   renderTable();
+}
+
+/**
+ * @param {any} upstream
+ */
+function renderUpstream(upstream) {
+  const tbody = $("upstream-tbody");
+  const empty = $("upstream-empty");
+  const heading = $("upstream-heading");
+  if (!tbody || !empty || !heading) return;
+
+  const hosts = Array.isArray(upstream) ? upstream : [];
+  heading.textContent = String(hosts.length);
+  tbody.replaceChildren();
+
+  if (!hosts.length) {
+    empty.hidden = false;
+    return;
+  }
+
+  empty.hidden = true;
+  for (const info of hosts) {
+    const row = document.createElement("tr");
+    const state = info?.bypassed
+      ? "bypassed"
+      : info?.blockedMs > 0
+        ? "blocked"
+        : `${info?.active ?? 0} active`;
+    row.innerHTML = `<td class="mono">${escapeHtml(String(info.host ?? ""))}</td><td class="mono">${escapeHtml(String(info.rate ?? "—"))}</td><td class="mono">${escapeHtml(String(state))}</td>`;
+    tbody.append(row);
+  }
+}
+
+/**
+ * @param {string} value
+ * @returns {string}
+ */
+function escapeHtml(value) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
 }
 
 /* ------------------------------------------------------------- cloudflare */
@@ -352,7 +409,7 @@ async function loadCloudflareAnalytics() {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "X-JSkelet-Cache-Panel": "1",
+      "X-JSkelet-Admin": "1",
     },
     body: JSON.stringify({ path }),
   });
@@ -888,11 +945,273 @@ function flip(value) {
 // Sekme arkaya alındığında yoklama durur: panel açık kalmış bir sekmede
 // dakikalarca boşa istek atmasın.
 document.addEventListener("visibilitychange", () => {
-  if (document.hidden) stopPolling();
-  else if ($("auto").checked) {
+  if (document.hidden) {
+    stopPolling();
+    stopLogStream();
+  } else if ($("auto").checked) {
     void load();
     startPolling();
+    if (page === "logs") startLogStream();
   }
+});
+
+/* -------------------------------------------------------------- sayfalar */
+
+/**
+ * URL yolunun son segmentinden sayfa adı.
+ * @returns {string}
+ */
+function pageFromLocation() {
+  const parts = location.pathname.replace(/\/+$/, "").split("/");
+  const last = parts[parts.length - 1] || "";
+  if (PAGES.has(last)) return last;
+  return "overview";
+}
+
+/**
+ * @param {string} next
+ * @param {{ push?: boolean }} [options]
+ */
+function showPage(next, options = {}) {
+  const name = PAGES.has(next) ? next : "overview";
+  page = name;
+
+  for (const node of document.querySelectorAll(".page")) {
+    const el = /** @type {HTMLElement} */ (node);
+    el.hidden = el.dataset.page !== name;
+  }
+
+  for (const link of document.querySelectorAll("#nav a")) {
+    const a = /** @type {HTMLAnchorElement} */ (link);
+    if (a.dataset.page === name) a.setAttribute("aria-current", "page");
+    else a.removeAttribute("aria-current");
+  }
+
+  const sse = $("sse-status");
+  if (sse) sse.hidden = name !== "logs";
+
+  if (options.push !== false) {
+    const target = name === "overview" ? "./" : name;
+    history.pushState({ page: name }, "", target);
+  }
+
+  if (name === "routes") void loadRoutes();
+  if (name === "views") void loadViews();
+  if (name === "logs") startLogStream();
+  else stopLogStream();
+}
+
+async function loadRoutes() {
+  const response = await fetch("api/routes");
+  if (!alive(response)) return;
+  if (!response.ok) return;
+  routesPayload = await response.json();
+  renderRoutes();
+}
+
+async function loadViews() {
+  const response = await fetch("api/views");
+  if (!alive(response)) return;
+  if (!response.ok) return;
+  viewsPayload = await response.json();
+  renderViews();
+}
+
+function renderRoutes() {
+  if (!routesPayload) return;
+
+  const routes = routesPayload.routes ?? [];
+  const modules = routesPayload.modules ?? [];
+  const activity = routesPayload.activity ?? {};
+
+  $("routes-count").textContent = String(routes.length);
+  $("modules-count").textContent = String(modules.length);
+
+  const tbody = $("routes-tbody");
+  const empty = $("routes-empty");
+  tbody.replaceChildren();
+
+  if (!routes.length) {
+    empty.hidden = false;
+  } else {
+    empty.hidden = true;
+    for (const route of routes) {
+      const key = route.path;
+      const act = activity[key] ?? null;
+      const row = document.createElement("tr");
+      row.innerHTML = `
+        <td class="mono">${escapeHtml(route.method)}</td>
+        <td class="mono"><button type="button" class="linkish" data-path="${escapeHtml(route.path)}">${escapeHtml(route.path)}</button></td>
+        <td class="mono">${act ? act.status : "—"}</td>
+        <td class="mono">${act ? Math.round(act.ms) : "—"}</td>
+        <td class="mono">${act ? act.count : "—"}</td>`;
+      tbody.append(row);
+    }
+
+    tbody.querySelectorAll("button[data-path]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const pathFilter = /** @type {HTMLElement} */ (button).dataset.path ?? "";
+        $("logs-path").value = pathFilter;
+        showPage("logs");
+        renderLogs();
+      });
+    });
+  }
+
+  const modulesBody = $("modules-tbody");
+  modulesBody.replaceChildren();
+  for (const mod of modules) {
+    const row = document.createElement("tr");
+    row.innerHTML = `<td class="mono">${escapeHtml(mod.relative)}</td>`;
+    modulesBody.append(row);
+  }
+}
+
+function renderViews() {
+  if (!viewsPayload) return;
+
+  const term = ($("views-search")?.value ?? "").trim().toLowerCase();
+  const views = (viewsPayload.views ?? []).filter(
+    (/** @type {{ relative: string }} */ view) =>
+      !term || view.relative.toLowerCase().includes(term),
+  );
+
+  $("views-count").textContent = String(views.length);
+  const tbody = $("views-tbody");
+  const empty = $("views-empty");
+  tbody.replaceChildren();
+
+  if (!views.length) {
+    empty.hidden = false;
+    return;
+  }
+
+  empty.hidden = true;
+  for (const view of views) {
+    const row = document.createElement("tr");
+    row.innerHTML = `<td class="mono">${escapeHtml(view.relative)}</td><td>${escapeHtml(view.kind)}</td>`;
+    tbody.append(row);
+  }
+}
+
+function startLogStream() {
+  if (logSource) return;
+
+  const chip = $("sse-status");
+  if (chip) {
+    chip.hidden = false;
+    chip.textContent = t("chip.sse.live");
+  }
+
+  logSource = new EventSource("api/logs/stream");
+  logSource.onmessage = (event) => {
+    try {
+      const entry = JSON.parse(event.data);
+      if (!logsPaused) {
+        logBuffer.push(entry);
+        if (logBuffer.length > 1000) logBuffer.shift();
+        renderLogs();
+      }
+    } catch {
+      // bozuk çerçeve yok sayılır
+    }
+  };
+  logSource.onerror = () => {
+    if (chip) chip.textContent = t("chip.sse.error");
+  };
+}
+
+function stopLogStream() {
+  if (logSource) {
+    logSource.close();
+    logSource = null;
+  }
+  const chip = $("sse-status");
+  if (chip) {
+    chip.textContent = t("chip.sse.off");
+    chip.hidden = page !== "logs";
+  }
+}
+
+function renderLogs() {
+  const list = $("logs-list");
+  const empty = $("logs-empty");
+  const count = $("logs-count");
+  if (!list || !empty || !count) return;
+
+  const q = ($("logs-q")?.value ?? "").trim().toLowerCase();
+  const kind = $("logs-kind")?.value ?? "";
+  const method = $("logs-method")?.value ?? "";
+  const statusClass = $("logs-status")?.value ?? "";
+  const cache = $("logs-cache")?.value ?? "";
+  const pathFilter = ($("logs-path")?.value ?? "").trim().toLowerCase();
+
+  const filtered = logBuffer.filter((entry) => {
+    if (kind && entry.kind !== kind) return false;
+    if (method && entry.method !== method) return false;
+    if (statusClass && entry.status != null) {
+      if (String(Math.floor(Number(entry.status) / 100)) !== statusClass) return false;
+    }
+    if (cache && entry.cache !== cache) return false;
+    if (pathFilter) {
+      const hay = `${entry.path ?? ""} ${entry.route ?? ""} ${entry.url ?? ""}`.toLowerCase();
+      if (!hay.includes(pathFilter)) return false;
+    }
+    if (q) {
+      const hay = `${entry.url ?? ""} ${entry.message ?? ""} ${entry.scope ?? ""} ${entry.path ?? ""}`.toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+
+  count.textContent = t("logs.shown", { shown: filtered.length, total: logBuffer.length });
+  empty.hidden = filtered.length > 0;
+
+  const lines = filtered.slice(-300).map(formatLogLine);
+  list.textContent = lines.join("\n");
+  list.scrollTop = list.scrollHeight;
+}
+
+/**
+ * @param {any} entry
+ * @returns {string}
+ */
+function formatLogLine(entry) {
+  const time = new Date(entry.at).toISOString().slice(11, 19);
+  if (entry.kind === "http") {
+    const cache = entry.cache ? ` ${entry.cache}` : "";
+    const route = entry.route ? ` [${entry.route}]` : "";
+    return `${time}  ${String(entry.method).padEnd(6)} ${entry.status}  ${Math.round(entry.ms)}ms${cache}${route}  ${entry.url}`;
+  }
+  return `${time}  ${entry.kind.padEnd(6)} ${entry.scope ?? ""}  ${entry.message ?? ""}${entry.note ? `  ${entry.note}` : ""}`;
+}
+
+for (const link of document.querySelectorAll("#nav a")) {
+  link.addEventListener("click", (event) => {
+    event.preventDefault();
+    const next = /** @type {HTMLElement} */ (link).dataset.page ?? "overview";
+    showPage(next);
+  });
+}
+
+window.addEventListener("popstate", () => {
+  showPage(pageFromLocation(), { push: false });
+});
+
+$("views-search")?.addEventListener("input", () => renderViews());
+
+for (const id of ["logs-q", "logs-kind", "logs-method", "logs-status", "logs-cache", "logs-path"]) {
+  $(id)?.addEventListener("input", () => renderLogs());
+  $(id)?.addEventListener("change", () => renderLogs());
+}
+
+$("logs-pause")?.addEventListener("change", (event) => {
+  logsPaused = /** @type {HTMLInputElement} */ (event.target).checked;
+});
+
+$("logs-clear")?.addEventListener("click", () => {
+  logBuffer = [];
+  renderLogs();
 });
 
 /* -------------------------------------------------------------------- dil */
@@ -905,11 +1224,19 @@ $("language").append(
     if (latest) render();
     renderCloudflare();
     renderReport();
+    renderRoutes();
+    renderViews();
+    renderLogs();
   }),
 );
 
 applyTranslations();
 
+const params = new URLSearchParams(location.search);
+if (params.get("path")) $("logs-path").value = params.get("path") ?? "";
+if (params.get("route")) $("logs-path").value = params.get("route") ?? "";
+
+showPage(pageFromLocation(), { push: false });
 void load();
 void loadCloudflare();
 startPolling();
