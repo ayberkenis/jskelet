@@ -159,7 +159,9 @@ one is listed under a **Breaking** heading.
   shared producer — a hit skips that wait so the gap is visible even when RTT
   dominates the wall clock. The island prints transferred bytes, Server-Timing
   `produce` duration, and a View Source section contrasts `__NEXT_DATA__`
-  payload tax with plain JSkelet HTML.
+  payload tax with plain JSkelet HTML. The measured-weight block also shows an
+  estimated Next.js App Router first-load breakdown beside this site’s real
+  gzip totals (clearly labelled estimate, not a build from this repo).
 - Duplicate component named exports (or the same PascalCase tag in two files)
   now **fail** at build and at server startup instead of warning and letting
   the second definition win. Overwriting `components/index.js` barrel exports

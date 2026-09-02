@@ -516,7 +516,19 @@ export default {
     weight: {
       eyebrow: "Ölçülen ağırlık",
       title: "Bu sitenin kendi build çıktısı",
-      lead: "Yukarıdaki 'boş sayfada client JS' satırının bu projedeki gerçek karşılığı.",
+      lead: "Yukarıdaki 'boş sayfada client JS' satırının buradaki gerçek karşılığı — yanında aynı tür sayfa için tahmini bir Next.js App Router ilk-yük bandı.",
+      oursLabel: "Bu site (JSkelet)",
+      oursBadge: "ölçüldü",
+      nextLabel: "Örnek Next.js App Router sayfası",
+      nextBadge: "tahmini",
+      nextEntries: {
+        react: "React + ReactDOM",
+        nextRuntime: "Next.js client / App Router runtime",
+        page: "Sayfa + paylaşılan app chunk'ları",
+        css: "Stylesheet (Tailwind ölçeği)",
+      },
+      nextNote:
+        "Tahmin; bu depoda Next build'i yok: minimal bir App Router sayfası için yuvarlak gzip rakamları (React ~44 kB, Next client runtime ~48 kB, ince sayfa chunk'ı, Tailwind ölçeğinde CSS). Senin Next uygulaman daha hafif ya da ağır olabilir — mesele kendi UI'ndan önce ödenen framework tabanı.",
     },
     apply: {
       eyebrow: "Karar",

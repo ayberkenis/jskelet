@@ -98,10 +98,6 @@
     <div class="mt-8 grid gap-8 lg:grid-cols-2 lg:items-start">
       <%- payloadTable({ payload, labels: t.payloadLabels }) %>
 
-      <%#
-        Barlar aynı veriyi oransal olarak gösteriyor: tabloda sayı, burada
-        ağırlık. Genişlik sunucudan geliyor, island yalnızca animasyonu ekliyor.
-      -%>
       <% if (payload.entries.length) { %>
       <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-white/[0.035]">
         <%- barGroup({
@@ -114,6 +110,30 @@
       </div>
       <% } %>
     </div>
+
+    <% if (payload.total && nextEstimate) { %>
+    <%- weightContrast({
+      ours: {
+        label: t.compare.weight.oursLabel,
+        badge: t.compare.weight.oursBadge,
+        totalGzip: payload.total.gzip,
+        entries: payload.entries.map((entry) => ({
+          label: t.payloadLabels[entry.name] ?? entry.name,
+          gzip: entry.gzip,
+        })),
+      },
+      next: {
+        label: t.compare.weight.nextLabel,
+        badge: t.compare.weight.nextBadge,
+        totalGzip: nextEstimate.totalGzip,
+        entries: nextEstimate.entries.map((entry) => ({
+          label: t.compare.weight.nextEntries[entry.key] ?? entry.key,
+          gzip: entry.gzip,
+        })),
+        note: t.compare.weight.nextNote,
+      },
+    }) %>
+    <% } %>
   </div>
 </section>
 

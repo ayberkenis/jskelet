@@ -21,6 +21,7 @@ import {
 } from "../lib/docs.js";
 import { LOCALES, PAGES, alternatePaths, localePath } from "../lib/i18n.js";
 import { getPayload } from "../lib/payload.js";
+import { getNextSampleEstimate } from "../lib/next-estimate.js";
 import { COMMANDS, getPublishedRelease, getRelease } from "../lib/release.js";
 
 const HOUR = 3600;
@@ -196,6 +197,7 @@ async function pageData(key, t, locale) {
         comparison: t.comparison,
         fit: t.fit,
         payload: getPayload(),
+        nextEstimate: getNextSampleEstimate(),
       };
 
     case "migrate":

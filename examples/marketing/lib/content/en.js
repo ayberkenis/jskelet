@@ -527,7 +527,19 @@ export default {
     weight: {
       eyebrow: "Measured weight",
       title: "This site's own build output",
-      lead: "What the 'client JS on an empty page' row above actually looks like in this project.",
+      lead: "What the 'client JS on an empty page' row above actually looks like here — then an estimated Next.js App Router first-load for the same kind of page.",
+      oursLabel: "This site (JSkelet)",
+      oursBadge: "measured",
+      nextLabel: "Sample Next.js App Router page",
+      nextBadge: "estimate",
+      nextEntries: {
+        react: "React + ReactDOM",
+        nextRuntime: "Next.js client / App Router runtime",
+        page: "Page + shared app chunks",
+        css: "Stylesheet (Tailwind-scale)",
+      },
+      nextNote:
+        "Estimates, not a build from this repo: rounded gzip figures for a minimal App Router page (React ~44 kB, Next client runtime ~48 kB, thin page chunk, Tailwind-scale CSS). Your Next app may be leaner or heavier — the point is the framework floor you pay before your own UI.",
     },
     apply: {
       eyebrow: "Decide",
