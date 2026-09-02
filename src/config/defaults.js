@@ -192,6 +192,44 @@ export const DEFAULT_REDIS = {
 };
 
 /**
+ * Kalıcı log sink'leri (dosya + S3).
+ *
+ * Varsayılan her şey kapalı: stdout ve admin ring mevcut davranışını korur.
+ * `kinds` hangi structured kayıtların sink'lere gideceğini seçer; `console`
+ * runtime `http`/`event`/`error` satırlarının terminalde görünmesini kontrol
+ * eder (banner/build satırlarına dokunmaz).
+ *
+ * S3 credential'ları config'e yazılmaz — `AWS_ACCESS_KEY_ID` /
+ * `AWS_SECRET_ACCESS_KEY` (ve isteğe bağlı `AWS_SESSION_TOKEN`). Bucket için
+ * `JSKELET_LOG_BUCKET` env'i config'i ezer.
+ */
+export const DEFAULT_LOGS = {
+  console: true,
+  /** @type {Array<"http" | "event" | "error">} */
+  kinds: ["http", "event", "error"],
+  file: {
+    enabled: false,
+    /** Proje köküne göre relative. */
+    dir: "logs",
+    /** Yalnızca günlük rotasyon. */
+    rotate: /** @type {"daily"} */ ("daily"),
+  },
+  s3: {
+    enabled: false,
+    /** @type {string | null} */
+    bucket: null,
+    prefix: "jskelet/logs/",
+    /** @type {string | null} */
+    region: null,
+    /** MinIO vb. için; null → AWS. */
+    /** @type {string | null} */
+    endpoint: null,
+    flushIntervalMs: 5000,
+    maxBatch: 100,
+  },
+};
+
+/**
  * Framework yönetim paneli (`/_jskelet/admin`).
  *
  * `enabled` varsayılan olarak **kapalı** ve ortama bakmaz: panel açıldığında

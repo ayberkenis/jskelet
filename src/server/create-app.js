@@ -10,6 +10,8 @@
  *   3. headers → devGate → redirects → trailingSlash — gate'in 404'ü
  *      redirect'ten önce; trailingSlash config redirects'ten sonra, böylece
  *      açık kurallar istenen yolu önce görür.
+ *   3b. access log (açıksa) — tamamlanan yanıtların süresi; admin/prewarm
+ *      içeride elenir.
  *   4. staticPrecompressed → express.static — build'de üretilmiş `.br`/`.gz`
  *      kopyalar varsa onlar servis edilir (kalite 11), yoksa istek altındaki
  *      static'e düşer ve middleware anında sıkıştırır (kalite 5).
@@ -42,6 +44,7 @@ import { isPrewarmRequest, notePrewarmError, startPrewarm } from "./prewarm.js";
 import { trackUpstreamFetch } from "./upstream-tracking.js";
 import { configureUpstreamLimiter } from "./upstream-limiter.js";
 import { connectRedis, disconnectRedis } from "./redis.js";
+import { configureLogs, flushLogs, closeLogs } from "./logs/pipeline.js";
 import { isNotFoundError, isRedirectError } from "../http/control-flow.js";
 
 /**
@@ -68,6 +71,10 @@ export async function createApp(options = {}) {
   // dokunmayan, tamamen opsiyonel bir adım.
   await connectRedis(config);
 
+  // Kalıcı log sink'leri (dosya / S3). Credential eksikse uyarı + no-op;
+  // site düşmez. Access middleware gerektiğinde biraz aşağıda mount edilir.
+  const { accessLog } = await configureLogs(config);
+
   const app = express();
 
   app.disable("x-powered-by");
@@ -89,6 +96,13 @@ export async function createApp(options = {}) {
   app.use(devGate());
   app.use(redirects());
   app.use(trailingSlash());
+
+  // Access log: headers/redirects sonrası, statikten önce — böylece
+  // tamamlanan her yanıt (304 dahil) süre alır; admin/prewarm içeride elenir.
+  if (accessLog) {
+    const { accessLogMiddleware } = await import("./logs/access-middleware.js");
+    app.use(accessLogMiddleware());
+  }
 
   app.use(staticPrecompressed(config.dirs.public));
   app.use(
@@ -248,8 +262,10 @@ export async function startServer(options = {}) {
 /**
  * `SIGTERM`/`SIGINT` sonrası düzenli kapanış.
  *
- * Kapatılması gereken tek dış bağlantı Redis ve `quit` uçuştaki komutların
- * bitmesini bekliyor; sert `disconnect` yarıda kalan bir `SET` bırakabiliyor.
+ * Kapatılması gereken dış kaynaklar Redis ve log sink buffer'ları. Redis
+ * `quit` uçuştaki komutların bitmesini bekliyor; sert `disconnect` yarıda
+ * kalan bir `SET` bırakabiliyor. S3 sink kapanışta kalan batch'i PutObject
+ * ile gönderir.
  *
  * Açık HTTP bağlantıları **beklenmez**. `close()` tek başına yalnızca yeni
  * bağlantıyı reddediyor; keep-alive bir istemci ya da dev panelinin
@@ -276,10 +292,11 @@ function attachShutdown(server) {
     server.close();
     server.closeAllConnections?.();
 
-    void disconnectRedis().finally(() => {
-      clearTimeout(timer);
-      process.exit(0);
-    });
+    void Promise.all([disconnectRedis(), flushLogs().then(() => closeLogs())])
+      .finally(() => {
+        clearTimeout(timer);
+        process.exit(0);
+      });
   };
 
   process.once("SIGTERM", shutdown);

@@ -752,6 +752,46 @@ redis: {
 }
 ```
 
+### `logs`
+
+Kalıcı log sink'leri. Varsayılan her şey kapalı: stdout ve admin paneli ring'i
+mevcut davranışını korur. Açıldığında HTTP access log ile framework olayları
+(`event` / `error`) NDJSON satırları olarak dosyaya ve/veya S3'e yazılır.
+
+| Alan | Tip | Varsayılan | Anlamı |
+| --- | --- | --- | --- |
+| `console` | `boolean` | `true` | Runtime `http` / `event` / `error` satırları stdout'a basılsın mı (banner/build satırları etkilenmez) |
+| `kinds` | `("http" \| "event" \| "error")[]` | hepsi | Sink'lere giden kayıt türleri |
+| `file.enabled` | `boolean` | `false` | Günlük dosya sink'i |
+| `file.dir` | `string` | `"logs"` | Proje köküne göre dizin; `jskelet-YYYY-MM-DD.log` |
+| `file.rotate` | `"daily"` | `"daily"` | Yalnızca günlük rotasyon |
+| `s3.enabled` | `boolean` | `false` | S3 batch PutObject sink'i |
+| `s3.bucket` | `string \| null` | `null` | Bucket; `JSKELET_LOG_BUCKET` ezer |
+| `s3.prefix` | `string` | `"jskelet/logs/"` | Nesne anahtarı öneki |
+| `s3.region` | `string \| null` | `null` | Bölge; verilmezse `AWS_REGION` / `AWS_DEFAULT_REGION` |
+| `s3.endpoint` | `string \| null` | `null` | MinIO vb. için path-style endpoint |
+| `s3.flushIntervalMs` | `number` | `5000` | Batch flush aralığı |
+| `s3.maxBatch` | `number` | `100` | Bu kadar satırda erken flush |
+
+S3 credential'ları config'e yazılmaz: `AWS_ACCESS_KEY_ID`,
+`AWS_SECRET_ACCESS_KEY`, isteğe bağlı `AWS_SESSION_TOKEN`. Bucket/region/
+credential eksikse uyarı basılır ve S3 sink kapanır; site ayağa kalkmaya devam
+eder. Framework `@aws-sdk` taşımaz — PutObject SigV4 ile gömülüdür.
+
+```js
+logs: {
+  console: true,
+  kinds: ["http", "error"],
+  file: { enabled: true, dir: "logs" },
+  s3: {
+    enabled: process.env.NODE_ENV === "production",
+    bucket: process.env.JSKELET_LOG_BUCKET,
+    prefix: "my-app/logs/",
+    region: process.env.AWS_REGION,
+  },
+}
+```
+
 ### `admin()`
 
 Framework yönetim paneli (`/_jskelet/admin`). Bellek içi / Redis / Cloudflare
@@ -933,6 +973,11 @@ basılmaz.
 | `JSKELET_SECRET` | `jskelet/cookies` | — | İmzalı cookie sırrı. `security.cookieSecret` verilmediğinde buradan okunur; ikisi de yoksa imzalı cookie API'si hata verir. [12](./12-panel-ve-oturum.md) |
 | `DEV_TOKEN` | `devGate`, `prewarm` | — | Ayarlıysa token taşımayan her isteğe 404 döner. Isıtma token'ı çerez olarak taşır. [09](./09-dev-araclari.md) |
 | `JSKELET_ADMIN` | `createApp` | — | Ayarlıysa yönetim panelini açar; `0` config'te açık olan paneli kapatır. Env config'i ezer, çünkü panel genelde bir arıza sırasında tek seferlik açılır. [06](./06-cache.md) |
+| `JSKELET_LOG_BUCKET` | `logs.s3` | — | S3 log bucket'ı; `logs.s3.bucket`'ı ezer |
+| `AWS_ACCESS_KEY_ID` | `logs.s3` | — | S3 PutObject imzası. Yoksa ve `s3.enabled` ise sink kapanır |
+| `AWS_SECRET_ACCESS_KEY` | `logs.s3` | — | S3 imza sırrı |
+| `AWS_SESSION_TOKEN` | `logs.s3` | — | Geçici credential'lar için isteğe bağlı |
+| `AWS_REGION` / `AWS_DEFAULT_REGION` | `logs.s3` | — | `logs.s3.region` verilmezse buradan okunur |
 | `JSKELET_CLOUDFLARE_KEY` | Cloudflare cache yüzeyi | — | API token. Verilene kadar CDN purge'ü ve edge analitiği kapalıdır; config'teki `apiToken`'ı ezer. Token hiçbir cevapta dönmez. [06](./06-cache.md) |
 | `JSKELET_CLOUDFLARE_ZONE_ID` | Cloudflare cache yüzeyi | — | Zone kimliği. Token'la birlikte verilmedikçe hiçbir Cloudflare ucu çağrılmaz |
 | `JSKELET_CLOUDFLARE_HOSTNAME` | Cloudflare cache yüzeyi | — | Purge URL'lerinin kökü. Panel iç bir adresten açılıyorsa gerekir |

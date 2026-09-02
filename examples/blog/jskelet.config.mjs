@@ -18,6 +18,20 @@ export default {
   clientEnv: ["SITE_URL"],
 
   /**
+   * Kalıcı log sink'leri (varsayılan kapalı). Açmak için:
+   *
+   * logs: {
+   *   kinds: ["http", "error"],
+   *   file: { enabled: true, dir: "logs" },
+   *   s3: {
+   *     enabled: Boolean(process.env.JSKELET_LOG_BUCKET),
+   *     bucket: process.env.JSKELET_LOG_BUCKET,
+   *     region: process.env.AWS_REGION,
+   *   },
+   * },
+   */
+
+  /**
    * Site içi gezinme ipuçları. `prerender` bilinçli olarak kapalı: prerender
    * edilen sayfanın script'leri gerçekten çalışır, yani ölçüm kodunu
    * `prerenderingchange` olayına bağlamadan açmak ziyaret sayılarını şişirir.

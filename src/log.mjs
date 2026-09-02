@@ -19,6 +19,28 @@ const useColor =
   !process.env.NO_COLOR && (isTTY || process.env.JSKELET_COLOR === "1");
 
 /**
+ * Runtime olaylarının (`http` / `event` / `errorBox`) stdout'a basılıp
+ * basılmayacağı. Banner ve build satırları etkilenmez — onlar başlangıç
+ * çıktısıdır, access log değil.
+ */
+let consoleEnabled = true;
+
+/**
+ * `http` kayıtlarının `emitLog` ile abonelere gidip gitmeyeceği. Access
+ * middleware mount edildiğinde kapatılır: aksi hâlde devtools + middleware
+ * aynı isteği iki kez sink'e yazar.
+ */
+let emitHttp = true;
+
+/**
+ * @param {{ console?: boolean, emitHttp?: boolean }} [options]
+ */
+export function configureLog(options = {}) {
+  if (options.console !== undefined) consoleEnabled = options.console !== false;
+  if (options.emitHttp !== undefined) emitHttp = options.emitHttp !== false;
+}
+
+/**
  * @param {string} open
  * @returns {(text: string) => string}
  */
@@ -245,14 +267,16 @@ export function ready({ elapsed, url, watching, label = "Ready" }) {
  * @param {{ symbol?: string, scope: string, message: string, note?: string, time?: number | null }} info
  */
 export function event({ symbol = symbols.ok, scope, message, note, time = null }) {
-  const body = `${message}${note ? `  ${note}` : ""}`;
-  const padding = " ".repeat(Math.max(1, DETAIL - body.length));
+  if (consoleEnabled) {
+    const body = `${message}${note ? `  ${note}` : ""}`;
+    const padding = " ".repeat(Math.max(1, DETAIL - body.length));
 
-  write(
-    `${c.gray(clock())}  ${symbol} ${c.bold(scope.padEnd(10))} ` +
-    `${message}${note ? `  ${c.dim(note)}` : ""}${padding}` +
-    `${c.gray((time == null ? "" : ms(time)).padStart(TIME))}\n`,
-  );
+    write(
+      `${c.gray(clock())}  ${symbol} ${c.bold(scope.padEnd(10))} ` +
+      `${message}${note ? `  ${c.dim(note)}` : ""}${padding}` +
+      `${c.gray((time == null ? "" : ms(time)).padStart(TIME))}\n`,
+    );
+  }
 
   emitLog({
     kind: "event",
@@ -270,24 +294,28 @@ export function event({ symbol = symbols.ok, scope, message, note, time = null }
  * @param {{ method: string, url: string, status: number, ms: number, cache?: string | null }} info
  */
 export function http(info) {
-  const tint =
-    info.status >= 500 ? c.red : info.status >= 400 ? c.yellow : c.green;
+  if (consoleEnabled) {
+    const tint =
+      info.status >= 500 ? c.red : info.status >= 400 ? c.yellow : c.green;
 
-  write(
-    `${c.gray(clock())}  ${c.bold(info.method.padEnd(6))}` +
-    `${c.gray(truncate(info.url, 28).padEnd(30))}` +
-    `${tint(String(info.status))} ${c.gray(ms(info.ms).padStart(TIME))}` +
-    `${info.cache === "HIT" ? ` ${c.dim("cached")}` : ""}\n`,
-  );
+    write(
+      `${c.gray(clock())}  ${c.bold(info.method.padEnd(6))}` +
+      `${c.gray(truncate(info.url, 28).padEnd(30))}` +
+      `${tint(String(info.status))} ${c.gray(ms(info.ms).padStart(TIME))}` +
+      `${info.cache === "HIT" ? ` ${c.dim("cached")}` : ""}\n`,
+    );
+  }
 
-  emitLog({
-    kind: "http",
-    method: info.method,
-    url: info.url,
-    status: info.status,
-    ms: info.ms,
-    cache: info.cache ?? null,
-  });
+  if (emitHttp) {
+    emitLog({
+      kind: "http",
+      method: info.method,
+      url: info.url,
+      status: info.status,
+      ms: info.ms,
+      cache: info.cache ?? null,
+    });
+  }
 }
 
 /**
@@ -333,27 +361,29 @@ export function box({ title, lines, tint = c.cyan }) {
  * @param {{ title: string, name: string, message: string, lines?: string[] }} info
  */
 export function errorBox({ title, name, message, lines = [] }) {
-  const top = `┌─ ${title} ${"─".repeat(Math.max(0, BOX - title.length - 3))}┐`;
-  const bottom = `└${"─".repeat(BOX)}┘`;
+  if (consoleEnabled) {
+    const top = `┌─ ${title} ${"─".repeat(Math.max(0, BOX - title.length - 3))}┐`;
+    const bottom = `└${"─".repeat(BOX)}┘`;
 
-  /** @param {string} text @param {(value: string) => string} [tint] */
-  const line = (text, tint = (value) => value) => {
-    const clipped = truncate(text, BOX - 4);
-    write(
-      `${c.red("│")}  ${tint(clipped)}${" ".repeat(BOX - 4 - clipped.length)}  ${c.red("│")}\n`,
-    );
-  };
+    /** @param {string} text @param {(value: string) => string} [tint] */
+    const line = (text, tint = (value) => value) => {
+      const clipped = truncate(text, BOX - 4);
+      write(
+        `${c.red("│")}  ${tint(clipped)}${" ".repeat(BOX - 4 - clipped.length)}  ${c.red("│")}\n`,
+      );
+    };
 
-  write(`\n${c.red(top)}\n`);
-  line("");
-  line(name, (value) => c.bold(c.red(value)));
-  for (const part of wrap(message, BOX - 4)) line(part);
-  if (lines.length) {
+    write(`\n${c.red(top)}\n`);
     line("");
-    for (const part of lines) line(part, c.gray);
+    line(name, (value) => c.bold(c.red(value)));
+    for (const part of wrap(message, BOX - 4)) line(part);
+    if (lines.length) {
+      line("");
+      for (const part of lines) line(part, c.gray);
+    }
+    line("");
+    write(`${c.red(bottom)}\n\n`);
   }
-  line("");
-  write(`${c.red(bottom)}\n\n`);
 
   emitLog({
     kind: "error",

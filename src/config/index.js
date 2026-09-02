@@ -19,9 +19,10 @@
  *                   query?: { [source]: string[] | true }, maxEntries?: number,
  *                   data?: {...}, redis?: {...}, prewarm?: {...} }
  *   admin()     → { enabled?, basePath?, allowIps?, blockBots?, … }
+ *   logs        → { console?, kinds?, file?, s3? }
  *
  * Fonksiyon olmayan bölümler (`brand`, `security`, `static`, `navigation`…)
- * düz nesne olarak okunur.
+ * düz nesne olarak okunur. `logs` fonksiyon ya da düz nesne olabilir.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -36,6 +37,7 @@ import {
   DEFAULT_DEV_GATE_BYPASS,
   DEFAULT_DIRS,
   DEFAULT_HTML_CACHE_MAX_ENTRIES,
+  DEFAULT_LOGS,
   DEFAULT_NAVIGATION,
   DEFAULT_NAVIGATION_EXCLUDE,
   DEFAULT_PREWARM,
@@ -76,6 +78,19 @@ const CONFIG_FILE = "jskelet.config.mjs";
  */
 
 /**
+ * @typedef {"http" | "event" | "error"} LogKind
+ *
+ * @typedef {object} LogsConfig
+ * @property {boolean} console Runtime http/event/error satırları stdout'a
+ *   basılsın mı (banner/build satırları etkilenmez).
+ * @property {LogKind[]} kinds Sink'lere giden kayıt türleri.
+ * @property {{ enabled: boolean, dir: string, rotate: "daily" }} file
+ * @property {{ enabled: boolean, bucket: string | null, prefix: string,
+ *   region: string | null, endpoint: string | null, flushIntervalMs: number,
+ *   maxBatch: number }} s3
+ */
+
+/**
  * @typedef {import('./pattern.js').CompiledPattern} CompiledPattern
  *
  * @typedef {object} ResolvedConfig
@@ -96,6 +111,7 @@ const CONFIG_FILE = "jskelet.config.mjs";
  * @property {{ attempts: number, delayMs: number }} transientRetry
  * @property {RedisConfig} redis Opsiyonel Redis ikinci kademesi.
  * @property {typeof DEFAULT_UPSTREAM_LIMIT} upstream Upstream hız freni.
+ * @property {LogsConfig} logs Kalıcı log sink'leri (dosya + S3).
  * @property {typeof DEFAULT_ADMIN} admin Framework yönetim paneli.
  * @property {typeof DEFAULT_CLOUDFLARE} cloudflare Cloudflare cache yüzeyi.
  * @property {Record<string, unknown>} prewarm
@@ -381,6 +397,77 @@ function normalizeCloudflare(raw) {
       Number.isFinite(hours) && hours > 0
         ? Math.min(72, Math.floor(hours))
         : DEFAULT_CLOUDFLARE.analyticsHours,
+  };
+}
+
+const LOG_KINDS = new Set(["http", "event", "error"]);
+
+/**
+ * Kalıcı log sink'leri. Bozuk bir `kinds` listesi siteyi düşürmemeli —
+ * bilinmeyen girdiler atılır; hiç geçerli tür kalmazsa varsayılana dönülür.
+ *
+ * @param {unknown} raw
+ * @returns {LogsConfig}
+ */
+export function normalizeLogs(raw) {
+  const source = /** @type {Record<string, any>} */ (raw ?? {});
+  const fileRaw = /** @type {Record<string, any>} */ (source.file ?? {});
+  const s3Raw = /** @type {Record<string, any>} */ (source.s3 ?? {});
+
+  /** @type {LogKind[]} */
+  let kinds = DEFAULT_LOGS.kinds;
+  if (Array.isArray(source.kinds)) {
+    const filtered = source.kinds.filter(
+      (entry) => typeof entry === "string" && LOG_KINDS.has(entry),
+    );
+    if (filtered.length) kinds = /** @type {LogKind[]} */ ([...new Set(filtered)]);
+    else {
+      console.warn(
+        "[config] logs.kinds has no valid entries (http|event|error), using defaults",
+      );
+    }
+  } else if (source.kinds != null) {
+    console.warn("[config] logs.kinds must be an array, using defaults");
+  }
+
+  const flush = Number(s3Raw.flushIntervalMs);
+  const batch = Number(s3Raw.maxBatch);
+
+  /** @param {unknown} value */
+  const text = (value) => (typeof value === "string" && value ? value : null);
+
+  const envBucket = process.env.JSKELET_LOG_BUCKET;
+  const envRegion = process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION;
+
+  return {
+    console: source.console !== false,
+    kinds,
+    file: {
+      enabled: fileRaw.enabled === true,
+      dir:
+        typeof fileRaw.dir === "string" && fileRaw.dir.trim()
+          ? fileRaw.dir.trim()
+          : DEFAULT_LOGS.file.dir,
+      rotate: "daily",
+    },
+    s3: {
+      enabled: s3Raw.enabled === true,
+      bucket: text(envBucket) ?? text(s3Raw.bucket),
+      prefix:
+        typeof s3Raw.prefix === "string" && s3Raw.prefix
+          ? s3Raw.prefix
+          : DEFAULT_LOGS.s3.prefix,
+      region: text(s3Raw.region) ?? text(envRegion),
+      endpoint: text(s3Raw.endpoint),
+      flushIntervalMs:
+        Number.isFinite(flush) && flush >= 500
+          ? Math.min(60_000, Math.floor(flush))
+          : DEFAULT_LOGS.s3.flushIntervalMs,
+      maxBatch:
+        Number.isFinite(batch) && batch >= 1
+          ? Math.min(5000, Math.floor(batch))
+          : DEFAULT_LOGS.s3.maxBatch,
+    },
   };
 }
 
@@ -680,12 +767,13 @@ export async function loadConfig(options = {}) {
     }
   };
 
-  const [headers, redirects, rewrites, cache, admin] = await Promise.all([
+  const [headers, redirects, rewrites, cache, admin, logs] = await Promise.all([
     section("headers"),
     section("redirects"),
     section("rewrites"),
     section("cache"),
     section("admin"),
+    section("logs"),
   ]);
 
   const {
@@ -721,6 +809,7 @@ export async function loadConfig(options = {}) {
     transientRetry,
     redis,
     upstream,
+    logs: normalizeLogs(logs),
     admin: normalizeAdmin(admin),
     cloudflare,
     prewarm,
