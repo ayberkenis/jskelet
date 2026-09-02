@@ -65,10 +65,25 @@ export default {
 };
 ```
 
-**2. If there is no list, the `routes/` directory is scanned alphabetically.**
-The scan is recursive (subdirectories included), only `.js` and `.mjs` files are
-picked up, and files whose name begins with `_` are skipped (for shared modules
-like `_helpers.js`).
+**2. If there is no list, the `routes/` directory is scanned alphabetically**,
+then each `features/<name>/index.js` (or `.mjs`) is appended alphabetically.
+The scan under `routes/` is recursive (subdirectories included), only `.js` and
+`.mjs` files are picked up, and files whose name begins with `_` are skipped
+(for shared modules like `_helpers.js`).
+
+Feature-first layout is optional:
+
+```
+features/markets/
+  index.js          # register(app, api) — URLs are still explicit
+  server/
+  views/pages/…     # .jsk or .ejs
+  views/components/
+  client/           # islands; register from client/entries
+```
+
+`jskelet generate feature|page|island` scaffolds this. There is no filesystem
+URL routing.
 
 In that case, give the file names a numeric prefix:
 

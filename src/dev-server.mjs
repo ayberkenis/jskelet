@@ -236,11 +236,13 @@ function run(args, label, passthrough) {
 const WATCH_DIRS = [
   config.dirs.routes,
   config.dirs.views,
+  config.dirs.features,
+  config.dirs.shared,
   path.join(ROOT, "lib"),
   ...(config.watch ?? []).map((dir) => path.resolve(ROOT, dir)),
-];
+].filter(Boolean);
 
-const WATCH_EXTENSIONS = /\.(?:js|mjs|json|ejs)$/;
+const WATCH_EXTENSIONS = /\.(?:js|mjs|json|ejs|jsk)$/;
 
 /** @type {import('node:child_process').ChildProcess | null} */
 let server = null;

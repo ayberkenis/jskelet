@@ -19,7 +19,7 @@ import { createRequire } from "node:module";
 import { pruneAssets, writeAsset } from "../paths.mjs";
 import * as log from "../../log.mjs";
 
-const SCAN_EXTENSIONS = new Set([".ejs", ".js", ".mjs"]);
+const SCAN_EXTENSIONS = new Set([".ejs", ".jsk", ".js", ".mjs"]);
 
 /** `icon({ … })` çağrısının tamamı; `name:` ifadesi ayrıca çözümlenir. */
 const ICON_CALL = /icon\(\s*\{([^}]*)\}/g;
@@ -189,7 +189,7 @@ export async function buildIconSprite(config) {
   }
 
   const scanDirs = (
-    config.icons?.scan ?? ["views", "client", "routes", "lib"]
+    config.icons?.scan ?? ["views", "client", "routes", "lib", "features", "shared"]
   ).map((dir) => path.resolve(config.root, dir));
 
   pruneAssets(["sprite."]);

@@ -25,6 +25,9 @@ JSkelet bu gözlemi mimarinin merkezine alır:
    olarak, kendi modülüyle, kendi zamanında bağlanır.
 3. **Sayfa üretimi önbelleklenir.** Aynı HTML'i her istekte yeniden üretmenin
    anlamı yok; TTL'li bir bellek önbelleği ISR'nin yerini tutar.
+4. **Şablonlar build-time derlenir (`.jsk`).** İstek anında parse yok; EJS
+   legacy olarak yan yana kalır. Feature'lar `features/<name>/{server,views,client}`
+   altında toplanabilir — URL kaydı yine açıktır.
 
 ## Bir isteğin yolu
 

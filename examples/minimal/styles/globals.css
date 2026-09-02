@@ -8,6 +8,8 @@
 @source "../views";
 @source "../client";
 @source "../routes";
+@source "../features";
+@source "../shared";
 
 .wrapper {
   max-width: 48rem;

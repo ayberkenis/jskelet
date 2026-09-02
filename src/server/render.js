@@ -14,6 +14,8 @@
  */
 import path from "node:path";
 import process from "node:process";
+import fs from "node:fs";
+import { pathToFileURL } from "node:url";
 import ejs from "ejs";
 import { withHtmlCache } from "./html-cache.js";
 import { getConfig, hook } from "../config/index.js";
@@ -40,6 +42,11 @@ import * as tags from "../views/helpers/tags.js";
 import { loadComponents } from "../views/components/loader.js";
 import { renderStatusPage } from "./status-page.js";
 import { suppressForPrewarm } from "./prewarm.js";
+import {
+  ensureTemplatesCompiled,
+  getComponentDirs,
+  getViewRoots,
+} from "../compile/index.js";
 
 const isDev = process.env.NODE_ENV === "development";
 
@@ -49,7 +56,10 @@ const isDev = process.env.NODE_ENV === "development";
  * hesaplanamaz, bu yüzden ilk render'da kurulur.
  *
  * @type {{ helpers: Record<string, unknown>, options: ejs.Options,
- *   viewsDir: string, layout: string } | null}
+ *   viewsDir: string, viewRoots: string[], layout: string,
+ *   compiled: Map<string, (data: object, helpers: object) => string>,
+ *   layoutRender: ((data: object, helpers: object) => string) | null
+ * } | null}
  */
 let engine = null;
 
@@ -61,21 +71,46 @@ async function getEngine() {
 
   const config = getConfig();
   const viewsDir = config.dirs.views;
+  const viewRoots = getViewRoots(config);
+
+  await ensureTemplatesCompiled(config);
+
+  /** @type {Record<string, unknown>} */
+  const helpers = {
+    ...html,
+    ...tags,
+    ...(await loadComponents(getComponentDirs(config))),
+    asset,
+    hasAsset,
+    // Yerleşik PascalCase etiketler (.jsk bileşen sözdizimi).
+    Link: (props) => tags.link(props),
+    Image: (props) => tags.image(props),
+    Icon: (props) => tags.icon(props),
+    CsrfField: () => tags.csrfField(),
+    PreloadImage: (props) => tags.preloadImage(props),
+  };
+
+  // camelCase JS bileşenlerini PascalCase etiket adıyla da erişilebilir yap.
+  for (const [name, value] of Object.entries(helpers)) {
+    if (typeof value !== "function") continue;
+    if (/^[A-Z]/.test(name)) continue;
+    const pascal = name.charAt(0).toUpperCase() + name.slice(1);
+    if (!(pascal in helpers)) helpers[pascal] = value;
+  }
+
+  const { compiled, layoutRender } = await loadCompiledTemplates(config, helpers);
 
   engine = {
     viewsDir,
+    viewRoots,
     layout: config.layout,
-    helpers: {
-      ...html,
-      ...tags,
-      ...(await loadComponents(path.join(viewsDir, "components"))),
-      asset,
-      hasAsset,
-    },
+    helpers,
+    compiled,
+    layoutRender,
     options: {
       // `include('partials/header')` gibi çağrılar views kökünden çözülür.
       root: viewsDir,
-      views: [viewsDir],
+      views: viewRoots.length ? viewRoots : [viewsDir],
       cache: !isDev,
       rmWhitespace: true,
       async: true,
@@ -83,6 +118,66 @@ async function getEngine() {
   };
 
   return engine;
+}
+
+/**
+ * Derlenmiş `.jsk` modüllerini yükler. İstek anında parse/compile yok.
+ *
+ * @param {import('../config/index.js').ResolvedConfig} config
+ * @param {Record<string, unknown>} helpers
+ * @returns {Promise<{ compiled: Map<string, Function>, layoutRender: Function | null }>}
+ */
+async function loadCompiledTemplates(config, helpers) {
+  /** @type {Map<string, (data: object, helpers: object) => string>} */
+  const compiled = new Map();
+  const templatesDir = path.join(config.dirs.generated, "templates");
+  const manifestPath = path.join(templatesDir, "manifest.json");
+
+  if (!fs.existsSync(manifestPath)) {
+    return { compiled, layoutRender: null };
+  }
+
+  /** @type {Record<string, string>} */
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+  const bust = isDev ? `?t=${Date.now()}` : "";
+
+  for (const [viewId, rel] of Object.entries(manifest)) {
+    const file = path.join(templatesDir, rel);
+    if (!fs.existsSync(file)) continue;
+    const mod = await import(pathToFileURL(file).href + bust);
+    if (typeof mod.render !== "function") continue;
+    compiled.set(viewId, mod.render);
+
+    // `components/*.jsk` → helpers.PascalName
+    if (viewId.startsWith("components/")) {
+      const base = viewId.slice("components/".length).split("/").pop() ?? "";
+      const pascal = base
+        .split(/[-_/]+/)
+        .filter(Boolean)
+        .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
+        .join("");
+      if (pascal) {
+        helpers[pascal] = (props) => mod.render(props ?? {}, helpers);
+      }
+    }
+  }
+
+  const layoutRender = compiled.get("layout") ?? null;
+  return { compiled, layoutRender };
+}
+
+/**
+ * View id için kaynak `.ejs` dosyasını çoklu kökte ara.
+ * @param {string[]} viewRoots
+ * @param {string} view
+ * @returns {string | null}
+ */
+function findEjsView(viewRoots, view) {
+  for (const root of viewRoots) {
+    const file = path.join(root, `${view}.ejs`);
+    if (fs.existsSync(file)) return file;
+  }
+  return null;
 }
 
 /**
@@ -100,13 +195,22 @@ export function resetRenderEngine() {
  * Layout kullanmadan tek bir şablon render eder. Fragment/partial uçları
  * ve e-posta şablonları bunu kullanır.
  *
+ * Öncelik: derlenmiş `.jsk` → `.ejs`. İstek anında şablon derlenmez.
+ *
  * @param {string} view `views/` altındaki yol, uzantısız (örn. "pages/home")
  * @param {object} [data]
  * @returns {Promise<string>}
  */
 export async function renderView(view, data = {}) {
-  const { viewsDir, helpers, options } = await getEngine();
-  const file = path.join(viewsDir, `${view}.ejs`);
+  const { helpers, options, compiled, viewRoots, viewsDir } = await getEngine();
+  const renderFn = compiled.get(view);
+  if (renderFn) {
+    return renderFn({ ...data }, helpers);
+  }
+
+  const file =
+    findEjsView(viewRoots.length ? viewRoots : [viewsDir], view) ??
+    path.join(viewsDir, `${view}.ejs`);
   return ejs.renderFile(file, { ...helpers, ...data }, options);
 }
 
@@ -118,7 +222,7 @@ export async function renderView(view, data = {}) {
  * @returns {Promise<string>}
  */
 export async function renderPage(page) {
-  const { helpers, options, layout } = await getEngine();
+  const { helpers, options, layout, layoutRender } = await getEngine();
   const config = getConfig();
 
   const metadata = {
@@ -134,34 +238,43 @@ export async function renderPage(page) {
     hook("layoutContext", {}, { pathname: page.pathname ?? "", metadata }),
   ]);
 
-  return ejs.renderFile(
-    layout,
-    {
-      ...helpers,
-      ...context,
-      metadata,
-      // Boş varsayılan bilinçli: "/" yazmak her sayfayı ana sayfa sanıp
-      // logoyu <h1> olarak bastıran türde hatalara yol açıyor.
-      pathname: page.pathname ?? "",
-      lang: context.lang ?? config.brand.lang ?? "en",
-      headMeta: renderHeadMeta(metadata),
-      structuredData: context.structuredData ?? [],
-      // Preconnect her sayfada aynı; LCP preload'ını sayfa kendisi ekler.
-      // Gezinme ipuçları preconnect'ten sonra: spekülasyon bir sonraki sayfayı
-      // ilgilendiriyor, bu sayfanın LCP'sinin önüne geçmemeli.
-      extraHead:
-        preconnectHints() +
-        navigationHints() +
-        (page.head ?? "") +
-        (context.extraHead ?? ""),
-      bodyClass: page.bodyClass ?? context.bodyClass ?? "",
-      entries: page.entries ?? [],
-      devtools: isDev,
-      devBasePath: config.brand.devBasePath,
-      body,
-    },
-    options,
-  );
+  const locals = {
+    ...helpers,
+    ...context,
+    metadata,
+    // Boş varsayılan bilinçli: "/" yazmak her sayfayı ana sayfa sanıp
+    // logoyu <h1> olarak bastıran türde hatalara yol açıyor.
+    pathname: page.pathname ?? "",
+    lang: context.lang ?? config.brand.lang ?? "en",
+    headMeta: renderHeadMeta(metadata),
+    structuredData: context.structuredData ?? [],
+    // Preconnect her sayfada aynı; LCP preload'ını sayfa kendisi ekler.
+    // Gezinme ipuçları preconnect'ten sonra: spekülasyon bir sonraki sayfayı
+    // ilgilendiriyor, bu sayfanın LCP'sinin önüne geçmemeli.
+    extraHead:
+      preconnectHints() +
+      navigationHints() +
+      (page.head ?? "") +
+      (context.extraHead ?? ""),
+    bodyClass: page.bodyClass ?? context.bodyClass ?? "",
+    entries: page.entries ?? [],
+    devtools: isDev,
+    devBasePath: config.brand.devBasePath,
+    body,
+  };
+
+  if (layoutRender) {
+    return layoutRender(locals, helpers);
+  }
+
+  if (layout.endsWith(".jsk")) {
+    // Kaynak var ama derlenmemiş — ensureTemplates sonrası olmamalı.
+    throw new Error(
+      `Layout ${path.relative(config.root, layout)} is not compiled — run jskelet build`,
+    );
+  }
+
+  return ejs.renderFile(layout, locals, options);
 }
 
 /**

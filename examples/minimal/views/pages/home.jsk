@@ -1,0 +1,11 @@
+<section class="wrapper">
+  <h1 class="text-3xl font-bold">{{ heading }}</h1>
+
+  {# list bileşeni views/components/list.js — <List /> ile çağrılır #}
+  <List :items="items" />
+
+  {#
+    Island. Varsayılan olarak görünürlüğe bağlı bağlanır.
+  #}
+  <div class="mt-8" data-island="counter" data-island-props='{"start":5}'></div>
+</section>

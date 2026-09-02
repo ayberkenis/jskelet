@@ -78,17 +78,17 @@ export default function register(app, { route }) {
 }
 `,
 
-  "views/pages/home.ejs": `<section class="wrapper">
-  <h1><%= metadata.title %></h1>
-  <p><%= message %></p>
+  "views/pages/home.jsk": `<section class="wrapper">
+  <h1>{{ metadata.title }}</h1>
+  <p>{{ message }}</p>
   <div data-island="counter" data-island-props='{"start":0}'></div>
 </section>
 `,
 
-  "views/pages/not-found.ejs": `<section class="wrapper">
+  "views/pages/not-found.jsk": `<section class="wrapper">
   <h1>404</h1>
   <p>The page you are looking for was not found.</p>
-  <p><a href="/">Back to home</a></p>
+  <p><Link href="/" text="Back to home" /></p>
 </section>
 `,
 
@@ -96,7 +96,7 @@ export default function register(app, { route }) {
 
 /**
  * Every named export under \`views/components/**\` is usable directly in
- * templates: \`<%- button({ text: "Save" }) %>\`. No import needed.
+ * templates: \`<Button text="Save" />\` in \`.jsk\` or \`<%- button({ text }) %>\` in EJS.
  *
  * @param {{ text: string, href?: string, class?: string }} props
  * @returns {string}
@@ -157,6 +157,8 @@ export function mount(element, props) {
 @source "../views";
 @source "../client";
 @source "../routes";
+@source "../features";
+@source "../shared";
 
 body {
   margin: 0;

@@ -20,17 +20,70 @@ route(controller)
          │     renderView(page.view, { …data, metadata }),   → body
          │     hooks.layoutContext({ pathname, metadata }),  → context
          │   ])
-         └─ layout.ejs render  → tam HTML
+         └─ layout (.jsk derlenmiş veya .ejs)  → tam HTML
 ```
 
 Layout bağlamı ve gövde **paralel** üretilir. Sebebi ölçümden geliyor:
 navigasyon çoğu projede upstream'den geliyor ve gövde render'ıyla sırayla
 beklemek her sayfaya gereksiz gecikme ekliyor.
 
-## EJS motoru
+## `.jsk` — build-time derlenmiş şablonlar
 
-Motor ilk render'da bir kez kurulur; bileşen taraması dosya sistemine
-dokunduğu için her istekte yapılamaz ve config yüklenmeden hesaplanamaz.
+Yeni uygulamalarda varsayılan şablon biçimi `.jsk`'dir. Build sırasında
+(`.jskelet/templates/*.mjs`) normal ESM modüllerine çevrilir; **istek anında
+parse / `eval` / `new Function` yoktur**. Production yolu:
+
+```
+controller data → import edilmiş render(data, helpers) → HTML
+```
+
+### Sözdizimi özeti
+
+```html
+<section class="wrapper">
+  <h1>{{ title }}</h1>
+  <div>{{{ trustedHtml }}}</div>
+
+  {#if items.length}
+    <List :items="items" />
+  {#else}
+    <p>Boş</p>
+  {/if}
+
+  {#each items as item, i}
+    <li data-i="{{ i }}">{{ item }}</li>
+  {/each}
+
+  <Link href="/" text="Home" />
+  <div data-island="counter" data-island-props='{"start":0}'></div>
+</section>
+```
+
+| Özellik | Yazım |
+| --- | --- |
+| Kaçışlı metin | `{{ expr }}` |
+| Ham HTML | `{{{ expr }}}` |
+| Koşul | `{#if expr}` … `{#else}` … `{/if}` |
+| Döngü | `{#each list as item}` veya `as item, i` |
+| Include | `{#include "partials/header"}` (derlenmiş `.jsk`) |
+| Bileşen | PascalCase etiket; `:prop="expr"`, `prop="literal"`, boolean `disabled` |
+| Yerleşikler | `Link`, `Image`, `Icon`, `CsrfField`, `PreloadImage` |
+
+İfade dili kasıtlı olarak dardır (erişim, karşılaştırma, ternary, `.length`).
+Atama ve rastgele fonksiyon çağrısı yok — mantık controller veya JS bileşende
+kalır.
+
+### EJS ile birlikte yaşam
+
+Aynı `view` id için derlenmiş `.jsk` varsa o kullanılır; yoksa `.ejs` dosyası
+EJS ile render edilir. Mevcut uygulamalar değişmeden çalışır. `jskelet init`
+yeni iskeleti `.jsk` ile kurar.
+
+## EJS motoru (legacy)
+
+EJS hâlâ desteklenir. Motor ilk render'da bir kez kurulur; bileşen taraması
+dosya sistemine dokunduğu için her istekte yapılamaz ve config yüklenmeden
+hesaplanamaz.
 
 Ayarlar:
 
@@ -52,8 +105,9 @@ normal akışta gerekmez.
 1. `jskelet.config.mjs` → `layout` verilmişse o kullanılır. Yol, **views
    dizininin üst dizinine** göre çözülür: `views` varsayılansa
    `layout: "views/ozel.ejs"` → `<root>/views/ozel.ejs`.
-2. Verilmemişse `views/layout.ejs` varsa o kullanılır.
-3. O da yoksa framework'ün kendi minimal layout'u kullanılır
+2. Verilmemişse `views/layout.jsk` (derlenmiş) varsa o kullanılır.
+3. Yoksa `views/layout.ejs` varsa o kullanılır.
+4. O da yoksa framework'ün kendi minimal layout'u kullanılır
    (`node_modules/jskelet/src/templates/layout.ejs`, ayrıca
    `jskelet/layout` belirteciyle de erişilebilir).
 

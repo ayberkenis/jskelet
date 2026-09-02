@@ -801,12 +801,19 @@ function resolveDirs(root, overrides) {
  * Uygulamanın layout'u yoksa framework'ün minimal layout'u kullanılır. Bu
  * sayede yeni bir proje tek bir route ile çalışır hâle gelir.
  *
+ * Öncelik: config `layout` → `layout.jsk` (derlenmiş) → `layout.ejs` →
+ * framework varsayılanı. Dönüş değeri kaynak dosya yoludur; `.jsk` için
+ * render katmanı derlenmiş modülü kullanır.
+ *
  * @param {Record<string, string>} dirs
  * @param {string} [override]
  * @returns {string}
  */
 function resolveLayout(dirs, override) {
   if (override) return path.resolve(dirs.views, "..", override);
+
+  const jskLayout = path.join(dirs.views, "layout.jsk");
+  if (fs.existsSync(jskLayout)) return jskLayout;
 
   const appLayout = path.join(dirs.views, "layout.ejs");
   if (fs.existsSync(appLayout)) return appLayout;

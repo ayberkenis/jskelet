@@ -25,6 +25,9 @@ JSkelet puts this observation at the centre of the architecture:
    independent "island", with its own module, at its own time.
 3. **Page production is cached.** There is no point in producing the same HTML
    again on every request; a memory cache with a TTL takes the place of ISR.
+4. **Templates are compiled at build time (`.jsk`).** No request-time parsing;
+   EJS remains as a legacy path. Features may co-locate under
+   `features/<name>/{server,views,client}` — route URLs stay explicit.
 
 ## The path of a request
 

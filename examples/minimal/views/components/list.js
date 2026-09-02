@@ -1,9 +1,9 @@
 import { esc } from "jskelet/html";
 
 /**
- * Bileşenler EJS şablonu değil, HTML string döndüren fonksiyonlardır.
- * `views/components/**` altındaki her named export otomatik olarak şablon
- * local'i olur — barrel dosyası tutmak gerekmez.
+ * Bileşenler HTML string döndüren fonksiyonlardır. `.jsk` içinde
+ * `<List :items="items" />`, EJS içinde `<%- list({ items }) %>` — named
+ * export otomatik local olur.
  *
  * @param {{ items: string[] }} props
  * @returns {string}

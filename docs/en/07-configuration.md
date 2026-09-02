@@ -155,12 +155,14 @@ internally.
 
 | Key | Default | Contents |
 | --- | --- | --- |
-| `views` | `"views"` | EJS layout, pages, components |
-| `public` | `"public"` | Static files; the build output is written here too |
+| `views` | `"views"` | Layout, pages, components (classic root; `.jsk` / `.ejs`) |
+| `features` | `"features"` | Feature-first slices (`<name>/{server,views,client}`) |
+| `shared` | `"shared"` | Cross-feature server/views/client |
+| `public` | `"public"` | Static files; build output lands here too |
 | `client` | `"client"` | Island runtime sources and entries |
 | `routes` | `"routes"` | Route modules |
 | `styles` | `"styles/globals.css"` | Tailwind/PostCSS entry **file** |
-| `generated` | `".jskelet"` | `manifest.json`, `metafile.json`, `images.json` |
+| `generated` | `".jskelet"` | `manifest.json`, `templates/`, `metafile.json`, `images.json` |
 
 Even though `styles` is a file path it goes through the same resolution; keeping
 a separate field for it is not worth it.

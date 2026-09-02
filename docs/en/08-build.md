@@ -12,6 +12,7 @@ build is in [09-dev-tools.md](./09-dev-tools.md).
 ## The pipeline and its order
 
 ```
+0. Templates      .jsk → .jskelet/templates/*.mjs (always; no-op if none)
 1. Fonts          if config.fonts is set
 2. Icon sprite    if config.icons !== false
 3. CSS            if the styles entry file exists
@@ -20,6 +21,10 @@ build is in [09-dev-tools.md](./09-dev-tools.md).
 6. Manifest       .jskelet/manifest.json
 7. Precompress    if not watch
 ```
+
+Template compilation finishes **before** asset scanning; there is no parse on
+the request path. Tailwind `@source` and the icon scan read source `.jsk` files
+(not the generated `.mjs`).
 
 The order is not arbitrary:
 

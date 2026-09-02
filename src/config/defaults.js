@@ -14,8 +14,12 @@ export const IMMUTABLE_CACHE = "public, max-age=31536000, immutable";
  * tek tek ezilebilir.
  */
 export const DEFAULT_DIRS = {
-  /** EJS layout + sayfalar + bileşenler. */
+  /** Layout + sayfalar + bileşenler (klasik kök). */
   views: "views",
+  /** Feature-first dikey dilimler (`features/<name>/{server,views,client}`). */
+  features: "features",
+  /** Özellikler arası paylaşılan server/views/client. */
+  shared: "shared",
   /** Statik dosyalar; build çıktısı da buraya yazılır. */
   public: "public",
   /** Island runtime ve entry'ler. */
@@ -24,7 +28,7 @@ export const DEFAULT_DIRS = {
   routes: "routes",
   /** Tailwind/PostCSS giriş dosyası. */
   styles: "styles/globals.css",
-  /** Build ara çıktıları (manifest, metafile, images). */
+  /** Build ara çıktıları (manifest, metafile, images, templates). */
   generated: ".jskelet",
 };
 

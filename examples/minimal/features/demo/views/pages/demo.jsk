@@ -1,0 +1,5 @@
+<section class="wrapper">
+  <h1 class="text-3xl font-bold">{{ metadata.title }}</h1>
+  <p class="mt-4">{{ message }}</p>
+  <DemoBadge label="feature-local component" />
+</section>

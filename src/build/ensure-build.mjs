@@ -10,6 +10,10 @@ import { loadConfig } from "../config/index.js";
 
 const config = await loadConfig();
 
-if (!fs.existsSync(path.join(config.dirs.generated, "manifest.json"))) {
+const generated = config.dirs.generated;
+const needsAssets = !fs.existsSync(path.join(generated, "manifest.json"));
+const needsTemplates = !fs.existsSync(path.join(generated, "templates", "manifest.json"));
+
+if (needsAssets || needsTemplates) {
   await import("./build.mjs");
 }

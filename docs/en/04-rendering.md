@@ -21,18 +21,69 @@ route(controller)
          │     renderView(page.view, { …data, metadata }),   → body
          │     hooks.layoutContext({ pathname, metadata }),  → context
          │   ])
-         └─ layout.ejs render  → full HTML
+         └─ layout (.jsk compiled or .ejs)  → full HTML
 ```
 
 The layout context and the body are produced **in parallel**. The reason comes
 from measurement: in most projects navigation comes from upstream, and waiting
 for it in sequence with the body render adds needless latency to every page.
 
-## The EJS engine
+## `.jsk` — build-time compiled templates
 
-The engine is set up once on the first render; the component scan touches the
-file system, so it cannot be done on every request and cannot be computed
-before the config is loaded.
+New apps default to `.jsk`. At build time they become normal ESM modules under
+`.jskelet/templates/*.mjs`. There is **no request-time parsing, `eval`, or
+`new Function`**. Production path:
+
+```
+controller data → imported render(data, helpers) → HTML
+```
+
+### Syntax summary
+
+```html
+<section class="wrapper">
+  <h1>{{ title }}</h1>
+  <div>{{{ trustedHtml }}}</div>
+
+  {#if items.length}
+    <List :items="items" />
+  {#else}
+    <p>Empty</p>
+  {/if}
+
+  {#each items as item, i}
+    <li data-i="{{ i }}">{{ item }}</li>
+  {/each}
+
+  <Link href="/" text="Home" />
+  <div data-island="counter" data-island-props='{"start":0}'></div>
+</section>
+```
+
+| Feature | Form |
+| --- | --- |
+| Escaped text | `{{ expr }}` |
+| Raw HTML | `{{{ expr }}}` |
+| Conditional | `{#if expr}` … `{#else}` … `{/if}` |
+| Loop | `{#each list as item}` or `as item, i` |
+| Include | `{#include "partials/header"}` (compiled `.jsk`) |
+| Component | PascalCase tag; `:prop="expr"`, `prop="literal"`, boolean `disabled` |
+| Built-ins | `Link`, `Image`, `Icon`, `CsrfField`, `PreloadImage` |
+
+The expression language is intentionally small (access, compare, ternary,
+`.length`). No assignments or arbitrary calls — keep logic in controllers or JS
+components.
+
+### Coexistence with EJS
+
+If a compiled `.jsk` exists for a view id it wins; otherwise `.ejs` is rendered
+with EJS. Existing apps keep working unchanged. `jskelet init` scaffolds `.jsk`.
+
+## The EJS engine (legacy)
+
+EJS remains supported. The engine is set up once on the first render; the
+component scan touches the file system, so it cannot be done on every request
+and cannot be computed before the config is loaded.
 
 Settings:
 
@@ -54,14 +105,15 @@ normal flow because the dev server restarts the process.
 1. `jskelet.config.mjs` → if `layout` is given, it is used. The path is
    resolved relative to the **parent directory of the views directory**: if
    `views` is the default, `layout: "views/custom.ejs"` → `<root>/views/custom.ejs`.
-2. If it is not given and `views/layout.ejs` exists, that is used.
-3. If that does not exist either, the framework's own minimal layout is used
+2. If it is not given and `views/layout.jsk` exists (compiled), that is used.
+3. Else if `views/layout.ejs` exists, that is used.
+4. If that does not exist either, the framework's own minimal layout is used
    (`node_modules/jskelet/src/templates/layout.ejs`, also reachable through the
    `jskelet/layout` specifier).
 
-The third option exists so that a new project can work with a single route. The
+These fallbacks exist so that a new project can work with a single route. The
 most practical way to move to your own layout is to copy that file to
-`views/layout.ejs`.
+`views/layout.ejs` or author `views/layout.jsk`.
 
 ### The framework's default layout
 

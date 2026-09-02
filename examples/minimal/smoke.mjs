@@ -9,6 +9,7 @@ const BASE = process.env.BASE ?? "http://localhost:3211";
 const CASES = [
   ["/", 200, /data-island="counter"/],
   ["/hakkinda", 200, /Hakkında/],
+  ["/demo", 200, /feature-local component/],
   ["/yok", 404],
 ];
 

@@ -1,5 +1,5 @@
 <section class="wrapper">
   <h1 class="text-3xl font-bold">404</h1>
   <p class="mt-4">Aradığınız sayfa bulunamadı.</p>
-  <p class="mt-4"><%- link({ href: "/", text: "Ana sayfaya dön" }) %></p>
+  <p class="mt-4"><Link href="/" text="Ana sayfaya dön" /></p>
 </section>

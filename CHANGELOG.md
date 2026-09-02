@@ -27,6 +27,18 @@ one is listed under a **Breaking** heading.
 
 ### Added
 
+- Build-time `.jsk` templates: declarative HTML-like syntax compiled to ESM
+  render modules under `.jskelet/templates/` (no request-time parse, `eval`, or
+  `new Function`). Coexists with EJS; compiled `.jsk` wins when both exist.
+  Syntax: `{{ }}` / `{{{ }}}`, `{#if}` / `{#each}` / `{#include}`, PascalCase
+  components (`:prop` bindings), built-ins `Link` / `Image` / `Icon` /
+  `CsrfField` / `PreloadImage`.
+- Feature-first conventions: `paths.features` / `paths.shared`, multi-root
+  views and components, `features/<name>/index.js` route registration after
+  `routes/`. CLI: `jskelet generate feature|page|island`. `jskelet init`
+  scaffolds `.jsk` pages.
+- Template compile step in `jskelet build`; icon scan and Tailwind docs cover
+  `.jsk` / `features` / `shared`. Bench: `node scripts/bench-templates.mjs`.
 - Top-level `logs` config for persistent sinks: daily NDJSON files
   (`logs.file`) and batched S3 PutObject (`logs.s3`) with embedded SigV4 — no
   `@aws-sdk` dependency. `kinds` selects `http` / `event` / `error`; `console`
@@ -112,6 +124,11 @@ one is listed under a **Breaking** heading.
   `invalidateHtmlCache()` matches a path pattern and takes down every query
   variant of a path, which is the right default for a webhook but wrong when you
   want `/list?page=2` gone and `/list?page=3` left hot.
+
+### Changed
+
+- `examples/minimal` pages moved to `.jsk`; adds `features/demo` as a
+  co-located route + view sample.
 
 - An adaptive per-host rate limit for upstream calls, `cache().upstream`. It sits
   in the `fetch` wrapper rather than in the prewarm pass, because what spends the

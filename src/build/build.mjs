@@ -40,6 +40,12 @@ if (!child) {
 
 log.section("build");
 
+// Şablonlar asset taramasından önce derlenir; istek anında parse yok.
+await task("Templates", async () => {
+  const { buildTemplates } = await import("./tasks/templates.mjs");
+  await buildTemplates(config);
+});
+
 /** @type {Record<string, string>} */
 const manifest = {};
 

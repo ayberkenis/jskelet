@@ -5,7 +5,8 @@
  *   jskelet dev      build watch + sunucu, canlı yenileme, dev overlay
  *   jskelet build    tek seferlik prod build (fontlar, sprite, CSS, JS, görseller)
  *   jskelet start    prod sunucu (build eksikse önce üretir)
- *   jskelet init     bulunduğun dizine minimal iskelet kurar
+ *   jskelet init       bulunduğun dizine minimal iskelet kurar
+ *   jskelet generate   feature / page / island iskeleti
  *
  * Alt komutlar ayrı süreçlerde çalışır. Sebep: `dev` iki uzun ömürlü süreci
  * (build watch + sunucu) yönetiyor ve sunucunun ESM resolve hook'larına
@@ -90,14 +91,26 @@ switch (command) {
     break;
   }
 
+  case "generate": {
+    const { generate } = await import("../src/generate.mjs");
+    try {
+      await generate(process.cwd(), rest);
+    } catch (error) {
+      process.stderr.write(`${error instanceof Error ? error.message : error}\n`);
+      process.exit(1);
+    }
+    break;
+  }
+
   default: {
     const known = command ? `unknown command: ${command}\n\n` : "";
     process.stderr.write(
-      `${known}usage: jskelet <dev|build|start|init>\n\n` +
-        "  dev     build watch + server (live reload, dev overlay)\n" +
-        "  build   production build\n" +
-        "  start   production server\n" +
-        "  init    scaffold a minimal skeleton in the current directory\n",
+      `${known}usage: jskelet <dev|build|start|init|generate>\n\n` +
+        "  dev       build watch + server (live reload, dev overlay)\n" +
+        "  build     production build\n" +
+        "  start     production server\n" +
+        "  init      scaffold a minimal skeleton in the current directory\n" +
+        "  generate  scaffold feature | page | island\n",
     );
     process.exit(command ? 1 : 0);
   }

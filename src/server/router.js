@@ -9,8 +9,8 @@
  *
  * Sıra iki şekilde belirlenir:
  *   1. `jskelet.config.mjs` → `routes: ["./routes/api.js", …]` (açık liste)
- *   2. Liste yoksa `routes/` dizini alfabetik taranır. Bu durumda dosya adına
- *      sayısal önek verin: `10-pages.js`, `50-blog.js`, `99-catch-all.js`.
+ *   2. Liste yoksa `routes/` alfabetik taranır, ardından her feature'ın
+ *      `index.js` dosyası alfabetik eklenir. Catch-all'lar için sayısal önek.
  *
  * Modül sözleşmesi: default export ya da `register` adlı named export,
  * `(app, api) => void | Promise<void>` imzasıyla. `api` içinde `route`,
@@ -62,6 +62,29 @@ function discover(dir, out = []) {
 }
 
 /**
+ * `features/<name>/index.js` (veya `.mjs`) — feature-first kayıt noktası.
+ * @param {string} featuresDir
+ * @returns {string[]}
+ */
+function discoverFeatures(featuresDir) {
+  if (!featuresDir || !fs.existsSync(featuresDir)) return [];
+
+  return fs
+    .readdirSync(featuresDir, { withFileTypes: true })
+    .filter((e) => e.isDirectory())
+    .map((e) => e.name)
+    .sort((a, b) => a.localeCompare(b))
+    .flatMap((name) => {
+      const dir = path.join(featuresDir, name);
+      for (const file of ["index.js", "index.mjs"]) {
+        const full = path.join(dir, file);
+        if (fs.existsSync(full)) return [full];
+      }
+      return [];
+    });
+}
+
+/**
  * Route dosyalarına geçilen framework yüzeyi.
  */
 const api = {
@@ -84,7 +107,7 @@ export async function registerRoutes(app) {
 
   const files = config.routes
     ? config.routes.map((entry) => path.resolve(config.root, entry))
-    : discover(config.dirs.routes);
+    : [...discover(config.dirs.routes), ...discoverFeatures(config.dirs.features)];
 
   if (!files.length) {
     console.warn(

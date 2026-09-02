@@ -150,12 +150,14 @@ göre çözülür ve içeride mutlak yola çevrilir.
 
 | Anahtar | Varsayılan | İçeriği |
 | --- | --- | --- |
-| `views` | `"views"` | EJS layout, sayfalar, bileşenler |
+| `views` | `"views"` | Layout, sayfalar, bileşenler (klasik kök; `.jsk` / `.ejs`) |
+| `features` | `"features"` | Feature-first dilimler (`<name>/{server,views,client}`) |
+| `shared` | `"shared"` | Özellikler arası paylaşılan server/views/client |
 | `public` | `"public"` | Statik dosyalar; build çıktısı da buraya yazılır |
 | `client` | `"client"` | Island runtime kaynakları ve entry'ler |
 | `routes` | `"routes"` | Route modülleri |
 | `styles` | `"styles/globals.css"` | Tailwind/PostCSS giriş **dosyası** |
-| `generated` | `".jskelet"` | `manifest.json`, `metafile.json`, `images.json` |
+| `generated` | `".jskelet"` | `manifest.json`, `templates/`, `metafile.json`, `images.json` |
 
 `styles` bir dosya yolu olduğu hâlde aynı çözümlemeden geçer; ayrı bir alan
 tutmaya değmiyor.
@@ -200,8 +202,8 @@ Layout `.ejs` dosyasının yolu. Verilen değer **views dizininin üst dizinine*
 göre çözülür, yani varsayılan `views` ile `"views/ozel.ejs"` →
 `<root>/views/ozel.ejs`.
 
-Verilmezse sırayla: `views/layout.ejs` varsa o, yoksa framework'ün minimal
-layout'u. Ayrıntı: [04-render-ve-sablonlar.md](./04-render-ve-sablonlar.md).
+Verilmezse sırayla: `views/layout.jsk`, `views/layout.ejs`, yoksa framework'ün
+minimal layout'u. Ayrıntı: [04-render-ve-sablonlar.md](./04-render-ve-sablonlar.md).
 
 ## `routes`
 
@@ -467,7 +469,7 @@ Phosphor SVG sprite üretimi.
 
 | Değer | Sonuç |
 | --- | --- |
-| `{}` (varsayılan) | Sprite üretilir; taranan dizinler `["views", "client", "routes", "lib"]` |
+| `{}` (varsayılan) | Sprite üretilir; taranan dizinler `["views", "client", "routes", "lib", "features", "shared"]` |
 | `{ scan: [...] }` | Taranan dizinler değiştirilir |
 | `false` | Sprite adımı tamamen atlanır |
 

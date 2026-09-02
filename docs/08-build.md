@@ -12,6 +12,7 @@ davranışı burada. Çıktının çalışma anında nasıl servis edildiği
 ## Hat ve sırası
 
 ```
+0. Templates      .jsk → .jskelet/templates/*.mjs (her zaman; dosya yoksa no-op)
 1. Fonts          config.fonts varsa
 2. Icon sprite    config.icons !== false ise
 3. CSS            styles giriş dosyası varsa
@@ -20,6 +21,10 @@ davranışı burada. Çıktının çalışma anında nasıl servis edildiği
 6. Manifest       .jskelet/manifest.json
 7. Precompress    watch değilse
 ```
+
+Şablon derlemesi asset taramasından **önce** biter; istek yolunda parse yoktur.
+Tailwind `@source` ve ikon taraması kaynak `.jsk` dosyalarını okur (üretilmiş
+`.mjs` değil).
 
 Sıra rastgele değil:
 

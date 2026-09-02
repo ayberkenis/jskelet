@@ -63,9 +63,25 @@ export default {
 };
 ```
 
-**2. Liste yoksa `routes/` dizini alfabetik taranır.** Tarama özyinelemelidir
-(alt dizinler de dâhil), yalnızca `.js` ve `.mjs` dosyaları alınır ve adı `_`
-ile başlayan dosyalar atlanır (`_helpers.js` gibi paylaşılan modüller için).
+**2. Liste yoksa `routes/` dizini alfabetik taranır**, ardından her
+`features/<name>/index.js` (veya `.mjs`) alfabetik eklenir. Tarama
+özyinelemelidir (alt dizinler de dâhil), yalnızca `.js` ve `.mjs` dosyaları
+alınır ve adı `_` ile başlayan dosyalar atlanır (`_helpers.js` gibi paylaşılan
+modüller için).
+
+Feature-first düzen zorunlu değildir; bir feature örneği:
+
+```
+features/piyasalar/
+  index.js          # register(app, api) — URL'ler açıkça yazılır
+  server/
+  views/pages/…     # .jsk veya .ejs
+  views/components/
+  client/           # island'lar; client/entries'ten registerAll
+```
+
+`jskelet generate feature|page|island` iskelet üretir. Filesystem URL routing
+yoktur.
 
 Bu durumda dosya adlarına sayısal önek verin:
 

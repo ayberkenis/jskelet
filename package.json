@@ -1,7 +1,7 @@
 {
   "name": "jskelet",
-  "version": "0.3.5",
-  "description": "A framework that feels like no framework: Express 5 + EJS server rendering, vanilla JS islands, Tailwind v4 and an in-process HTML TTL cache.",
+  "version": "0.4.0",
+  "description": "A framework that feels like no framework: Express 5 + build-time .jsk (or EJS) SSR, vanilla JS islands, Tailwind v4 and an in-process HTML TTL cache.",
   "type": "module",
   "license": "MIT",
   "author": "Ayberk Enis",

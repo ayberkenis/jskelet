@@ -1,7 +1,6 @@
 /**
- * `views/components/**` altındaki tüm modülleri yükler ve named export'larını
- * tek bir nesnede birleştirir. Bu nesne EJS şablonlarına local olarak geçer,
- * böylece `<%- card({ … }) %>` gibi çağrılar import gerektirmeden çalışır.
+ * `views/components/**` (ve feature/shared köklerindeki eşleri) altındaki
+ * tüm modülleri yükler ve named export'larını tek bir nesnede birleştirir.
  *
  * Elle bakılan bir barrel dosyası yok: yeni bir bileşen eklemek için dosyayı
  * oluşturmak yeterli.
@@ -44,17 +43,15 @@ function collect(dir, out = []) {
 }
 
 /**
- * @param {string} dir `views/components` dizininin mutlak yolu. Dizin yoksa
- *   boş nesne döner: bileşen kullanmayan bir proje de çalışmalı.
- * @returns {Promise<Record<string, unknown>>}
+ * Tek bir `components/` dizinini yükler.
+ *
+ * @param {string} dir
+ * @param {Record<string, unknown>} components
+ * @param {Map<string, string>} origin
+ * @returns {Promise<void>}
  */
-export async function loadComponents(dir) {
-  if (!dir || !fs.existsSync(dir)) return {};
-
-  /** @type {Record<string, unknown>} */
-  const components = {};
-  /** @type {Map<string, string>} */
-  const origin = new Map();
+async function loadDir(dir, components, origin) {
+  if (!dir || !fs.existsSync(dir)) return;
 
   const barrel = path.join(dir, BARREL);
   const files = [
@@ -79,6 +76,22 @@ export async function loadComponents(dir) {
       components[name] = value;
       origin.set(name, relative);
     }
+  }
+}
+
+/**
+ * @param {string | string[]} dirs Tek dizin veya çoklu kök (feature/shared).
+ * @returns {Promise<Record<string, unknown>>}
+ */
+export async function loadComponents(dirs) {
+  /** @type {Record<string, unknown>} */
+  const components = {};
+  /** @type {Map<string, string>} */
+  const origin = new Map();
+
+  const list = Array.isArray(dirs) ? dirs : [dirs];
+  for (const dir of list) {
+    await loadDir(dir, components, origin);
   }
 
   return components;
