@@ -47,7 +47,8 @@ one is listed under a **Breaking** heading.
 - Feature-first conventions: `paths.features` / `paths.shared`, multi-root
   views and components, `features/<name>/index.js` route registration after
   `routes/`. CLI: `jskelet generate feature|page|island`. `jskelet init`
-  scaffolds `.jsk` pages.
+  scaffolds a feature-first `.jsk` skeleton (`features/home/` with route,
+  page, component and island; global `views/pages/not-found.jsk`).
 - Template compile step in `jskelet build`; icon scan and Tailwind docs cover
   `.jsk` / `features` / `shared`. Bench: `node scripts/bench-templates.mjs`.
 - Top-level `logs` config for persistent sinks: daily NDJSON files
@@ -138,6 +139,11 @@ one is listed under a **Breaking** heading.
 
 ### Changed
 
+- README rewritten for the current surface: build-time `.jsk` as the default
+  template story (EJS still supported), feature-first `init` examples, `mount`
+  island contract, path-based `invalidateHtmlCache` (replacing the outdated
+  “no targeted invalidation” claim), Redis / admin / data-cache callouts, and
+  bilingual doc links under `docs/` and `docs/en/`.
 - Duplicate component named exports (or the same PascalCase tag in two files)
   now **fail** at build and at server startup instead of warning and letting
   the second definition win. Overwriting `components/index.js` barrel exports

@@ -2,7 +2,7 @@
 
 Bu belge JSkelet'i sıfırdan çalıştırmayı anlatır: paket kurulumu, `jskelet init`
 ile iskeletin oluşturulması, ilk route ve ilk island'ın yazılması, oluşan dizin
-yapısının ne anlama geldiği ve CLI'ın dört komutu. Sonunda tarayıcıda sunucuda
+yapısının ne anlama geldiği ve CLI komutları. Sonunda tarayıcıda sunucuda
 render edilmiş, önbelleğe alınmış ve island'ı görünürlükte hidre olan bir sayfa
 olacak. Kararların *nedenleri* için [02-mimari.md](./02-mimari.md)'ye, buradaki
 her config alanının tam referansı için
@@ -56,20 +56,23 @@ tamamlar, atlanan dosyaların sayısını uyarı olarak basar. Amaç, "kurulumu
 yaptım ama hiçbir şey çalışmıyor" aşamasını tamamen atlamak — `jskelet dev`
 hemen ardından çalışır.
 
-Oluşturulan dosyalar:
+Oluşturulan dosyalar (feature-first + `.jsk`):
 
 ```
-jskelet.config.mjs          config: brand, preconnect, cache(), hooks
-routes/10-pages.mjs         "/" route'u
-views/pages/home.ejs        ana sayfa şablonu
-views/pages/not-found.ejs   404 şablonu
-views/components/button.js  örnek bileşen (HTML string döndüren fonksiyon)
-client/entries/main.js      island bootstrap'ı
-client/islands/counter.js   örnek island
-styles/globals.css          Tailwind girişi + @source direktifleri
-jsconfig.json               checkJs + "@/*" alias'ı
-.gitignore                  node_modules/, .jskelet/, public/assets/, .env
+jskelet.config.mjs                       config: brand, preconnect, cache(), hooks
+features/home/index.js                   "/" route'u
+features/home/views/pages/home.jsk       ana sayfa şablonu
+features/home/views/components/button.js örnek bileşen (<Button />)
+features/home/client/counter.js          örnek island
+features/home/server/.gitkeep
+views/pages/not-found.jsk                uygulama geneli 404
+client/entries/main.js                   island bootstrap'ı
+styles/globals.css                       Tailwind girişi + @source direktifleri
+jsconfig.json                            checkJs + "@/*" alias'ı
+.gitignore                               node_modules/, .jskelet/, public/assets/, .env
 ```
+
+Büyümek için: `npx jskelet generate feature <name>` (veya `page` / `island`).
 
 Sonra:
 
@@ -88,44 +91,44 @@ ile ezilebilir. Aşağıdaki değerler varsayılanlardır (`src/config/defaults.
 
 | Dizin | Varsayılan | İçeriği |
 | --- | --- | --- |
-| `views` | `views` | EJS layout, sayfalar ve bileşenler |
+| `views` | `views` | Uygulama geneli layout, sayfalar ve bileşenler |
+| `features` | `features` | Feature dilimleri (`<name>/{server,views,client}`) |
+| `shared` | `shared` | Feature'lar arası paylaşılan server/views/client |
 | `public` | `public` | Statik dosyalar; build çıktısı da buraya yazılır |
 | `client` | `client` | Island runtime kaynakları ve entry'ler |
-| `routes` | `routes` | Route modülleri |
+| `routes` | `routes` | Route modülleri (feature'lardan önce yüklenir) |
 | `styles` | `styles/globals.css` | Tailwind/PostCSS giriş **dosyası** |
-| `generated` | `.jskelet` | Build ara çıktıları: `manifest.json`, `metafile.json`, `images.json` |
+| `generated` | `.jskelet` | Build ara çıktıları: `manifest.json`, `metafile.json`, `images.json`, `templates/` |
 
 Bunlara ek olarak framework iki yolu her zaman türetir ve ayrı ayar kabul
 etmez: `public/assets` (hash'li build çıktısı) ve `public/fonts` (self-host
 fontlar).
 
-Tipik bir proje:
+Tipik bir proje (`jskelet init` çıktısına yakın):
 
 ```
 benim-sitem/
 ├── jskelet.config.mjs
 ├── jsconfig.json
-├── routes/
-│   ├── 10-pages.mjs
-│   └── 90-catch-all.mjs
+├── features/
+│   └── home/
+│       ├── index.js
+│       ├── server/
+│       ├── views/
+│       │   ├── pages/home.jsk
+│       │   └── components/button.js
+│       └── client/counter.js
 ├── views/
-│   ├── layout.ejs
-│   ├── pages/
-│   │   ├── home.ejs
-│   │   └── not-found.ejs
-│   └── components/
-│       └── card.js
+│   └── pages/not-found.jsk
 ├── client/
-│   ├── entries/
-│   │   └── main.js
-│   └── islands/
-│       └── counter.js
+│   └── entries/main.js
 ├── styles/
 │   └── globals.css
 ├── public/
 │   └── (statik dosyalar; build → public/assets)
 └── .jskelet/
-    └── manifest.json
+    ├── manifest.json
+    └── templates/
 ```
 
 ## İlk route
@@ -135,7 +138,7 @@ kendi yollarını `app.get(...)` ile açıkça yazar. Modül sözleşmesi: defau
 export ya da `register` adlı named export, `(app, api)` imzasıyla.
 
 ```js
-// routes/10-pages.mjs
+// features/home/index.js
 export default function register(app, { route }) {
   app.get(
     "/",
@@ -143,7 +146,7 @@ export default function register(app, { route }) {
       async () => ({
         view: "pages/home",
         metadata: { title: "Ana sayfa" },
-        data: { heading: "JSkelet çalışıyor", items: ["Bir", "İki"] },
+        data: { message: "JSkelet çalışıyor" },
       }),
       { revalidate: 60 },
     ),
@@ -157,25 +160,26 @@ yapmak zorunda kalmaz. `route()` controller'ı sarar: HTML cache'i,
 notFound/redirect kontrol akışı, sıkıştırma ve `X-JSkelet-Cache` başlığı ondan
 gelir. Controller'ın tek işi bir sayfa tanımı döndürmektir.
 
-Dosya adındaki `10-` öneki yükleme sırasını belirler. `routes/` alfabetik
-tarandığı için `/:slug` gibi yakalayıcı route'ları daha yüksek numaralı bir
-dosyaya koymalısınız; aksi hâlde `/hakkinda` bir slug sanılır. Ayrıntı:
-[03-routing.md](./03-routing.md).
+`routes/` kullanıyorsanız dosya adındaki `10-` öneki yükleme sırasını belirler;
+`/:slug` gibi yakalayıcı route'ları daha yüksek numaralı bir dosyaya koyun.
+Feature `index.js` dosyaları `routes/` tarandıktan sonra alfabetik eklenir.
+Ayrıntı: [03-routing.md](./03-routing.md).
 
-Şablon tarafı düz EJS:
+Şablon tarafı `.jsk` (build-time derlenir):
 
-```ejs
-<%# views/pages/home.ejs %>
+```html
+{# features/home/views/pages/home.jsk #}
 <section class="wrapper">
-  <h1 class="text-3xl font-bold"><%= heading %></h1>
-  <%- list({ items }) %>
-  <div data-island="counter" data-island-props='{"start":5}'></div>
+  <h1>{{ metadata.title }}</h1>
+  <p>{{ message }}</p>
+  <Button text="Örnek bileşen" />
+  <div data-island="counter" data-island-props='{"start":0}'></div>
 </section>
 ```
 
-`list` burada `views/components/list.js` içinde tanımlı bir fonksiyondur ve
-import edilmemiştir: `views/components/**` altındaki her named export otomatik
-olarak şablon local'i olur ([04-render-ve-sablonlar.md](./04-render-ve-sablonlar.md)).
+`Button`, `features/home/views/components/button.js` içindeki `button` named
+export'undan gelir — PascalCase etiket; import gerekmez
+([04-render-ve-sablonlar.md](./04-render-ve-sablonlar.md)).
 
 ## İlk island
 
@@ -193,7 +197,7 @@ iki parçadan oluşur.
 verir.
 
 ```js
-// client/islands/counter.js
+// features/home/client/counter.js
 /**
  * @param {HTMLElement} element
  * @param {{ start?: number }} props
@@ -225,7 +229,7 @@ runtime'ı başlatır.
 import { registerAll, start } from "jskelet/client";
 
 registerAll({
-  counter: () => import("../islands/counter.js"),
+  counter: () => import("../../features/home/client/counter.js"),
 });
 
 start();
@@ -239,7 +243,7 @@ haritayı büyütmek ilk yükü büyütmez. Hidrasyon stratejileri
 
 ## CLI komutları
 
-`bin/jskelet.mjs` dört alt komut sunar. Her biri ayrı bir Node sürecinde
+`bin/jskelet.mjs` şu alt komutları sunar. Her biri ayrı bir Node sürecinde
 çalışır; sebebi `dev`in iki uzun ömürlü süreci yönetmesi ve sunucunun ESM
 resolve hook'larına (`--import`) süreç başlangıcında ihtiyaç duyması.
 
@@ -248,7 +252,8 @@ resolve hook'larına (`--import`) süreç başlangıcında ihtiyaç duyması.
 | `jskelet dev` | Build watch + sunucu, tek terminalde. Canlı yenileme, CSS hot-swap, dev overlay. `NODE_ENV=development`. |
 | `jskelet build` | Tek seferlik prod build: fontlar → ikon sprite → CSS → client JS → görseller → manifest → precompress. `NODE_ENV` verilmemişse `production`. |
 | `jskelet start` | Prod sunucu. Build çıktısı yoksa önce üretir. `NODE_ENV` verilmemişse `production`. |
-| `jskelet init` | Bulunduğun dizine minimal iskelet kurar; var olan dosyalara dokunmaz. |
+| `jskelet init` | Bulunduğun dizine feature-first `.jsk` iskeleti kurar; var olan dosyalara dokunmaz. |
+| `jskelet generate` | `feature` / `page` / `island` iskeleti üretir. |
 
 Bilinmeyen bir komut ya da argümansız çağrı kullanım metnini basar.
 

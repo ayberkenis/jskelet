@@ -2,8 +2,8 @@
 
 This document explains how to get JSkelet running from scratch: installing the
 package, scaffolding the skeleton with `jskelet init`, writing your first route
-and your first island, what the resulting directory layout means, and the CLI's
-four commands. By the end you will have a page in the browser that is rendered
+and your first island, what the resulting directory layout means, and the CLI
+commands. By the end you will have a page in the browser that is rendered
 on the server, cached, and whose island hydrates on visibility. For the
 *reasons* behind the decisions see
 [02-architecture.md](./02-architecture.md), and for the full reference of every
@@ -58,20 +58,23 @@ what is missing and prints the number of skipped files as a warning. The goal is
 to skip the "I installed it but nothing works" stage entirely — `jskelet dev`
 runs right afterwards.
 
-The files it creates:
+The files it creates (feature-first + `.jsk`):
 
 ```
-jskelet.config.mjs          config: brand, preconnect, cache(), hooks
-routes/10-pages.mjs         the "/" route
-views/pages/home.ejs        home page template
-views/pages/not-found.ejs   404 template
-views/components/button.js  example component (a function returning an HTML string)
-client/entries/main.js      island bootstrap
-client/islands/counter.js   example island
-styles/globals.css          Tailwind entry + @source directives
-jsconfig.json               checkJs + the "@/*" alias
-.gitignore                  node_modules/, .jskelet/, public/assets/, .env
+jskelet.config.mjs                       config: brand, preconnect, cache(), hooks
+features/home/index.js                   the "/" route
+features/home/views/pages/home.jsk       home page template
+features/home/views/components/button.js example component (<Button />)
+features/home/client/counter.js          example island
+features/home/server/.gitkeep
+views/pages/not-found.jsk                app-wide 404
+client/entries/main.js                   island bootstrap
+styles/globals.css                       Tailwind entry + @source directives
+jsconfig.json                            checkJs + the "@/*" alias
+.gitignore                               node_modules/, .jskelet/, public/assets/, .env
 ```
+
+To grow: `npx jskelet generate feature <name>` (or `page` / `island`).
 
 Then:
 
@@ -92,44 +95,44 @@ None of the directory names are fixed; all of them can be overridden via
 
 | Directory | Default | Contents |
 | --- | --- | --- |
-| `views` | `views` | EJS layout, pages and components |
+| `views` | `views` | App-wide layout, pages and components |
+| `features` | `features` | Feature slices (`<name>/{server,views,client}`) |
+| `shared` | `shared` | Cross-feature server/views/client |
 | `public` | `public` | Static files; build output is written here too |
 | `client` | `client` | Island runtime sources and entries |
-| `routes` | `routes` | Route modules |
+| `routes` | `routes` | Route modules (loaded before features) |
 | `styles` | `styles/globals.css` | Tailwind/PostCSS entry **file** |
-| `generated` | `.jskelet` | Intermediate build output: `manifest.json`, `metafile.json`, `images.json` |
+| `generated` | `.jskelet` | Intermediate build output: `manifest.json`, `metafile.json`, `images.json`, `templates/` |
 
 In addition to these the framework always derives two paths and accepts no
 separate setting for them: `public/assets` (hashed build output) and
 `public/fonts` (self-hosted fonts).
 
-A typical project:
+A typical project (close to what `jskelet init` writes):
 
 ```
 my-site/
 ├── jskelet.config.mjs
 ├── jsconfig.json
-├── routes/
-│   ├── 10-pages.mjs
-│   └── 90-catch-all.mjs
+├── features/
+│   └── home/
+│       ├── index.js
+│       ├── server/
+│       ├── views/
+│       │   ├── pages/home.jsk
+│       │   └── components/button.js
+│       └── client/counter.js
 ├── views/
-│   ├── layout.ejs
-│   ├── pages/
-│   │   ├── home.ejs
-│   │   └── not-found.ejs
-│   └── components/
-│       └── card.js
+│   └── pages/not-found.jsk
 ├── client/
-│   ├── entries/
-│   │   └── main.js
-│   └── islands/
-│       └── counter.js
+│   └── entries/main.js
 ├── styles/
 │   └── globals.css
 ├── public/
 │   └── (static files; build → public/assets)
 └── .jskelet/
-    └── manifest.json
+    ├── manifest.json
+    └── templates/
 ```
 
 ## Your first route
@@ -140,7 +143,7 @@ a default export or a named export called `register`, with the signature
 `(app, api)`.
 
 ```js
-// routes/10-pages.mjs
+// features/home/index.js
 export default function register(app, { route }) {
   app.get(
     "/",
@@ -148,7 +151,7 @@ export default function register(app, { route }) {
       async () => ({
         view: "pages/home",
         metadata: { title: "Home" },
-        data: { heading: "JSkelet is running", items: ["One", "Two"] },
+        data: { message: "JSkelet is running" },
       }),
       { revalidate: 60 },
     ),
@@ -163,25 +166,26 @@ HTML cache, the notFound/redirect control flow, compression and the
 `X-JSkelet-Cache` header all come from it. The controller's only job is to
 return a page definition.
 
-The `10-` prefix in the file name determines the load order. Because `routes/`
-is scanned alphabetically, you should put catch-all routes such as `/:slug` in a
-file with a higher number; otherwise `/about` will be mistaken for a slug.
-Details: [03-routing.md](./03-routing.md).
+If you use `routes/`, the `10-` prefix in the file name determines load order;
+put catch-alls such as `/:slug` in a higher-numbered file. Feature `index.js`
+files are appended alphabetically after the `routes/` scan. Details:
+[03-routing.md](./03-routing.md).
 
-The template side is plain EJS:
+The template side is `.jsk` (compiled at build time):
 
-```ejs
-<%# views/pages/home.ejs %>
+```html
+{# features/home/views/pages/home.jsk #}
 <section class="wrapper">
-  <h1 class="text-3xl font-bold"><%= heading %></h1>
-  <%- list({ items }) %>
-  <div data-island="counter" data-island-props='{"start":5}'></div>
+  <h1>{{ metadata.title }}</h1>
+  <p>{{ message }}</p>
+  <Button text="Example component" />
+  <div data-island="counter" data-island-props='{"start":0}'></div>
 </section>
 ```
 
-Here `list` is a function defined in `views/components/list.js` and it has not
-been imported: every named export under `views/components/**` automatically
-becomes a template local ([04-rendering.md](./04-rendering.md)).
+`Button` comes from the `button` named export in
+`features/home/views/components/button.js` — PascalCase tag, no import
+([04-rendering.md](./04-rendering.md)).
 
 ## Your first island
 
@@ -199,7 +203,7 @@ carried as JSON inside `data-island-props`.
 `mount(element, props)`.
 
 ```js
-// client/islands/counter.js
+// features/home/client/counter.js
 /**
  * @param {HTMLElement} element
  * @param {{ start?: number }} props
@@ -231,7 +235,7 @@ import and starts the runtime.
 import { registerAll, start } from "jskelet/client";
 
 registerAll({
-  counter: () => import("../islands/counter.js"),
+  counter: () => import("../../features/home/client/counter.js"),
 });
 
 start();
@@ -245,7 +249,7 @@ runtime API are in [05-islands.md](./05-islands.md).
 
 ## CLI commands
 
-`bin/jskelet.mjs` offers four subcommands. Each runs in a separate Node process;
+`bin/jskelet.mjs` offers these subcommands. Each runs in a separate Node process;
 the reason is that `dev` manages two long-lived processes and the server needs
 ESM resolve hooks (`--import`) at process start.
 
@@ -254,7 +258,8 @@ ESM resolve hooks (`--import`) at process start.
 | `jskelet dev` | Build watch + server, in a single terminal. Live reload, CSS hot-swap, dev overlay. `NODE_ENV=development`. |
 | `jskelet build` | One-shot prod build: fonts → icon sprite → CSS → client JS → images → manifest → precompress. `production` if `NODE_ENV` is not given. |
 | `jskelet start` | Prod server. If there is no build output it produces it first. `production` if `NODE_ENV` is not given. |
-| `jskelet init` | Installs a minimal skeleton into the current directory; leaves existing files alone. |
+| `jskelet init` | Installs a feature-first `.jsk` skeleton into the current directory; leaves existing files alone. |
+| `jskelet generate` | Scaffolds a `feature` / `page` / `island`. |
 
 An unknown command, or a call with no arguments, prints the usage text.
 

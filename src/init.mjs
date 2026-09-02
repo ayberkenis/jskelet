@@ -1,9 +1,12 @@
 /**
  * `jskelet init` — bulunduğun dizine çalışan bir minimum iskelet kurar.
  *
- * Var olan dosyaların üzerine yazmaz: komutu ikinci kez çalıştırmak yalnızca
- * eksikleri tamamlar. Amaç, "kurulum yaptım ama hiçbir şey çalışmıyor"
- * aşamasını tamamen atlamak — `jskelet dev` hemen ardından çalışır.
+ * Varsayılan düzen feature-first'tir: sayfa, bileşen ve island
+ * `features/<name>/` altında toplanır; URL kaydı yine açıkça yazılır.
+ * Şablonlar `.jsk`. Var olan dosyaların üzerine yazmaz: komutu ikinci kez
+ * çalıştırmak yalnızca eksikleri tamamlar. Amaç, "kurulum yaptım ama hiçbir
+ * şey çalışmıyor" aşamasını tamamen atlamak — `jskelet dev` hemen ardından
+ * çalışır.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -55,13 +58,12 @@ export default {
 };
 `,
 
-  "routes/10-pages.mjs": `/**
- * Route module. The default export receives \`(app, api)\`; \`api.route()\` wraps
- * the controller with the HTML cache, the notFound/redirect flow and
- * compression.
+  "features/home/index.js": `/**
+ * Feature route registration. Explicit paths only — no filesystem URL routing.
+ * Loaded after \`routes/\` (alphabetically among features).
  *
- * The numeric prefix in the file name sets load order: catch-all routes
- * (like "/:slug") belong to a higher number.
+ * @param {import('express').Express} app
+ * @param {{ route: Function }} api
  */
 export default function register(app, { route }) {
   app.get(
@@ -78,25 +80,19 @@ export default function register(app, { route }) {
 }
 `,
 
-  "views/pages/home.jsk": `<section class="wrapper">
+  "features/home/views/pages/home.jsk": `<section class="wrapper">
   <h1>{{ metadata.title }}</h1>
   <p>{{ message }}</p>
+  <Button text="Example component" />
   <div data-island="counter" data-island-props='{"start":0}'></div>
 </section>
 `,
 
-  "views/pages/not-found.jsk": `<section class="wrapper">
-  <h1>404</h1>
-  <p>The page you are looking for was not found.</p>
-  <p><Link href="/" text="Back to home" /></p>
-</section>
-`,
-
-  "views/components/button.js": `import { attrs, esc } from "jskelet/html";
+  "features/home/views/components/button.js": `import { attrs, esc } from "jskelet/html";
 
 /**
- * Every named export under \`views/components/**\` is usable directly in
- * templates: \`<Button text="Save" />\` in \`.jsk\` or \`<%- button({ text }) %>\` in EJS.
+ * Named exports under \`views/components/**\` (including feature views) become
+ * PascalCase tags in \`.jsk\`: \`<Button text="Save" />\`.
  *
  * @param {{ text: string, href?: string, class?: string }} props
  * @returns {string}
@@ -107,22 +103,10 @@ export function button({ text, href, class: className }) {
 }
 `,
 
-  "client/entries/main.js": `import { registerAll, start } from "jskelet/client";
-
-/**
- * Island registry. Values are dynamic imports: a module is downloaded only if
- * that island is actually on the page and becomes visible.
- */
-registerAll({
-  counter: () => import("../islands/counter.js"),
-});
-
-start();
-`,
-
-  "client/islands/counter.js": `/**
+  "features/home/client/counter.js": `/**
  * Island contract: a named export called \`mount(element, props)\`.
- * The returned function, if any, is reserved for cleanup.
+ * Register it from \`client/entries/main.js\`. The returned function, if any,
+ * is reserved for cleanup.
  *
  * @param {HTMLElement} element
  * @param {{ start?: number }} props
@@ -145,6 +129,28 @@ export function mount(element, props) {
   paint();
   element.append(button);
 }
+`,
+
+  "features/home/server/.gitkeep": "",
+
+  "views/pages/not-found.jsk": `<section class="wrapper">
+  <h1>404</h1>
+  <p>The page you are looking for was not found.</p>
+  <p><Link href="/" text="Back to home" /></p>
+</section>
+`,
+
+  "client/entries/main.js": `import { registerAll, start } from "jskelet/client";
+
+/**
+ * Island registry. Values are dynamic imports: a module is downloaded only if
+ * that island is actually on the page and becomes visible.
+ */
+registerAll({
+  counter: () => import("../../features/home/client/counter.js"),
+});
+
+start();
 `,
 
   "styles/globals.css": `@import "tailwindcss" source(none);
@@ -220,4 +226,5 @@ export async function init(root) {
 
   log.line("");
   log.line("next step:  npx jskelet dev");
+  log.line("grow with:  npx jskelet generate feature <name>");
 }
