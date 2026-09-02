@@ -46,6 +46,7 @@ const CASES = [
   ["/docs/bilinmeyen-bolum", 404],
 
   ["/_fragment/render-demo", 200, /<li/],
+  ["/_fragment/render-demo-cached", 200, /<li/],
   ["/robots.txt", 200, /Sitemap:/],
   ["/sitemap.xml", 200, /<urlset/],
   ["/sitemap.xml", 200, /hreflang="x-default"/],
@@ -83,12 +84,20 @@ for (const [pathname, expectedStatus, expectedBody] of CASES) {
   );
 }
 
-// Fragment ucu ölçümün kontrol grubu; cache'e girerse karşılaştırma anlamsız.
+// Fragment uçları ölçümün iki kolu: biri no-store, diğeri bellekten.
 const fragment = await fetch(`${BASE}/_fragment/render-demo`);
 const fragmentCacheControl = fragment.headers.get("cache-control");
 if (fragmentCacheControl !== "no-store") {
   failed += 1;
   console.log(`✗ /_fragment/render-demo cache-control=${fragmentCacheControl}`);
+}
+
+await fetch(`${BASE}/_fragment/render-demo-cached`);
+const cachedFragment = await fetch(`${BASE}/_fragment/render-demo-cached`);
+const cachedHeader = cachedFragment.headers.get("x-jskelet-cache");
+if (cachedHeader !== "HIT" && cachedHeader !== "STALE") {
+  failed += 1;
+  console.log(`✗ /_fragment/render-demo-cached cache=${cachedHeader} (expected HIT|STALE)`);
 }
 
 const second = await fetch(`${BASE}/compare`);

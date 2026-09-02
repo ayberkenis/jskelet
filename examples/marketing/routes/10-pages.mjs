@@ -196,9 +196,6 @@ async function pageData(key, t, locale) {
         comparison: t.comparison,
         fit: t.fit,
         payload: getPayload(),
-        // Ölçüm aynı dildeki ana sayfayı yokluyor: başka bir dilin yolunu
-        // ölçmek ilk turda kaçınılmaz bir MISS üretirdi.
-        cachedUrl: localePath(locale, PAGES.home),
       };
 
     case "migrate":

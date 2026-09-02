@@ -368,6 +368,15 @@ export default {
         ],
       },
       {
+        label: "Framework JSON in the HTML",
+        values: [
+          { text: "None — the document is the page", tone: "good" },
+          { text: "__NEXT_DATA__ (or RSC flight) alongside HTML", tone: "bad" },
+          { text: "None by default", tone: "good" },
+          { text: "None", tone: "good" },
+        ],
+      },
+      {
         label: "Interaction model",
         values: [
           { text: "Vanilla islands with a mount function", tone: "good" },
@@ -451,20 +460,67 @@ export default {
     live: {
       eyebrow: "Right now, in this browser",
       title: "Watch the cache difference live.",
-      lead: "Two requests, the same server and the same network. The only difference: one is served ready, the other is rendered from scratch every time.",
+      lead: "Two requests, the same template, the same network. The only difference: one is served from memory, the other is rendered from scratch every time.",
       cachedLabel: "Served from cache",
       cachedBadge: "live",
-      cachedNote: "Served from memory; the controller never runs.",
+      cachedNote: "Same HTML body, from memory; the producer never runs on a hit.",
       freshLabel: "Rendered every time",
       freshBadge: "every request",
-      freshNote: "Marked no-store, so the template engine runs each time.",
+      freshNote: "Same template, marked no-store — the engine runs on every request.",
       measuring: "measuring…",
+      bytesLabel: "%s transferred",
       status:
         "This section measures nothing when JavaScript is disabled; the rest of the page is unaffected.",
       statusDone: "%s requests, median. Measured in this browser, on this network.",
       statusFailed: "Measurement failed.",
       footnote:
-        "Locally both numbers land in the low milliseconds and the gap looks small. What matters is that the cached side is independent of your data source: if the controller calls an API or a database, that cost lands on a miss and never on a hit.",
+        "Both sides transfer the same number of bytes — otherwise a tiny fresh fragment can look “faster” than a large cached page, and the demo lies. Locally the gap is small; what matters is that a hit never pays for your API or database. Put the slow work in the controller and the cache stops charging visitors for it.",
+    },
+    source: {
+      eyebrow: "View Source",
+      title: "No __NEXT_DATA__. No framework JSON in the document.",
+      lead: "What ships to the crawler and the first paint is the page — not a second copy of your props serialized into a script tag.",
+      panels: {
+        left: {
+          label: "typical App/Pages HTML",
+          badge: "payload tax",
+          code: `<main>…</main>
+<script id="__NEXT_DATA__" type="application/json">
+{"props":{"pageProps":{"posts":[…],
+"user":null,"locale":"en"}},
+"page":"/","query":{},"buildId":"…"}
+</script>
+<script src="/_next/static/chunks/…js">
+</script>`,
+          note: "Content is sent twice: once as HTML, again as JSON for hydration. Crawlers and humans both download the tax.",
+        },
+        right: {
+          label: "JSkelet HTML",
+          badge: "page only",
+          code: `<main>
+  <h1>Latest posts</h1>
+  <article>…</article>
+  <div data-island="newsletter"></div>
+</main>
+<script type="module" src="/assets/js/main….js">
+</script>`,
+          note: "One document. Islands load only when a marker is on the page — no hidden state dump, no second representation of the tree.",
+        },
+      },
+      points: [
+        {
+          label: "Crawlers",
+          text: "See the same HTML humans see. Nothing waits on a client runtime to assemble the article.",
+        },
+        {
+          label: "First paint",
+          text: "No multi-kilobyte JSON blob competing with content on the critical path.",
+        },
+        {
+          label: "Cache",
+          text: "What you store is the finished page. Invalidation refreshes HTML — not a serialized React tree.",
+        },
+      ],
     },
     weight: {
       eyebrow: "Measured weight",

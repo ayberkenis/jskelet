@@ -83,3 +83,43 @@ export function fitList({ title, items, tone }) {
     </ul>
   </div>`;
 }
+
+/**
+ * Kaynak HTML kontrastı: Next tarzı gömülü JSON kirliliği vs düz sunucu HTML.
+ * Sayı değil görsel kanıt — View Source'ta ne olmadığını göstermek için.
+ *
+ * @param {{ left: { label: string, badge: string, code: string, note: string },
+ *   right: { label: string, badge: string, code: string, note: string } }} props
+ * @returns {string}
+ */
+export function sourceContrast({ left, right }) {
+  return `<div class="grid gap-5 lg:grid-cols-2">
+    ${sourcePanel(left, "bad")}
+    ${sourcePanel(right, "good")}
+  </div>`;
+}
+
+/**
+ * @param {{ label: string, badge: string, code: string, note: string }} panel
+ * @param {'good' | 'bad'} tone
+ * @returns {string}
+ */
+function sourcePanel(panel, tone) {
+  const shell =
+    tone === "good"
+      ? "border-emerald-200/80 dark:border-emerald-400/25"
+      : "border-rose-200/80 dark:border-rose-400/25";
+  const badge =
+    tone === "good"
+      ? "bg-emerald-500/15 text-emerald-800 dark:text-emerald-200"
+      : "bg-rose-500/15 text-rose-800 dark:text-rose-200";
+
+  return `<figure class="${cn("overflow-hidden rounded-2xl border bg-[#0b1020] shadow-xl shadow-slate-950/20", shell)}">
+    <figcaption class="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
+      <span class="font-mono text-xs font-semibold tracking-wide text-slate-200">${esc(panel.label)}</span>
+      <span class="${cn("rounded-full px-2.5 py-0.5 text-[10px] font-bold tracking-wider uppercase", badge)}">${esc(panel.badge)}</span>
+    </figcaption>
+    <pre class="m-0 overflow-x-auto p-4 font-mono text-[11px]/5 text-slate-300 sm:text-xs/6"><code>${esc(panel.code)}</code></pre>
+    <p class="m-0 border-t border-white/10 px-4 py-3 text-xs/5 text-slate-400">${esc(panel.note)}</p>
+  </figure>`;
+}

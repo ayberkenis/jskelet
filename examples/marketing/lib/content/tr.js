@@ -357,6 +357,15 @@ export default {
         ],
       },
       {
+        label: "HTML içinde framework JSON",
+        values: [
+          { text: "Yok — belge sayfanın kendisi", tone: "good" },
+          { text: "__NEXT_DATA__ (veya RSC flight) HTML'in yanında", tone: "bad" },
+          { text: "Varsayılan olarak yok", tone: "good" },
+          { text: "Yok", tone: "good" },
+        ],
+      },
+      {
         label: "Etkileşim modeli",
         values: [
           { text: "Vanilla island ve bir mount fonksiyonu", tone: "good" },
@@ -440,20 +449,67 @@ export default {
     live: {
       eyebrow: "Şimdi, bu tarayıcıda",
       title: "Cache farkını canlı izle.",
-      lead: "İki istek, aynı sunucu ve aynı ağ. Tek fark: biri hazır sunulur, diğeri her seferinde sıfırdan render edilir.",
+      lead: "İki istek, aynı şablon, aynı ağ. Tek fark: biri bellekten gelir, diğeri her seferinde sıfırdan render edilir.",
       cachedLabel: "Cache'ten hazır gelen",
       cachedBadge: "canlı",
-      cachedNote: "Bellekten sunulur; controller hiç çalışmaz.",
+      cachedNote: "Aynı HTML gövdesi, bellekten; HIT'te üretici hiç çalışmaz.",
       freshLabel: "Her seferinde render edilen",
       freshBadge: "her istekte",
-      freshNote: "no-store işaretli, yani şablon motoru her seferinde çalışır.",
+      freshNote: "Aynı şablon, no-store — motor her istekte çalışır.",
       measuring: "ölçülüyor…",
+      bytesLabel: "%s aktarıldı",
       status:
         "JavaScript kapalıysa bu bölüm ölçüm yapmaz; sayfanın kalanı etkilenmez.",
       statusDone: "%s istek, medyan. Bu tarayıcıda ve bu ağda ölçüldü.",
       statusFailed: "Ölçüm yapılamadı.",
       footnote:
-        "Yerelde iki sayı da milisaniyeler mertebesinde çıkar ve fark küçük görünür. Önemli olan cache'li tarafın veri kaynağından bağımsız olması: controller bir API'ye ya da veritabanına gidiyorsa o maliyet MISS'e yazılır, HIT'e hiç yazılmaz.",
+        "İki taraf da aynı bayt sayısını aktarır — aksi hâlde küçük bir fresh fragment, büyük cache'li sayfadan “daha hızlı” görünüp demoyu yalanlar. Yerelde fark küçüktür; önemli olan HIT'in API ya da veritabanı maliyetini hiç ödememesidir. Yavaş işi controller'a koyun, cache ziyaretçiyi o maliyetten kurtarır.",
+    },
+    source: {
+      eyebrow: "View Source",
+      title: "__NEXT_DATA__ yok. Belgede framework JSON'u yok.",
+      lead: "Arama motorlarına ve ilk boyamaya giden şey sayfanın kendisi — props'ların script etiketine gömülmüş ikinci bir kopyası değil.",
+      panels: {
+        left: {
+          label: "tipik App/Pages HTML",
+          badge: "payload vergisi",
+          code: `<main>…</main>
+<script id="__NEXT_DATA__" type="application/json">
+{"props":{"pageProps":{"posts":[…],
+"user":null,"locale":"en"}},
+"page":"/","query":{},"buildId":"…"}
+</script>
+<script src="/_next/static/chunks/…js">
+</script>`,
+          note: "İçerik iki kez gider: bir kez HTML, bir kez hidrasyon için JSON. Hem tarayıcı hem insan vergiyi indirir.",
+        },
+        right: {
+          label: "JSkelet HTML",
+          badge: "yalnızca sayfa",
+          code: `<main>
+  <h1>Son yazılar</h1>
+  <article>…</article>
+  <div data-island="newsletter"></div>
+</main>
+<script type="module" src="/assets/js/main….js">
+</script>`,
+          note: "Tek belge. Island yalnızca sayfada işaretçi varsa iner — gizli state dökümü yok, ağacın ikinci temsili yok.",
+        },
+      },
+      points: [
+        {
+          label: "Arama motorları",
+          text: "İnsanların gördüğü HTML'i görür. Makale bir client runtime'ın birleştirmesini beklemez.",
+        },
+        {
+          label: "İlk boyama",
+          text: "Kritik yolda içerikle yarışan çok kilobaytlık JSON blob yok.",
+        },
+        {
+          label: "Cache",
+          text: "Saklanan şey bitmiş sayfadır. Invalidation HTML'i tazeler — serileştirilmiş bir React ağacını değil.",
+        },
+      ],
     },
     weight: {
       eyebrow: "Ölçülen ağırlık",

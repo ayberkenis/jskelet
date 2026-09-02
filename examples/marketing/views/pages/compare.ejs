@@ -21,18 +21,20 @@
 
     <%#
       Island görünürlükte hidre olur, yani ölçüm sayfa açılışındaki ağ
-      yoğunluğuna karışmaz ve LCP'ye yazılmaz. Ölçülecek uçlar ve durum
-      metinleri props olarak geçiyor: client tarafı dil bilmiyor.
+      yoğunluğuna karışmaz ve LCP'ye yazılmaz. İki uç aynı şablonu üretir;
+      tek fark cache — aksi hâlde büyük HTML ile küçük fragment kıyaslanır
+      ve transfer süresi sonucu ters çevirebilir.
     -%>
     <div
       class="mt-10 grid gap-5 sm:grid-cols-2"
       data-island="latency"
       data-island-props='<%= JSON.stringify({
         runs: 6,
-        cachedUrl,
+        cachedUrl: "/_fragment/render-demo-cached",
         freshUrl: "/_fragment/render-demo",
         done: t.compare.live.statusDone,
         failed: t.compare.live.statusFailed,
+        bytesLabel: t.compare.live.bytesLabel,
       }) %>'
     >
       <div class="relative overflow-hidden rounded-3xl border border-cyan-200 bg-gradient-to-br from-cyan-50 to-white p-7 shadow-xl shadow-cyan-950/5 dark:border-cyan-400/20 dark:from-cyan-400/10 dark:to-white/[0.03]">
@@ -42,8 +44,9 @@
         <p class="m-0 text-sm font-semibold"><%= t.compare.live.cachedLabel %></p>
         <p class="mt-5 mb-0 font-mono text-4xl font-bold tracking-tight tabular-nums" data-latency-value="cached"><%= t.compare.live.measuring %></p>
         <p class="mt-2 mb-0 font-mono text-xs text-slate-600 dark:text-slate-400" data-latency-cache="cached">&nbsp;</p>
+        <p class="mt-1 mb-0 font-mono text-xs text-slate-500 dark:text-slate-500" data-latency-bytes="cached">&nbsp;</p>
         <p class="mt-3 mb-0 text-xs/5 text-slate-600 dark:text-slate-400">
-          <code class="font-mono"><%= cachedUrl %></code> — <%= t.compare.live.cachedNote %>
+          <code class="font-mono">/_fragment/render-demo-cached</code> — <%= t.compare.live.cachedNote %>
         </p>
       </div>
 
@@ -52,6 +55,7 @@
         <p class="m-0 text-sm font-semibold"><%= t.compare.live.freshLabel %></p>
         <p class="mt-5 mb-0 font-mono text-4xl font-bold tracking-tight tabular-nums" data-latency-value="fresh"><%= t.compare.live.measuring %></p>
         <p class="mt-2 mb-0 font-mono text-xs text-slate-600 dark:text-slate-400" data-latency-cache="fresh">&nbsp;</p>
+        <p class="mt-1 mb-0 font-mono text-xs text-slate-500 dark:text-slate-500" data-latency-bytes="fresh">&nbsp;</p>
         <p class="mt-3 mb-0 text-xs/5 text-slate-600 dark:text-slate-400">
           <code class="font-mono">/_fragment/render-demo</code> — <%= t.compare.live.freshNote %>
         </p>
@@ -69,41 +73,56 @@
 </section>
 
 <section class="wrapper py-16">
-  <%- sectionHead(t.compare.weight) %>
+  <%- sectionHead(t.compare.source) %>
+  <div class="mt-10">
+    <%- sourceContrast(t.compare.source.panels) %>
+  </div>
+  <ul class="mt-8 grid list-none gap-3 p-0 text-sm/6 text-slate-600 sm:grid-cols-3 dark:text-slate-300">
+    <% t.compare.source.points.forEach(function (point) { %>
+    <li class="rounded-2xl border border-slate-200 bg-white p-5 dark:border-white/10 dark:bg-white/[0.035]">
+      <p class="m-0 text-xs font-bold tracking-[0.18em] text-cyan-700 uppercase dark:text-cyan-300"><%= point.label %></p>
+      <p class="mt-2 mb-0"><%= point.text %></p>
+    </li>
+    <% }); %>
+  </ul>
+</section>
 
-  <div class="mt-8 grid gap-8 lg:grid-cols-2 lg:items-start">
-    <%- payloadTable({ payload, labels: t.payloadLabels }) %>
+<section class="border-y border-slate-200 bg-slate-50 py-16 dark:border-white/10 dark:bg-white/[0.02]">
+  <div class="wrapper">
+    <%- sectionHead(t.compare.weight) %>
 
-    <%#
-      Barlar aynı veriyi oransal olarak gösteriyor: tabloda sayı, burada
-      ağırlık. Genişlik sunucudan geliyor, island yalnızca animasyonu ekliyor.
-    -%>
-    <% if (payload.entries.length) { %>
-    <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-white/[0.035]">
-      <%- barGroup({
-        items: payload.entries.map((entry) => ({
-          label: t.payloadLabels[entry.name] ?? entry.name,
-          value: entry.gzip,
-          display: bytes(entry.gzip),
-        })),
-      }) %>
+    <div class="mt-8 grid gap-8 lg:grid-cols-2 lg:items-start">
+      <%- payloadTable({ payload, labels: t.payloadLabels }) %>
+
+      <%#
+        Barlar aynı veriyi oransal olarak gösteriyor: tabloda sayı, burada
+        ağırlık. Genişlik sunucudan geliyor, island yalnızca animasyonu ekliyor.
+      -%>
+      <% if (payload.entries.length) { %>
+      <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-white/[0.035]">
+        <%- barGroup({
+          items: payload.entries.map((entry) => ({
+            label: t.payloadLabels[entry.name] ?? entry.name,
+            value: entry.gzip,
+            display: bytes(entry.gzip),
+          })),
+        }) %>
+      </div>
+      <% } %>
     </div>
-    <% } %>
   </div>
 </section>
 
-<section class="border-t border-slate-200 py-16 dark:border-white/10">
-  <div class="wrapper">
-    <%- sectionHead(t.compare.apply) %>
+<section class="wrapper py-16">
+  <%- sectionHead(t.compare.apply) %>
 
-    <div class="mt-10 grid gap-5 md:grid-cols-2">
-      <%- fitList({ title: t.fit.title.good, items: fit.good, tone: "good" }) %>
-      <%- fitList({ title: t.fit.title.bad, items: fit.bad, tone: "bad" }) %>
-    </div>
+  <div class="mt-10 grid gap-5 md:grid-cols-2">
+    <%- fitList({ title: t.fit.title.good, items: fit.good, tone: "good" }) %>
+    <%- fitList({ title: t.fit.title.bad, items: fit.bad, tone: "bad" }) %>
+  </div>
 
-    <div class="mt-10 flex flex-wrap gap-3">
-      <%- buttonLink({ href: paths.migrate, text: t.compare.apply.ctaPrimary, icon: "ArrowRight" }) %>
-      <%- buttonLink({ href: paths.howItWorks, text: t.compare.apply.ctaSecondary, variant: "ghost" }) %>
-    </div>
+  <div class="mt-10 flex flex-wrap gap-3">
+    <%- buttonLink({ href: paths.migrate, text: t.compare.apply.ctaPrimary, icon: "ArrowRight" }) %>
+    <%- buttonLink({ href: paths.howItWorks, text: t.compare.apply.ctaSecondary, variant: "ghost" }) %>
   </div>
 </section>
