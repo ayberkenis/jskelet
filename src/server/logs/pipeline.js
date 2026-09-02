@@ -104,6 +104,12 @@ export async function configureLogs(config) {
           maxBatch: logs.s3.maxBatch,
         }),
       );
+
+      // Redis satırıyla aynı kanal: console → jskelet dev `server` scope'una
+      // düşer. Credential basılmaz; yalnızca hedef konum.
+      const target = `${logs.s3.bucket}/${logs.s3.prefix}`.replace(/\/+/g, "/");
+      const via = logs.s3.endpoint ? ` @ ${logs.s3.endpoint}` : "";
+      console.log(`[logs] s3 connected — objects under \`${target}\`${via}`);
     }
   }
 
