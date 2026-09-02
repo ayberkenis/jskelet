@@ -330,9 +330,14 @@ footer {
 }
 
 main {
-  max-width: 1180px;
+  width: 100%;
+  max-width: 1600px;
   margin: 0 auto;
-  padding: 20px;
+  padding: 20px 24px 28px;
+}
+
+.page {
+  width: 100%;
 }
 
 .cards {

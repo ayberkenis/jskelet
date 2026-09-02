@@ -207,6 +207,11 @@ false`.
 
 ### Changed
 
+- Admin panel System meters (CPU, memory, disk) show this process's share of
+  the host — RSS and project disk footprint against machine totals, plus
+  process CPU across all cores — instead of whole-machine fullness. The panel
+  content width is wider (`1600px`) so Overview, Routes, Views and System use
+  the screen better.
 - The release history page in `examples/marketing` now shows one release at a
   time: the newest one is expanded and older releases collapse to a single
   header row with their date, status and change count. Every release used to be

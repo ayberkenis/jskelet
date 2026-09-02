@@ -182,12 +182,16 @@ export const MESSAGES = {
 
     /* --- host --- */
     "host.section": "Host",
+    "host.cpu": "CPU",
     "host.memory": "Memory",
     "host.disk": "Disk",
     "host.noStats": "This platform does not report filesystem stats.",
-    "host.ramShared": "This process: {rss} RSS.",
-    "host.ramOnly": "This process holds the whole cache: {rss} RSS, {html} of it HTML.",
-    "host.diskNote": "{free} free on {path} — build output and logs live here.",
+    "host.cpuNote": "This process across {cores} cores (since last refresh).",
+    "host.ramShared": "This process: {rss} RSS · {heap} heap.",
+    "host.ramOnly":
+      "This process holds the whole cache: {rss} RSS · {heap} heap, {html} of it HTML.",
+    "host.diskNote":
+      "Project files on {path} (excluding node_modules) · {free} free on the volume.",
 
     /* --- işlemler --- */
     "actions.section": "Actions",
@@ -479,12 +483,16 @@ export const MESSAGES = {
     "cf.rowPurgeTitle": "Bu URL'i Cloudflare'de düşür",
 
     "host.section": "Makine",
+    "host.cpu": "CPU",
     "host.memory": "Bellek",
     "host.disk": "Disk",
     "host.noStats": "Bu platform dosya sistemi bilgisi vermiyor.",
-    "host.ramShared": "Bu süreç: {rss} RSS.",
-    "host.ramOnly": "Önbelleğin tamamı bu süreçte: {rss} RSS, {html} kadarı HTML.",
-    "host.diskNote": "{path} üzerinde {free} boş — build çıktısı ve loglar burada.",
+    "host.cpuNote": "Bu sürecin {cores} çekirdek üzerindeki payı (son yenilemeden beri).",
+    "host.ramShared": "Bu süreç: {rss} RSS · {heap} heap.",
+    "host.ramOnly":
+      "Önbelleğin tamamı bu süreçte: {rss} RSS · {heap} heap, {html} kadarı HTML.",
+    "host.diskNote":
+      "{path} üzerindeki proje dosyaları (node_modules hariç) · birimde {free} boş.",
 
     "actions.section": "İşlemler",
     "actions.target.placeholder": "/haber/:slug  ·  /haber/bir-yazi  ·  invalidation hedefi",

@@ -591,9 +591,8 @@ function renderRedis(redis, state) {
 }
 
 /**
- * Makinenin RAM ve disk durumu. Paylaşımlı kademe kapalıyken önbelleğin
- * tamamı bu sürecin belleğinde yaşıyor; `maxEntries` ile RAM arasındaki
- * ilişkiyi görmeden ayar yapmak körlemesine oluyor.
+ * System sayfası: çubuklar bu sürecin makine kapasitesindeki payı
+ * (CPU / RSS / proje diski), host'un genel doluluğu değil.
  *
  * @param {any} host
  * @param {any} proc
@@ -608,14 +607,24 @@ function renderHost(host, proc, redis) {
     .filter(Boolean)
     .join(" · ");
 
-  const ramUsed = host.memory.used / host.memory.total;
+  // Çubuklar makine doluluğunu değil, **bu sürecin** payını gösterir.
+  const cpuPercent = Number(proc.cpuPercent) || 0;
+  $("cpu-text").textContent = `${cpuPercent.toFixed(1)}%`;
+  meter("cpu-bar", cpuPercent / 100);
+  $("cpu-note").textContent = t("host.cpuNote", { cores: host.cpus });
+
+  const ramRatio = host.memory.total > 0 ? proc.memory.rss / host.memory.total : 0;
   $("ram-text").textContent =
-    `${formatBytes(host.memory.used)} / ${formatBytes(host.memory.total)}`;
-  meter("ram-bar", ramUsed);
+    `${formatBytes(proc.memory.rss)} / ${formatBytes(host.memory.total)}`;
+  meter("ram-bar", ramRatio);
   $("ram-note").textContent = redis.connected
-    ? t("host.ramShared", { rss: formatBytes(proc.memory.rss) })
+    ? t("host.ramShared", {
+        rss: formatBytes(proc.memory.rss),
+        heap: formatBytes(proc.memory.heapUsed),
+      })
     : t("host.ramOnly", {
         rss: formatBytes(proc.memory.rss),
+        heap: formatBytes(proc.memory.heapUsed),
         html: formatBytes(latest.html.bytes),
       });
 
@@ -626,11 +635,11 @@ function renderHost(host, proc, redis) {
     return;
   }
 
-  const diskUsed = (host.disk.total - host.disk.free) / host.disk.total;
+  const appDisk = Number(proc.diskBytes) || 0;
+  const diskRatio = host.disk.total > 0 ? appDisk / host.disk.total : 0;
   $("disk-text").textContent =
-    `${formatBytes(host.disk.total - host.disk.free)} / ${formatBytes(host.disk.total)}`;
-  meter("disk-bar", diskUsed);
-  // Önbellek diske yazılmıyor; disk build çıktısı ve log için önemli.
+    `${formatBytes(appDisk)} / ${formatBytes(host.disk.total)}`;
+  meter("disk-bar", diskRatio);
   $("disk-note").textContent = t("host.diskNote", {
     free: formatBytes(host.disk.free),
     path: host.disk.path,
