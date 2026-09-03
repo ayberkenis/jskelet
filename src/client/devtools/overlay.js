@@ -17,7 +17,7 @@ const BASE = "/__jskelet/dev";
 const POLL_MS = 2000;
 const MAX_ERRORS = 100;
 
-/** @type {{ id: number, level: string, message: string, stack: string | null, source: string, at: number }[]} */
+/** @type {{ id: number, level: string, message: string, stack: string | null, source: string, page?: string | null, island?: string | null, url?: string | null, details?: unknown, at: number }[]} */
 const clientErrors = [];
 let nextId = 1;
 
@@ -109,7 +109,14 @@ function loadState() {
 /**
  * @param {string} level
  * @param {string} message
- * @param {{ stack?: string | null, source?: string }} [extra]
+ * @param {{
+ *   stack?: string | null,
+ *   source?: string,
+ *   page?: string | null,
+ *   island?: string | null,
+ *   url?: string | null,
+ *   details?: unknown,
+ * }} [extra]
  */
 function pushError(level, message, extra = {}) {
   clientErrors.unshift({
@@ -118,6 +125,10 @@ function pushError(level, message, extra = {}) {
     message,
     stack: extra.stack ?? null,
     source: extra.source ?? "client",
+    page: extra.page ?? location.pathname,
+    island: extra.island ?? null,
+    url: extra.url ?? null,
+    details: extra.details ?? null,
     at: Date.now(),
   });
   if (clientErrors.length > MAX_ERRORS) clientErrors.length = MAX_ERRORS;
@@ -318,6 +329,8 @@ const clientApi = [];
 /**
  * Tarayıcıdaki veri çağrıları. Panelin kendi uçları ve statik varlıklar
  * sayılmaz; amaç sayfanın hangi API'lere kaç ms harcadığını görmek.
+ * 4xx/5xx ve ağ hataları Errors sekmesine de düşer — hangi sayfa / island
+ * bağlamı mümkün olduğunca doldurulur.
  */
 function captureFetch() {
   const original = window.fetch.bind(window);
@@ -326,13 +339,34 @@ function captureFetch() {
     const url = typeof input === "string" ? input : (input?.url ?? String(input));
     if (url.includes(BASE)) return original(input, init);
 
+    const method = String(init?.method ?? "GET").toUpperCase();
     const started = performance.now();
     try {
       const response = await original(input, init);
       record(url, performance.now() - started, response.status, response);
+      if (!response.ok) {
+        void reportFailedFetch({
+          url,
+          method,
+          status: response.status,
+          response,
+        });
+      }
       return response;
     } catch (error) {
       record(url, performance.now() - started, 0, null);
+      pushError(
+        "error",
+        `${method} ${shortUrl(url)} → network error`,
+        {
+          source: "fetch",
+          url,
+          page: location.pathname + location.search,
+          island: inferIsland(),
+          stack: error instanceof Error ? error.stack : null,
+          details: error instanceof Error ? error.message : String(error),
+        },
+      );
       throw error;
     }
   };
@@ -353,6 +387,99 @@ function captureFetch() {
     });
     if (clientApi.length > 100) clientApi.shift();
   }
+}
+
+/**
+ * Başarısız bir tarayıcı fetch'ini Errors listesine yazar. Gövdeyi klonlayıp
+ * okur; asıl Response tüketilmez.
+ *
+ * @param {{ url: string, method: string, status: number, response: Response }} call
+ */
+async function reportFailedFetch(call) {
+  const details = await readResponseDetails(call.response);
+  const summary = detailSummary(details);
+  pushError(
+    "error",
+    `${call.method} ${shortUrl(call.url)} → ${call.status}${
+      summary ? `: ${summary}` : ""
+    }`,
+    {
+      source: "fetch",
+      url: call.url,
+      page: location.pathname + location.search,
+      island: inferIsland(),
+      details,
+    },
+  );
+}
+
+/**
+ * @param {Response} response
+ * @returns {Promise<unknown>}
+ */
+async function readResponseDetails(response) {
+  try {
+    const text = (await response.clone().text()).slice(0, 4000);
+    if (!text) return null;
+    try {
+      return JSON.parse(text);
+    } catch {
+      return text;
+    }
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * @param {unknown} details
+ * @returns {string | null}
+ */
+function detailSummary(details) {
+  if (details == null) return null;
+  if (typeof details === "string") return details.slice(0, 200);
+  if (typeof details !== "object") return String(details);
+  const record = /** @type {Record<string, unknown>} */ (details);
+  for (const key of ["details", "detail", "message", "error", "title"]) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim()) return value.slice(0, 200);
+    if (value && typeof value === "object") {
+      const nested = detailSummary(value);
+      if (nested) return nested;
+    }
+  }
+  try {
+    return JSON.stringify(details).slice(0, 200);
+  } catch {
+    return null;
+  }
+}
+
+/** @param {string} url */
+function shortUrl(url) {
+  try {
+    const parsed = new URL(url, location.origin);
+    return parsed.origin === location.origin
+      ? parsed.pathname + parsed.search
+      : parsed.host + parsed.pathname + parsed.search;
+  } catch {
+    return url;
+  }
+}
+
+/**
+ * Çağrı yığınında `islands/ad` izi varsa ya da bir island mount edilirken
+ * yakalanmışsa ada bağlar.
+ *
+ * @returns {string | null}
+ */
+function inferIsland() {
+  const mounting = globalThis.__JSKELET_MOUNTING_ISLAND;
+  if (typeof mounting === "string" && mounting) return mounting;
+
+  const stack = new Error().stack ?? "";
+  const match = stack.match(/islands[/\\]([A-Za-z0-9_-]+)/);
+  return match?.[1] ?? null;
 }
 
 /**
@@ -847,7 +974,11 @@ h4:first-child { margin-top: 0; }
 .item.warn { border-inline-start-color: var(--mid); }
 .item.selected { border-color: rgba(255,255,255,.22); background: var(--surface-hover); }
 .item .meta { color: var(--muted); font-size: 10.5px; display: flex; align-items: center; gap: 8px; margin-bottom: 3px; }
+.item .ctx-row { flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+.item .ctx { font-family: ui-monospace, SFMono-Regular, monospace; font-size: 10.5px; color: #cfd6de; }
+.item .ctx.muted { color: var(--muted); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tag { border: 1px solid var(--line); border-radius: 999px; padding: 0 7px; text-transform: uppercase; letter-spacing: .05em; font-weight: 600; font-size: 9.5px; }
+.tag.island { text-transform: none; letter-spacing: 0; color: #c4b5fd; border-color: rgba(196,181,253,.35); }
 .msg { word-break: break-word; color: var(--text); }
 .item pre { margin: 8px 0 0; padding: 8px 10px; background: rgba(0,0,0,.4); border-radius: 8px; white-space: pre-wrap; word-break: break-word; color: #b8c0cb; font-size: 11px; font-family: ui-monospace, SFMono-Regular, monospace; max-height: 150px; overflow: auto; }
 .item .detail-text { margin: 8px 0 0; color: #b8c0cb; font-size: 12px; line-height: 1.55; }
@@ -1101,28 +1232,79 @@ const clipboard = new Map();
 let copiedKey = null;
 
 /**
- * @param {{ level: string, message: string, stack?: string | null, source?: string, at: number }} item
+ * @param {{
+ *   level: string,
+ *   message: string,
+ *   stack?: string | null,
+ *   source?: string,
+ *   page?: string | null,
+ *   island?: string | null,
+ *   url?: string | null,
+ *   details?: unknown,
+ *   at: number,
+ * }} item
  * @returns {string}
  */
 function asText(item) {
   const time = new Date(item.at).toISOString();
+  const details =
+    item.details == null
+      ? ""
+      : typeof item.details === "string"
+        ? item.details
+        : safeJson(item.details);
   return [
     `[${item.level}] ${item.source ?? "server"} · ${time}`,
+    item.page ? `page: ${item.page}` : "",
+    item.island ? `island: ${item.island}` : "",
+    item.url ? `url: ${item.url}` : "",
     item.message,
+    details,
     item.stack ?? "",
   ]
     .filter(Boolean)
     .join("\n");
 }
 
-/** @param {{ id?: number, level: string, message: string, stack?: string | null, source?: string, at: number }[]} list */
+/**
+ * @param {unknown} value
+ * @returns {string}
+ */
+function formatDetails(value) {
+  if (value == null) return "";
+  if (typeof value === "string") return value;
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return safeJson(value);
+  }
+}
+
+/** @param {{ id?: number, level: string, message: string, stack?: string | null, source?: string, page?: string | null, island?: string | null, url?: string | null, details?: unknown, at: number }[]} list */
 function errorList(list, scope) {
   if (!list.length) return `<div class="empty">No records.</div>`;
   return list
     .map((item) => {
       const key = `${scope}:${item.id ?? item.at}`;
       const shown = expanded.has(key);
+      const detailsKey = `${key}:details`;
+      const detailsShown = expanded.has(detailsKey);
+      const detailsText = formatDetails(item.details);
       clipboard.set(key, asText(item));
+
+      const context = [
+        item.page
+          ? `<span class="ctx" title="Page">${pathLink(item.page)}</span>`
+          : "",
+        item.island
+          ? `<span class="tag island" title="Island">${escapeHtml(item.island)}</span>`
+          : "",
+        item.url && item.url !== item.page
+          ? `<span class="ctx muted" title="Request">${escapeHtml(shortUrl(item.url))}</span>`
+          : "",
+      ]
+        .filter(Boolean)
+        .join("");
 
       return `<div class="item ${item.level === "warn" ? "warn" : ""}">
         <div class="meta">
@@ -1131,7 +1313,14 @@ function errorList(list, scope) {
           <span class="spacer"></span>
           ${copyButton(key)}
         </div>
+        ${context ? `<div class="meta ctx-row">${context}</div>` : ""}
         <div class="msg">${escapeHtml(item.message)}</div>
+        ${
+          detailsText
+            ? `<button class="link" data-action="stack" data-key="${escapeHtml(detailsKey)}">${detailsShown ? "▾ hide details" : "▸ show details"}</button>
+               ${detailsShown ? `<pre>${escapeHtml(detailsText)}</pre>` : ""}`
+            : ""
+        }
         ${
           item.stack
             ? `<button class="link" data-action="stack" data-key="${escapeHtml(key)}">${shown ? "▾ hide stack" : "▸ show stack"}</button>
@@ -1187,7 +1376,7 @@ function errorsTab() {
     ${lede(
       errorCount ? "bad" : total ? "mid" : "good",
       errorCount
-        ? `<strong>${errorCount} errors</strong> captured${total - errorCount ? `, plus ${total - errorCount} warnings` : ""}. Newest first; expand the stack trace and copy a record with one click.`
+        ? `<strong>${errorCount} errors</strong> captured${total - errorCount ? `, plus ${total - errorCount} warnings` : ""}. Newest first; expand details or the stack, and copy a record with one click. Failed fetch calls include the page and API path.`
         : total
           ? `No errors, <strong>${total} warnings</strong>. Warnings usually come from missing data or islands that were never ported.`
           : "No browser or server side errors were seen in this session.",

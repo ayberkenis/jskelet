@@ -556,6 +556,7 @@ function apiTab() {
       "api-calls",
       [
         { key: "url", label: "URL" },
+        { key: "page", label: "Page", render: (row) => (row.page ? link(row.page) : "—") },
         { key: "method", label: "Method" },
         { key: "status", label: "Status", render: (row) => `<span class="status ${row.error ? "bad" : ""}">${row.status || "—"}</span>` },
         { key: "ms", label: "Time", value: (row) => row.ms, render: (row) => `<span class="${tone(row.ms, [200, 800])}">${ms(row.ms)}</span>` },
@@ -589,6 +590,25 @@ function errorsTab() {
       "errors",
       [
         { key: "message", label: "Message" },
+        { key: "page", label: "Page", render: (row) => (row.page ? link(row.page) : "—") },
+        {
+          key: "details",
+          label: "Details",
+          render: (row) => {
+            if (row.details == null) return "—";
+            const text =
+              typeof row.details === "string"
+                ? row.details
+                : (() => {
+                    try {
+                      return JSON.stringify(row.details);
+                    } catch {
+                      return String(row.details);
+                    }
+                  })();
+            return `<span class="hint" title="${escapeHtml(text)}">${escapeHtml(text.slice(0, 120))}${text.length > 120 ? "…" : ""}</span>`;
+          },
+        },
         { key: "level", label: "Level", render: (row) => `<span class="tag">${escapeHtml(row.level)}</span>` },
         { key: "at", label: "Time", value: (row) => row.at, render: (row) => new Date(row.at).toLocaleTimeString() },
       ],

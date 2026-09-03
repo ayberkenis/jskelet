@@ -25,13 +25,15 @@ import { AsyncLocalStorage } from "node:async_hooks";
  * @property {string[]} taintReasons Hangi erişimler işaretledi (teşhis için).
  * @property {string | null} csrfToken
  * @property {import('express').Response | null} res
+ * @property {string | null} pathname Devtools: bu isteğin sayfa yolu (SSR
+ *   sırasında upstream hatasına "hangi sayfa" bağlamak için).
  */
 
 /** @type {AsyncLocalStorage<RequestContext>} */
 const storage = new AsyncLocalStorage();
 
 /**
- * @param {{ private?: boolean, res?: import('express').Response }} [initial]
+ * @param {{ private?: boolean, res?: import('express').Response, pathname?: string | null }} [initial]
  * @returns {RequestContext}
  */
 export function createRequestContext(initial = {}) {
@@ -41,6 +43,7 @@ export function createRequestContext(initial = {}) {
     taintReasons: [],
     csrfToken: null,
     res: initial.res ?? null,
+    pathname: initial.pathname ?? null,
   };
 }
 

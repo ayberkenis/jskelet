@@ -177,9 +177,13 @@ Tüm arayüz shadow DOM içinde durur, sayfanın CSS'i ile karışmaz.
 Gösterdikleri:
 
 - **Hatalar:** tarayıcı tarafındaki JS hataları, kaynak yükleme hataları
-  (`img`/`script`/`link`), ve sunucudaki `console.error` / `console.warn`
-  çıktıları. Sunucu tarafında `console` sarılır, böylece uyarılar terminalde
-  kaybolmaz.
+  (`img`/`script`/`link`), sunucudaki `console.error` / `console.warn`
+  çıktıları, ve SSR / tarayıcı `fetch` çağrılarının 4xx/5xx ya da ağ
+  başarısızlıkları. Her kayıt mümkün olduğunca **sayfa yolu**, **API URL** ve
+  (istemcide) **island adı** taşır; yanıt gövdesi **show details** ile açılır —
+  `[object Object]` yerine JSON. Sunucu tarafında `console` sarılır, böylece
+  uyarılar terminalde kaybolmaz; upstream hataları uygulamanın kendi logger'ı
+  stderr'e yazsa bile overlay'e düşer.
 - **SEO:** açık sayfanın istemci tarafı taraması — title ve meta description
   uzunluğu, `html lang`, viewport, canonical, robots/`noindex`, Open Graph ve
   Twitter etiketleri, H1/outline, görsel `alt`, boş linkler ve JSON-LD parse
@@ -244,9 +248,11 @@ http://localhost:3000/__jskelet/dev/report
   gezilmemiş ama ısıtılmış sayfalar da listelenir: SSR tarafı bilinir, istemci
   ölçümleri boş kalır.
 - **Sunucu API çağrıları:** SSR sırasında yapılan dış `fetch` çağrıları — URL,
-  host, metot, durum, süre, bayt. `globalThis.fetch` yalnızca development'ta
+  host, metot, durum, süre, bayt, hangi sayfa render edilirken yapıldığı ve
+  başarısız cevaplarda gövde özeti. `globalThis.fetch` yalnızca development'ta
   sarılır; üretim yolu dokunulmaz kalır. Kendi sunucumuza yapılan istekler
-  (ısıtma, sağlık kontrolü) API sayılmaz.
+  (ısıtma, sağlık kontrolü) API sayılmaz. Başarısız çağrılar overlay Errors
+  sekmesine de düşer.
 - **Build çıktısı:** manifest'teki her varlığın ham/gzip/brotli boyutu, ve
   esbuild metafile'ından chunk analizi — her çıktının boyutu, hangi kaynaklardan
   oluştuğu, hangi chunk'ları import ettiği. Kaynaklar okunur gruplara indirgenir

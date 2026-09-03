@@ -1,6 +1,6 @@
 {
   "name": "jskelet",
-  "version": "0.4.7",
+  "version": "0.4.8",
   "description": "A framework that feels like no framework: Express 5 + build-time .jsk (or EJS) SSR, vanilla JS islands, Tailwind v4 and an in-process HTML TTL cache.",
   "type": "module",
   "license": "MIT",

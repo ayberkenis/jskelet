@@ -181,9 +181,13 @@ the page's CSS.
 What it shows:
 
 - **Errors:** browser-side JS errors, resource loading errors
-  (`img`/`script`/`link`), and the server's `console.error` / `console.warn`
-  output. On the server side `console` is wrapped so warnings do not get lost in
-  the terminal.
+  (`img`/`script`/`link`), the server's `console.error` / `console.warn`
+  output, and failed SSR / browser `fetch` calls (4xx/5xx or network). Each
+  record carries a **page path**, **API URL**, and (on the client) an **island
+  name** when known; the response body opens under **show details** as JSON
+  instead of `[object Object]`. On the server side `console` is wrapped so
+  warnings do not get lost in the terminal; upstream failures still land in the
+  overlay even when the app's own logger writes them only to stderr.
 - **SEO:** a client-side scan of the current page — title and meta description
   length, `html lang`, viewport, canonical, robots/`noindex`, Open Graph and
   Twitter tags, H1/outline, image `alt`, empty links, and JSON-LD parse errors.
@@ -248,9 +252,10 @@ Its contents:
   status of the SSR output. Pages that were never visited but were warmed are
   listed too: the SSR side is known, the client measurements stay empty.
 - **Server API calls:** outbound `fetch` calls made during SSR — URL, host,
-  method, status, duration, bytes. `globalThis.fetch` is only wrapped in
-  development; the production path is left untouched. Requests to our own server
-  (warming, health check) do not count as API calls.
+  method, status, duration, bytes, which page was rendering, and a body summary
+  on failures. `globalThis.fetch` is only wrapped in development; the production
+  path is left untouched. Requests to our own server (warming, health check) do
+  not count as API calls. Failures also appear on the overlay Errors tab.
 - **Build output:** the raw/gzip/brotli size of every asset in the manifest, and
   chunk analysis from esbuild's metafile — the size of each output, which
   sources it is made of, which chunks it imports. Sources are reduced to

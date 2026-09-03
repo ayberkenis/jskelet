@@ -304,7 +304,11 @@ export function route(controller, options = {}) {
   const isPrivate = options.private === true;
 
   return async (req, res, next) => {
-    const context = createRequestContext({ private: isPrivate, res });
+    const context = createRequestContext({
+      private: isPrivate,
+      res,
+      pathname: req.path,
+    });
     const ctx = {
       params: req.params ?? {},
       query: req.query ?? {},
@@ -442,7 +446,11 @@ export function route(controller, options = {}) {
  */
 export function fragment(controller) {
   return async (req, res, next) => {
-    const context = createRequestContext({ private: true, res });
+    const context = createRequestContext({
+      private: true,
+      res,
+      pathname: req.path,
+    });
     const ctx = {
       params: req.params ?? {},
       query: req.query ?? {},

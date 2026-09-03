@@ -13,6 +13,7 @@ import { createHash } from "node:crypto";
 import express from "express";
 import * as log from "../../log.mjs";
 import { FRAMEWORK_ROOT, getConfig } from "../../config/index.js";
+import { getRequestContext } from "../../http/request-context.js";
 import { prewarm, prewarmProgress } from "../prewarm.js";
 import { clearHtmlCache } from "../html-cache.js";
 import {
@@ -55,7 +56,21 @@ const STATE_FILE = path.join(
 /** @type {{ id: number, method: string, url: string, status: number, ms: number, cache: string | null, at: number }[]} */
 let requests = [];
 
-/** @type {{ id: number, level: string, message: string, stack: string | null, url: string | null, at: number }[]} */
+/**
+ * @typedef {{
+ *   id: number,
+ *   level: string,
+ *   message: string,
+ *   stack: string | null,
+ *   url: string | null,
+ *   page: string | null,
+ *   island: string | null,
+ *   details: unknown,
+ *   at: number,
+ * }} ServerError
+ */
+
+/** @type {ServerError[]} */
 let errors = [];
 
 let nextId = 1;
@@ -103,7 +118,13 @@ function trim(list) {
 /**
  * @param {string} level
  * @param {string} message
- * @param {{ stack?: string | null, url?: string | null }} [extra]
+ * @param {{
+ *   stack?: string | null,
+ *   url?: string | null,
+ *   page?: string | null,
+ *   island?: string | null,
+ *   details?: unknown,
+ * }} [extra]
  */
 export function recordServerError(level, message, extra = {}) {
   errors.push({
@@ -112,6 +133,9 @@ export function recordServerError(level, message, extra = {}) {
     message,
     stack: extra.stack ?? null,
     url: extra.url ?? null,
+    page: extra.page ?? null,
+    island: extra.island ?? null,
+    details: extra.details ?? null,
     at: Date.now(),
   });
   trim(errors);
@@ -121,19 +145,47 @@ export function recordServerError(level, message, extra = {}) {
 
 /**
  * `console.error` / `console.warn` çıktısını da overlay'e taşır: sunucudaki
- * uyarılar terminalde kaybolmasın.
+ * uyarılar terminalde kaybolmasın. Render bağlamındaysa sayfa yolu da yazılır.
  */
 function patchConsole() {
   for (const level of /** @type {const} */ (["error", "warn"])) {
     const original = console[level].bind(console);
     console[level] = (...args) => {
       const error = args.find((arg) => arg instanceof Error);
+      const page = currentPage();
       recordServerError(level, args.map(format).join(" "), {
         stack: error?.stack ?? null,
+        page,
+        url: page,
+        details: extractDetails(args),
       });
       original(...args);
     };
   }
+}
+
+/** @returns {string | null} */
+function currentPage() {
+  return getRequestContext()?.pathname ?? null;
+}
+
+/**
+ * console argümanlarından yapılandırılmış bir `details` alanı ayıklar.
+ * Uygulama `console.error("msg", { details: {...} })` yazdığında overlay
+ * nesneyi `[object Object]` yerine açılabilir JSON olarak görsün.
+ *
+ * @param {unknown[]} args
+ * @returns {unknown}
+ */
+function extractDetails(args) {
+  for (const arg of args) {
+    if (!arg || typeof arg !== "object" || arg instanceof Error) continue;
+    const record = /** @type {Record<string, unknown>} */ (arg);
+    if ("details" in record) return record.details;
+    if ("detail" in record) return record.detail;
+    return record;
+  }
+  return null;
 }
 
 /**
@@ -144,9 +196,70 @@ function format(value) {
   if (typeof value === "string") return value;
   if (value instanceof Error) return `${value.name}: ${value.message}`;
   try {
-    return JSON.stringify(value);
+    return JSON.stringify(value, (_key, nested) => {
+      // Döngüsel referanslarda stringify zaten fırlar; burada yalnızca
+      // Error örneklerini okunabilir kılmak yeterli.
+      if (nested instanceof Error) {
+        return { name: nested.name, message: nested.message };
+      }
+      return nested;
+    });
   } catch {
     return String(value);
+  }
+}
+
+/**
+ * Upstream `fetch` başarısızlığını overlay hata listesine yazar.
+ *
+ * @param {{
+ *   url: string,
+ *   method: string,
+ *   status: number,
+ *   ms: number,
+ *   bytes: number,
+ *   error: string | null,
+ *   page: string | null,
+ *   details: unknown,
+ * }} call
+ */
+function recordApiFailure(call) {
+  // Aynı SSR turunda hem fetch sarmalayıcısı hem uygulama logger'ı aynı
+  // hatayı basabiliyor; kısa pencerede tekilleştir.
+  const last = errors.at(-1);
+  if (
+    last &&
+    last.url === call.url &&
+    last.page === call.page &&
+    Date.now() - last.at < 2000
+  ) {
+    // İlk kayıtta details yoksa sonrakinin gövdesini birleştir.
+    if (last.details == null && call.details != null) {
+      last.details = call.details;
+      if (call.error && !last.message.includes(call.error)) {
+        last.message = `${call.method} ${shortApiPath(call.url)} → ${call.error}`;
+      }
+      persist();
+      pushStats();
+    }
+    return;
+  }
+
+  recordServerError("error", `${call.method} ${shortApiPath(call.url)} → ${call.error ?? call.status}`, {
+    url: call.url,
+    page: call.page,
+    details: call.details,
+    stack: null,
+  });
+}
+
+/** @param {string} url */
+function shortApiPath(url) {
+  try {
+    const parsed = new URL(url);
+    return parsed.pathname + parsed.search;
+  } catch {
+    return url;
   }
 }
 
@@ -448,7 +561,7 @@ export function mountDevtools(app) {
 
   restore();
   patchConsole();
-  trackServerFetch();
+  trackServerFetch({ onFailure: recordApiFailure });
   watchManifest();
   startVersionCheck();
   startHeartbeat();

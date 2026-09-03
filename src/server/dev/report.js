@@ -18,6 +18,7 @@ import { getRedisStatus } from "../redis.js";
 import { getUpstreamLimiterStatus } from "../upstream-limiter.js";
 import { prewarmProgress } from "../prewarm.js";
 import { getConfig } from "../../config/index.js";
+import { getRequestContext } from "../../http/request-context.js";
 
 /** Yollar config'ten: framework paket içine taşındığında `../..` sayan her hesap bozulur. */
 const ROOT = getConfig().root;
@@ -78,61 +79,176 @@ export function clearPageReports() {
 /* --------------------------------------------------- sunucu tarafı API çağrıları */
 
 /**
- * @type {{ url: string, host: string, method: string, status: number, ms: number,
- *   bytes: number, at: number, error: string | null }[]}
+ * @typedef {{
+ *   url: string,
+ *   host: string,
+ *   method: string,
+ *   status: number,
+ *   ms: number,
+ *   bytes: number,
+ *   at: number,
+ *   error: string | null,
+ *   page: string | null,
+ *   details: unknown,
+ * }} ServerApiCall
  */
+
+/** @type {ServerApiCall[]} */
 const serverApiCalls = [];
 const MAX_API_CALLS = 300;
+
+/** Başarısız çağrı gövdesinin overlay'e taşınacak üst sınırı. */
+const DETAILS_MAX = 4_000;
+
+/**
+ * @typedef {{
+ *   url: string,
+ *   method: string,
+ *   status: number,
+ *   ms: number,
+ *   bytes: number,
+ *   error: string | null,
+ *   page: string | null,
+ *   details: unknown,
+ * }} ApiFailure
+ */
 
 /**
  * SSR sırasında yapılan dış çağrıları ölçer. `globalThis.fetch` sarılır;
  * yalnızca dev'de çağrıldığı için üretim yolu dokunulmaz kalır.
+ *
+ * Başarısız cevaplar (4xx/5xx ya da ağ) isteğe bağlı `onFailure` ile
+ * overlay hata günlüğüne de düşer — uygulama kendi logger'ıyla stderr'e
+ * yazsa bile panel "hangi sayfa hangi API" bilgisini görsün.
+ *
+ * @param {{ onFailure?: (call: ApiFailure) => void }} [options]
  */
-export function trackServerFetch() {
+export function trackServerFetch(options = {}) {
   const original = globalThis.fetch;
-  if (original.__jskeletWrapped) return;
+  if (/** @type {any} */ (original).__jskeletWrapped) return;
+
+  const { onFailure } = options;
 
   /** @type {typeof fetch} */
   const wrapped = async (input, init) => {
     const url = typeof input === "string" ? input : (input?.url ?? String(input));
+    const method = String(init?.method ?? "GET").toUpperCase();
     const started = Date.now();
+    const page = currentPage();
 
     // Kendi sunucumuza yapılan istekler (ısıtma, sağlık kontrolü) API sayılmaz.
-    const isSelf = /^https?:\/\/(127\.0\.0\.1|localhost)/i.test(url);
+    const isSelf = /^https?:\/\/(127\.0\.0\.1|\[::1\]|localhost)(:|\/|$)/i.test(url);
 
     try {
       const response = await original(input, init);
       if (!isSelf) {
-        push({
+        const details = response.ok
+          ? null
+          : await readFailureDetails(response);
+        const error = response.ok ? null : summarizeFailure(response.status, details);
+        const call = {
           url,
-          method: init?.method ?? "GET",
+          method,
           status: response.status,
           ms: Date.now() - started,
           bytes: Number(response.headers.get("content-length") ?? 0),
-          error: response.ok ? null : `HTTP ${response.status}`,
-        });
+          error,
+          page,
+          details,
+        };
+        push(call);
+        if (error) onFailure?.(call);
       }
       return response;
     } catch (error) {
       if (!isSelf) {
-        push({
+        const message = error instanceof Error ? error.message : String(error);
+        const call = {
           url,
-          method: init?.method ?? "GET",
+          method,
           status: 0,
           ms: Date.now() - started,
           bytes: 0,
-          error: error instanceof Error ? error.message : String(error),
-        });
+          error: message,
+          page,
+          details: null,
+        };
+        push(call);
+        onFailure?.(call);
       }
       throw error;
     }
   };
 
-  wrapped.__jskeletWrapped = true;
+  /** @type {any} */ (wrapped).__jskeletWrapped = true;
   globalThis.fetch = wrapped;
 }
 
-/** @param {{ url: string, method: string, status: number, ms: number, bytes: number, error: string | null }} call */
+/** @returns {string | null} */
+function currentPage() {
+  return getRequestContext()?.pathname ?? null;
+}
+
+/**
+ * @param {Response} response
+ * @returns {Promise<unknown>}
+ */
+async function readFailureDetails(response) {
+  try {
+    const text = (await response.clone().text()).slice(0, DETAILS_MAX);
+    if (!text) return null;
+    try {
+      return JSON.parse(text);
+    } catch {
+      return text;
+    }
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Overlay başlığı: durum + varsa API'nin kendi doğrulama mesajı.
+ *
+ * @param {number} status
+ * @param {unknown} details
+ * @returns {string}
+ */
+function summarizeFailure(status, details) {
+  const label = `HTTP ${status}`;
+  const detail = failureMessage(details);
+  return detail ? `${label}: ${detail}` : label;
+}
+
+/**
+ * Upstream gövdesinden kısa, okunabilir bir cümle çıkarır. `[object Object]`
+ * basmamak için nesneleri bilinçli dolaşır.
+ *
+ * @param {unknown} details
+ * @returns {string | null}
+ */
+function failureMessage(details) {
+  if (details == null) return null;
+  if (typeof details === "string") return details.slice(0, 280);
+  if (typeof details !== "object") return String(details);
+
+  const record = /** @type {Record<string, unknown>} */ (details);
+  for (const key of ["details", "detail", "message", "error", "title"]) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim()) return value.slice(0, 280);
+    if (value && typeof value === "object") {
+      const nested = failureMessage(value);
+      if (nested) return nested;
+    }
+  }
+  try {
+    return JSON.stringify(details).slice(0, 280);
+  } catch {
+    return null;
+  }
+}
+
+/** @param {Omit<ServerApiCall, "host" | "at">} call */
 function push(call) {
   let host = "—";
   try {

@@ -10,6 +10,11 @@ one is listed under a **Breaking** heading.
 
 ### Added
 
+- Dev overlay Errors tab now lists failed SSR and browser `fetch` calls with
+  page path, API URL, optional island name, and expandable response-body
+  details (JSON instead of `[object Object]`). Server `console.error` /
+  `console.warn` records also carry the current page when they fire during
+  render.
 - Visit-driven HTML prewarm (`cache().prewarm.onVisit`): after each public
   cacheable page response, same-origin links in the HTML are warmed in the
   background (document order, `perPage` cap). Mutually exclusive with classic

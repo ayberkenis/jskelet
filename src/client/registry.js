@@ -110,6 +110,12 @@ async function mountIsland(element) {
 
   markMounted(element);
 
+  // Dev overlay başarısız fetch'i hangi island'dan geldiğine bağlayabilsin.
+  // Mount bittikten sonra (event handler'lar) bu işaret kalkar; o durumda
+  // yığın izine düşülür.
+  const previous = globalThis.__JSKELET_MOUNTING_ISLAND;
+  globalThis.__JSKELET_MOUNTING_ISLAND = name;
+
   try {
     const module = await loader();
     const cleanup = module.mount(element, readProps(element));
@@ -130,6 +136,8 @@ async function mountIsland(element) {
     element.dataset.islandReady = "true";
   } catch (error) {
     console.error(`[island] ${name} failed to load`, error);
+  } finally {
+    globalThis.__JSKELET_MOUNTING_ISLAND = previous;
   }
 }
 
