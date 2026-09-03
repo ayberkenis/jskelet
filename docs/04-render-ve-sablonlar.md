@@ -383,12 +383,16 @@ Davranış:
 
 - `public/` altındaki yerel raster görseller için build'de üretilen webp
   varyantları (`.jskelet/images.json`) otomatik olarak `srcset` + intrinsic
-  `width`/`height` olarak eklenir. Manifest'te olmayan ya da uzak görseller
-  olduğu gibi basılır.
-- `srcset` elle verilmişse ya da `unoptimized: true` ise manifest'e hiç
-  bakılmaz.
+  `width`/`height` olarak eklenir. Manifest'te olmayan yerel yollar olduğu
+  gibi basılır.
+- `images.remote.allowHosts` açıksa uzak `http(s)` URL'leri
+  `/_jskelet/image?url=&w=` proxy'sine çevrilir (webp). `width` varsa 1x/2x
+  + config `widths` ile `srcset` üretilir.
+- `srcset` elle verilmişse ya da `unoptimized: true` ise ne manifest ne de
+  remote proxy kullanılır.
 - Yalnızca **tek** varyant üretilmişse (kaynak zaten küçükse) `srcset`/`sizes`
-  yazılmaz; gürültüden ibaret olurdu.
+  yazılmaz; gürültüden ibaret olurdu. Remote'da tek genişlikte bile `src`
+  yine optimize URL'dir.
 - `sizes` verilmezse makul bir varsayılan üretilir: görsel kendi intrinsic
   genişliğinden büyütülmez, dar ekranlarda viewport'u kaplar
   (`(max-width: Npx) 100vw, Npx`).

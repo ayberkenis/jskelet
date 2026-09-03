@@ -305,6 +305,13 @@ to the `.jskelet/images.json` manifest. `image()` looks at that manifest and add
 This step requires `sharp`. If it is not installed the step is silently skipped
 and `image()` falls back to the original file. It never runs on a watch pass.
 
+## Runtime remote image proxy
+
+When `images.remote.allowHosts` is set, `createApp` mounts `/_jskelet/image`.
+CMS / CDN covers never enter the build, so `image()` rewrites those host URLs to
+`?url=&w=`; the endpoint encodes webp with sharp and stores files under
+`.jskelet/image-cache/`. Details: [07-configuration.md](./07-configuration.md).
+
 ## Precompress
 
 Produces brotli (quality 11) and gzip (level 9) copies of the built assets:

@@ -17,6 +17,8 @@
  *      static'e düşer ve middleware anında sıkıştırır (kalite 5).
  *   4b. admin paneli (açıksa) — statikten sonra, route'lardan önce: kendi
  *      gövde ayrıştırıcısını taşır ve uygulama yolunu gölgeleyemez.
+ *   4c. image optimizer (images.remote) — uzak görselleri webp'ye çevirir;
+ *      body parser'dan önce, admin ile aynı katmanda.
  *   5. body parser'lar — statikten sonra: görsel isteklerinde gövde ayrıştırma
  *      maliyeti ödenmesin.
  *   6. csrf — body parser'lardan sonra olmalı: token form alanından okunuyor.
@@ -135,6 +137,13 @@ export async function createApp(options = {}) {
   if (config.admin.enabled) {
     const { mountAdmin } = await import("./admin/mount.js");
     mountAdmin(app);
+  }
+
+  // Uzak görsel proxy: allowHosts doluysa mount. Statikten sonra, body
+  // parser'dan önce — görsel GET'lerinde gövde ayrıştırma maliyeti ödenmesin.
+  if (config.images && config.images !== false && config.images.remote) {
+    const { mountImageOptimizer } = await import("./image-optimizer.js");
+    await mountImageOptimizer(app);
   }
 
   app.use(express.urlencoded({ extended: false, limit: "64kb" }));

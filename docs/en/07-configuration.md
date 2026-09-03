@@ -494,23 +494,51 @@ icons: { scan: ["views", "client", "routes", "lib", "content"] }
 
 ## `images`
 
-**Type:** `{ widths?: number[], quality?: number, skip?: string[] } | false` —
-**Default:** `{}`
+**Type:**
+`{ widths?: number[], quality?: number, skip?: string[], remote?: { allowHosts: string[], path?: string, maxWidth?: number, cacheMaxAge?: number, fetchTimeoutMs?: number, maxBytes?: number } | false } | false`
+— **Default:** `{ widths, quality, skip, remote: false }` (remote off)
 
-Generates webp variants of the png/jpg images under `public/`.
+Generates webp variants of png/jpg files under `public/` at **build** time.
+When `remote.allowHosts` is set, also proxies remote images at runtime
+(`/_jskelet/image?url=&w=&q=` → webp).
 
 | Field | Type | Default | Meaning |
 | --- | --- | --- | --- |
-| `widths` | `number[]` | `[400, 640, 960, 1280, 1920]` | Widths to generate. Ones larger than the source are dropped; the source's own width (at most 1920) is always added. |
-| `quality` | `number` | `78` | webp quality. When it changes, the encoder signature changes and every image is re-encoded. |
-| `skip` | `string[]` | `[]` | **Directory names** not to scan. `assets` and `fonts` are always skipped. |
+| `widths` | `number[]` | `[400, 640, 960, 1280, 1920]` | Candidates for build and remote `srcset`. Ones larger than the source are dropped at build; the source's own width (at most 1920) is always added. |
+| `quality` | `number` | `78` | webp quality. Part of the build encoder signature; default `q` on the remote endpoint. |
+| `skip` | `string[]` | `[]` | **Directory names** not to scan at build. `assets` and `fonts` are always skipped. |
+| `remote` | `object \| false` | off | Runtime optimizer. `allowHosts` is **required**; empty disables the route. |
 
-If `false` is given, the image step never runs. The step requires `sharp` and
-never runs on a watch pass. Details: [08-build.md](./08-build.md).
+### `images.remote`
+
+| Field | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `allowHosts` | `string[]` | `[]` | Hosts that may be fetched. Supports a `*.cdn.example.com` suffix wildcard. |
+| `path` | `string` | `/_jskelet/image` | Optimizer GET path. |
+| `maxWidth` | `number` | `1920` | Cap for `w`. |
+| `cacheMaxAge` | `number` | `2592000` (30 days) | Response `Cache-Control` max-age (seconds). Disk cache under `.jskelet/image-cache/`. |
+| `fetchTimeoutMs` | `number` | `10000` | Upstream fetch timeout. |
+| `maxBytes` | `number` | `10485760` (10 MiB) | Upstream body size limit. |
+
+If `false` is given, neither surface runs. The build step requires `sharp` and
+never runs on a watch pass. With remote enabled, `sharp` is also needed at
+**runtime**; without it the optimizer 302-redirects to the source URL. Details:
+[08-build.md](./08-build.md).
 
 ```js
-images: { widths: [400, 800, 1200], quality: 82, skip: ["downloads"] }
+images: {
+  widths: [400, 800, 1200],
+  quality: 82,
+  skip: ["downloads"],
+  remote: {
+    allowHosts: ["static.example.com", "*.cdn.example.com"],
+  },
+}
 ```
+
+`image({ src: "https://static.example.com/a.jpg", width: 96, alt: "…" })`
+rewrites `src` / `srcset` to `/_jskelet/image?url=…&w=96`. To build URLs by
+hand, use `remoteImageUrl(src, { width })` from `jskelet`.
 
 ## `clientEnv`
 

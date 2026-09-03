@@ -290,6 +290,13 @@ değiştirmez ([04-render-ve-sablonlar.md](./04-render-ve-sablonlar.md)).
 Bu adım `sharp` gerektirir. Kurulu değilse adım sessizce atlanır ve `image()`
 orijinal dosyaya döner. Watch turunda hiç çalışmaz.
 
+## Runtime uzak görsel proxy
+
+`images.remote.allowHosts` verilirse `createApp` `/_jskelet/image` ucunu
+mount eder. CMS / CDN kapakları build'e girmediği için `image()` bu host'lardaki
+URL'leri `?url=&w=` biçiminde yeniden yazar; uç sharp ile webp üretir ve
+`.jskelet/image-cache/` altına yazar. Ayrıntı: [07-yapilandirma.md](./07-yapilandirma.md).
+
 ## Precompress
 
 Build çıktısı varlıkların brotli (kalite 11) ve gzip (seviye 9) kopyalarını

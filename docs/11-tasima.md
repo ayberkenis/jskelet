@@ -96,9 +96,10 @@ Bunları taşıma planında baştan hesaba katın:
   önce belgeyi hazırlar, `viewTransition` geçişi yumuşatır
   ([07](./07-yapilandirma.md)).
 - **Server Actions.** Form gönderimleri normal `app.post(...)` handler'larıdır.
-- **Otomatik görsel optimizasyonu (istek anında).** Optimizasyon build zamanında
-  yapılır ve yalnızca `public/` altındaki yerel görselleri kapsar; uzak görseller
-  olduğu gibi basılır.
+- **Otomatik görsel optimizasyonu (istek anında).** Yerel `public/` görselleri
+  hâlâ build zamanında optimize edilir. Uzak `http(s)` görseller
+  `images.remote.allowHosts` verilirse çalışma anında proxy edilir
+  (`/_jskelet/image` → webp); config yoksa olduğu gibi basılır.
 
 ## Yan yana örnek
 

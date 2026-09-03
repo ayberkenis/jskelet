@@ -99,9 +99,10 @@ Account for these from the start in your migration plan:
   `viewTransition` smooths the transition
   ([07](./07-configuration.md)).
 - **Server Actions.** Form submissions are ordinary `app.post(...)` handlers.
-- **Automatic image optimization (at request time).** Optimization happens at
-  build time and only covers local images under `public/`; remote images are
-  emitted as-is.
+- **Automatic image optimization (at request time).** Local `public/` images
+  are still optimized at build time. Remote `http(s)` images can be proxied at
+  runtime when `images.remote.allowHosts` is set (`/_jskelet/image` → webp);
+  without that config they are emitted as-is.
 
 ## A side-by-side example
 

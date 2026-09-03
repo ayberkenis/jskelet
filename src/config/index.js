@@ -37,6 +37,7 @@ import {
   DEFAULT_DEV_GATE_BYPASS,
   DEFAULT_DIRS,
   DEFAULT_HTML_CACHE_MAX_ENTRIES,
+  DEFAULT_IMAGES,
   DEFAULT_LOGS,
   DEFAULT_NAVIGATION,
   DEFAULT_NAVIGATION_EXCLUDE,
@@ -130,8 +131,27 @@ const CONFIG_FILE = "jskelet.config.mjs";
  * @property {string[]} watch Dev sunucusunun izlediği ek dizinler.
  * @property {{ family: string, slug?: string, weights: number[] }[]} fonts
  * @property {{ scan?: string[] } | false} icons
- * @property {{ widths?: number[], quality?: number, skip?: string[] } | false} images
+ * @property {ImagesConfig | false} images
  * @property {string[]} clientEnv Client bundle'a gömülecek env anahtarları.
+ */
+
+/**
+ * @typedef {object} ImagesRemoteConfig
+ * @property {boolean} enabled
+ * @property {string[]} allowHosts
+ * @property {string} path
+ * @property {number} maxWidth
+ * @property {number} cacheMaxAge
+ * @property {number} fetchTimeoutMs
+ * @property {number} maxBytes
+ */
+
+/**
+ * @typedef {object} ImagesConfig
+ * @property {number[]} widths
+ * @property {number} quality
+ * @property {string[]} skip
+ * @property {ImagesRemoteConfig | false} remote
  */
 
 /** @type {ResolvedConfig | null} */
@@ -773,6 +793,83 @@ function normalizeSecurity(raw) {
 }
 
 /**
+ * Build + runtime görsel ayarları. `false` → her iki yüzey de kapalı.
+ * `remote.allowHosts` boşsa remote kapalı kalır (açık proxy olmasın).
+ *
+ * @param {unknown} raw
+ * @returns {ImagesConfig | false}
+ */
+function normalizeImages(raw) {
+  if (raw === false) return false;
+
+  const source = /** @type {Record<string, any>} */ (raw ?? {});
+  const widths = asArray(source.widths ?? DEFAULT_IMAGES.widths, "images.widths")
+    .map((entry) => Number(entry))
+    .filter((entry) => Number.isFinite(entry) && entry > 0)
+    .map((entry) => Math.round(entry));
+
+  const quality = Number(source.quality ?? DEFAULT_IMAGES.quality);
+  const skip = asArray(source.skip ?? DEFAULT_IMAGES.skip, "images.skip")
+    .filter((entry) => typeof entry === "string")
+    .map(String);
+
+  /** @type {ImagesRemoteConfig | false} */
+  let remote = false;
+  if (source.remote !== false && source.remote != null) {
+    const rem = /** @type {Record<string, any>} */ (
+      source.remote === true ? {} : source.remote
+    );
+    const allowHosts = asArray(
+      rem.allowHosts ?? DEFAULT_IMAGES.remote.allowHosts,
+      "images.remote.allowHosts",
+    )
+      .filter((entry) => typeof entry === "string" && entry.trim())
+      .map((entry) => String(entry).trim().toLowerCase());
+
+    if (allowHosts.length === 0) {
+      if (source.remote === true || rem.allowHosts != null) {
+        console.warn(
+          "[config] images.remote needs a non-empty allowHosts list; remote optimizer disabled",
+        );
+      }
+    } else {
+      remote = {
+        enabled: true,
+        allowHosts,
+        path: String(rem.path ?? DEFAULT_IMAGES.remote.path),
+        maxWidth: Math.max(
+          1,
+          Number(rem.maxWidth ?? DEFAULT_IMAGES.remote.maxWidth) ||
+            DEFAULT_IMAGES.remote.maxWidth,
+        ),
+        cacheMaxAge: Math.max(
+          0,
+          Number(rem.cacheMaxAge ?? DEFAULT_IMAGES.remote.cacheMaxAge) ||
+            DEFAULT_IMAGES.remote.cacheMaxAge,
+        ),
+        fetchTimeoutMs: Math.max(
+          1000,
+          Number(rem.fetchTimeoutMs ?? DEFAULT_IMAGES.remote.fetchTimeoutMs) ||
+            DEFAULT_IMAGES.remote.fetchTimeoutMs,
+        ),
+        maxBytes: Math.max(
+          1024,
+          Number(rem.maxBytes ?? DEFAULT_IMAGES.remote.maxBytes) ||
+            DEFAULT_IMAGES.remote.maxBytes,
+        ),
+      };
+    }
+  }
+
+  return {
+    widths: widths.length ? widths : [...DEFAULT_IMAGES.widths],
+    quality: Number.isFinite(quality) && quality > 0 ? quality : DEFAULT_IMAGES.quality,
+    skip,
+    remote,
+  };
+}
+
+/**
  * Dizin adlarını mutlak yola çevirir. `styles` bir dosya yolu olduğu için
  * de aynı çözümlemeden geçer; ayrı bir alan tutmaya değmez.
  *
@@ -942,7 +1039,7 @@ export async function loadConfig(options = {}) {
     // olsun diye aynı yerden geçer.
     fonts: source.fonts ?? [],
     icons: source.icons ?? {},
-    images: source.images ?? {},
+    images: normalizeImages(source.images),
     clientEnv: source.clientEnv ?? [],
   };
 

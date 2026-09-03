@@ -4,6 +4,11 @@
  */
 import { attrs, esc, cn } from "./html.js";
 import { asset, getSpriteIds, optimizedImage } from "../../server/assets.js";
+import {
+  parseAllowedRemoteUrl,
+  remoteImageUrl,
+  srcsetWidths,
+} from "../../server/image-optimizer.js";
 import { getRequestContext, markTainted } from "../../http/request-context.js";
 import { getSignedCookie, randomToken, setSignedCookie } from "../../http/cookies.js";
 import { getConfig } from "../../config/index.js";
@@ -53,7 +58,11 @@ export function link(props) {
  * `next/image` karşılığı. `public/` altındaki yerel görseller için build'de
  * üretilen webp varyantları (`build/tasks/images.mjs`) otomatik olarak
  * `srcset` + intrinsic `width`/`height` olarak eklenir; manifest'te olmayan
- * ya da uzak görseller olduğu gibi basılır.
+ * yerel yollar olduğu gibi basılır.
+ *
+ * `images.remote.allowHosts` açıksa uzak http(s) URL'leri `/_jskelet/image`
+ * proxy'sine çevrilir (webp + `w`). `unoptimized` veya elle `srcset` bunu
+ * atlar.
  *
  * `priority` LCP görselleri için `fetchpriority=high` + eager yükleme yapar.
  * @param {{ src: string, alt: string, width?: number, height?: number,
@@ -79,20 +88,27 @@ export function image(props) {
   } = props;
 
   const optimized = unoptimized || srcset ? undefined : optimizedImage(src);
+  const remote = unoptimized || srcset ? null : remoteResponsive(src, width);
   const largest = optimized?.variants.at(-1);
   // Tek varyant üretilmişse (kaynak zaten küçükse) srcset/sizes gürültüden ibaret.
-  const responsive = optimized && optimized.variants.length > 1;
+  const responsive =
+    (optimized && optimized.variants.length > 1) ||
+    (remote && remote.srcset);
 
   const attributes = attrs({
-    src: largest?.url ?? src,
+    src: largest?.url ?? remote?.src ?? src,
     alt: alt ?? "",
     width: fill ? undefined : (width ?? optimized?.width),
     height: fill ? undefined : (height ?? optimized?.height),
     class: fill
       ? cn("absolute inset-0 h-full w-full object-cover", className)
       : className,
-    sizes: responsive ? (sizes ?? defaultSizes(optimized)) : sizes,
-    srcset: responsive ? toSrcSet(optimized) : srcset,
+    sizes: responsive
+      ? (sizes ?? (optimized ? defaultSizes(optimized) : remote?.sizes))
+      : sizes,
+    srcset: responsive
+      ? (optimized ? toSrcSet(optimized) : remote?.srcset)
+      : srcset,
     loading: loading ?? (priority ? "eager" : "lazy"),
     decoding: priority ? "sync" : "async",
     fetchpriority: priority ? "high" : undefined,
@@ -100,6 +116,37 @@ export function image(props) {
   });
 
   return `<img${attributes}>`;
+}
+
+/**
+ * Uzak URL → optimizer `src` / `srcset`. Allowlist dışıysa null.
+ * @param {string} src
+ * @param {number | undefined} width
+ * @returns {{ src: string, srcset?: string, sizes?: string } | null}
+ */
+function remoteResponsive(src, width) {
+  if (!parseAllowedRemoteUrl(src)) return null;
+
+  const images = getConfig().images;
+  if (!images || images === false || !images.remote) return null;
+
+  const display = width && width > 0 ? width : 640;
+  const widths = srcsetWidths(display, images.widths, images.remote.maxWidth);
+  const urls = widths
+    .map((w) => {
+      const href = remoteImageUrl(src, { width: w });
+      return href ? `${href} ${w}w` : null;
+    })
+    .filter(Boolean);
+
+  const primary = remoteImageUrl(src, { width: display });
+  if (!primary) return null;
+
+  return {
+    src: primary,
+    srcset: urls.length > 1 ? urls.join(", ") : undefined,
+    sizes: `(max-width: ${display}px) 100vw, ${display}px`,
+  };
 }
 
 /**

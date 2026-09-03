@@ -97,6 +97,7 @@ ENV HOST=0.0.0.0
 
 COPY package.json package-lock.json ./
 # sharp ve tailwind yalnızca build zamanı gerekli; çalışma imajına girmesin.
+# images.remote kullanıyorsanız sharp'ı production dependencies'e alın.
 RUN npm ci --omit=dev && npm cache clean --force
 
 COPY --from=build /app/jskelet.config.mjs ./jskelet.config.mjs
@@ -126,9 +127,11 @@ Notlar:
   anında yapılıyor. `lib/` yalnızca projenizde varsa kopyalayın.
 - **`.jskelet/` gerekir:** `manifest.json` olmadan `asset()` hash'li URL'leri
   bulamaz ve `jskelet start` build'i baştan çalıştırmaya kalkar.
-- **`sharp` çalışma imajında gerekmez:** yalnızca build zamanı görsel
+- **`sharp` çalışma imajında genelde gerekmez:** yalnızca build zamanı görsel
   optimizasyonu için. `--omit=dev` ile dışarıda kalır (devDependency olarak
-  kurulmuşsa).
+  kurulmuşsa). **`images.remote` açıksa** sharp runtime bağımlılığıdır —
+  production `dependencies`'e alın ya da runtime imajında ayrıca kurun; yoksa
+  optimizer kaynak URL'ye 302 yönlendirir.
 - `jskelet start`ı `npx` olmadan çağırmak isterseniz
   `CMD ["node", "node_modules/jskelet/bin/jskelet.mjs", "start"]` de çalışır.
 

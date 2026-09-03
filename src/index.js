@@ -37,6 +37,7 @@ export {
 } from "./http/cookies.js";
 export { reportUpstreamFailure } from "./server/upstream-tracking.js";
 export { asset, hasAsset, optimizedImage, getSpriteIds } from "./server/assets.js";
+export { remoteImageUrl, parseAllowedRemoteUrl } from "./server/image-optimizer.js";
 export { headHints } from "./server/head-hints.js";
 export { renderHeadMeta } from "./server/metadata.js";
 export {

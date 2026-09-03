@@ -8,6 +8,15 @@ one is listed under a **Breaking** heading.
 
 ## [Unreleased]
 
+### Added
+
+- Runtime remote image optimizer: set `images.remote.allowHosts` to proxy
+  allowlisted http(s) images through `/_jskelet/image?url=&w=&q=` as resized
+  webp (disk cache under `.jskelet/image-cache/`). `image()` rewrites matching
+  remote `src` values automatically; `remoteImageUrl()` builds URLs by hand.
+  Requires `sharp` at runtime; without it the endpoint 302-redirects to the
+  source.
+
 ### Breaking
 
 - The cache admin panel moved to a top-level `admin()` config section at

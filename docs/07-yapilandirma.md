@@ -482,23 +482,50 @@ icons: { scan: ["views", "client", "routes", "lib", "content"] }
 
 ## `images`
 
-**Tip:** `{ widths?: number[], quality?: number, skip?: string[] } | false` —
-**Varsayılan:** `{}`
+**Tip:**
+`{ widths?: number[], quality?: number, skip?: string[], remote?: { allowHosts: string[], path?: string, maxWidth?: number, cacheMaxAge?: number, fetchTimeoutMs?: number, maxBytes?: number } | false } | false`
+— **Varsayılan:** `{ widths, quality, skip, remote: false }` (remote kapalı)
 
-`public/` altındaki png/jpg görsellerin webp varyantlarını üretir.
+`public/` altındaki png/jpg görsellerin webp varyantlarını **build**'de üretir.
+`remote.allowHosts` verilirse çalışma anında uzak görselleri de proxy eder
+(`/_jskelet/image?url=&w=&q=` → webp).
 
 | Alan | Tip | Varsayılan | Anlamı |
 | --- | --- | --- | --- |
-| `widths` | `number[]` | `[400, 640, 960, 1280, 1920]` | Üretilecek genişlikler. Kaynaktan büyük olanlar elenir; kaynağın kendi genişliği (en fazla 1920) her zaman eklenir. |
-| `quality` | `number` | `78` | webp kalitesi. Değişince kodlayıcı imzası değişir ve tüm görseller yeniden kodlanır. |
-| `skip` | `string[]` | `[]` | Taranmayacak **dizin adları**. `assets` ve `fonts` her zaman atlanır. |
+| `widths` | `number[]` | `[400, 640, 960, 1280, 1920]` | Build ve remote `srcset` adayları. Kaynaktan büyük olanlar build'de elenir; kaynağın kendi genişliği (en fazla 1920) her zaman eklenir. |
+| `quality` | `number` | `78` | webp kalitesi. Build'de imzaya girer; remote uçta `q` varsayılanı. |
+| `skip` | `string[]` | `[]` | Build'de taranmayacak **dizin adları**. `assets` ve `fonts` her zaman atlanır. |
+| `remote` | `object \| false` | kapalı | Runtime optimizer. `allowHosts` **zorunlu**; boşsa uç mount edilmez. |
 
-`false` verilirse görsel adımı hiç çalışmaz. Adım `sharp` gerektirir ve watch
-turunda hiç çalışmaz. Ayrıntı: [08-build.md](./08-build.md).
+### `images.remote`
+
+| Alan | Tip | Varsayılan | Anlamı |
+| --- | --- | --- | --- |
+| `allowHosts` | `string[]` | `[]` | Çekilebilecek host'lar. `*.cdn.example.com` sonek jokerini destekler. |
+| `path` | `string` | `/_jskelet/image` | Optimizer GET yolu. |
+| `maxWidth` | `number` | `1920` | `w` üst sınırı. |
+| `cacheMaxAge` | `number` | `2592000` (30 gün) | Yanıt `Cache-Control` max-age (saniye). Disk önbelleği `.jskelet/image-cache/`. |
+| `fetchTimeoutMs` | `number` | `10000` | Upstream fetch zaman aşımı. |
+| `maxBytes` | `number` | `10485760` (10 MiB) | Upstream gövde üst sınırı. |
+
+`false` verilirse görsel adımı hiç çalışmaz. Build adımı `sharp` gerektirir ve
+watch turunda hiç çalışmaz. Remote açıksa `sharp` **runtime**'da da gerekir;
+yoksa optimizer kaynak URL'ye 302 yönlendirir. Ayrıntı: [08-build.md](./08-build.md).
 
 ```js
-images: { widths: [400, 800, 1200], quality: 82, skip: ["indirmeler"] }
+images: {
+  widths: [400, 800, 1200],
+  quality: 82,
+  skip: ["indirmeler"],
+  remote: {
+    allowHosts: ["static.ornek.com", "*.cdn.ornek.com"],
+  },
+}
 ```
+
+`image({ src: "https://static.ornek.com/a.jpg", width: 96, alt: "…" })` bu
+ayarla `src` / `srcset`'i `/_jskelet/image?url=…&w=96` biçimine çevirir.
+Elle URL kurmak için `remoteImageUrl(src, { width })` (`jskelet`).
 
 ## `clientEnv`
 

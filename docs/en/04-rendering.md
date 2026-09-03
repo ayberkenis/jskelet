@@ -389,12 +389,16 @@ Behaviour:
 
 - For local raster images under `public/`, the webp variants generated at build
   time (`.jskelet/images.json`) are added automatically as `srcset` plus
-  intrinsic `width`/`height`. Images that are not in the manifest, or remote
-  ones, are emitted as-is.
-- If `srcset` is given by hand, or `unoptimized: true` is set, the manifest is
-  not consulted at all.
+  intrinsic `width`/`height`. Local paths missing from the manifest are emitted
+  as-is.
+- When `images.remote.allowHosts` is set, remote `http(s)` URLs are rewritten to
+  the `/_jskelet/image?url=&w=` proxy (webp). If `width` is set, `srcset`
+  includes 1x/2x plus config `widths`.
+- If `srcset` is given by hand, or `unoptimized: true` is set, neither the
+  manifest nor the remote proxy is used.
 - If only **one** variant was produced (because the source is already small),
-  `srcset`/`sizes` are not written; they would be pure noise.
+  `srcset`/`sizes` are not written; they would be pure noise. For remote images,
+  a single width still rewrites `src` to the optimized URL.
 - If `sizes` is not given a reasonable default is produced: the image is not
   scaled beyond its own intrinsic width, and it fills the viewport on narrow
   screens (`(max-width: Npx) 100vw, Npx`).

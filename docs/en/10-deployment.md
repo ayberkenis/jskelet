@@ -98,6 +98,7 @@ ENV HOST=0.0.0.0
 
 COPY package.json package-lock.json ./
 # sharp and tailwind are only needed at build time; keep them out of the runtime image.
+# If you use images.remote, move sharp to production dependencies.
 RUN npm ci --omit=dev && npm cache clean --force
 
 COPY --from=build /app/jskelet.config.mjs ./jskelet.config.mjs
@@ -127,9 +128,11 @@ Notes:
   rendering happens at runtime. Copy `lib/` only if your project has one.
 - **`.jskelet/` is needed:** without `manifest.json`, `asset()` cannot find the
   hashed URLs and `jskelet start` will try to run the build from scratch.
-- **`sharp` is not needed in the runtime image:** it is only for build-time image
-  optimization. `--omit=dev` leaves it out (if it was installed as a
-  devDependency).
+- **`sharp` is usually not needed in the runtime image:** it is only for
+  build-time image optimization. `--omit=dev` leaves it out (if it was installed
+  as a devDependency). **If `images.remote` is enabled**, sharp is a runtime
+  dependency — move it to production `dependencies` or install it in the
+  runtime image; otherwise the optimizer 302-redirects to the source URL.
 - If you would rather call `jskelet start` without `npx`,
   `CMD ["node", "node_modules/jskelet/bin/jskelet.mjs", "start"]` works too.
 

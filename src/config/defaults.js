@@ -368,6 +368,32 @@ export const DEFAULT_SECURITY = {
 };
 
 /**
+ * Build-zamanı görsel adımı + opsiyonel runtime uzak görsel proxy.
+ *
+ * `remote` kapalıyken `image()` uzak URL'leri olduğu gibi basar (eski davranış).
+ * Açılınca yalnızca `allowHosts` listesindeki host'lar proxy edilir — boş liste
+ * açık proxy / SSRF kapısı olurdu, bu yüzden allowHosts olmadan remote hiç
+ * mount edilmez.
+ */
+export const DEFAULT_IMAGES = {
+  widths: [400, 640, 960, 1280, 1920],
+  quality: 78,
+  skip: /** @type {string[]} */ ([]),
+  remote: {
+    /** @type {string[]} */
+    allowHosts: [],
+    path: "/_jskelet/image",
+    /** İzin verilen en büyük `w` (retina üstü israf). */
+    maxWidth: 1920,
+    /** Disk önbelleği Cache-Control max-age (saniye). */
+    cacheMaxAge: 60 * 60 * 24 * 30,
+    fetchTimeoutMs: 10_000,
+    /** Upstream gövde üst sınırı; aşılırsa 502. */
+    maxBytes: 10 * 1024 * 1024,
+  },
+};
+
+/**
  * Markalama. Header adı ve dev overlay yolu tek yerden değişsin diye
  * config'ten okunur — fork eden proje kendi adını verebilir.
  */

@@ -42,6 +42,8 @@ Request
  ├─ staticPrecompressed            .br/.gz copies produced at build (quality 11)
  ├─ express.static                 files under public/
  ├─ (dev) devtools                 only when NODE_ENV=development
+ ├─ admin (if enabled)             /_jskelet/admin
+ ├─ image optimizer (remote)       /_jskelet/image — when allowHosts is set
  ├─ body parsers                   urlencoded 64kb + json 256kb
  ├─ rewrites(afterFiles)           after static has been tried
  ├─ routes

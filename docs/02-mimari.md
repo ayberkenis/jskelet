@@ -42,6 +42,8 @@ JSkelet bu gözlemi mimarinin merkezine alır:
  ├─ staticPrecompressed            build'de üretilmiş .br/.gz kopyalar (kalite 11)
  ├─ express.static                 public/ altındaki dosyalar
  ├─ (dev) devtools                 yalnızca NODE_ENV=development
+ ├─ admin (açıksa)                 /_jskelet/admin
+ ├─ image optimizer (remote)       /_jskelet/image — allowHosts doluysa
  ├─ body parser'lar                urlencoded 64kb + json 256kb
  ├─ rewrites(afterFiles)           statik denendikten sonra
  ├─ route'lar
