@@ -28,6 +28,10 @@ one is listed under a **Breaking** heading.
 
 ### Fixed
 
+- Remote image optimizer cache hits no longer 404. Disk cache lives under
+  `.jskelet/image-cache/`; Express `sendFile` ignores dotfiles by default, so
+  the file was written but the response still failed. `sendCached` now passes
+  `dotfiles: "allow"`.
 - Cloudflare analytics in the cache panel no longer asks for an open-ended
   window. Queries used only `datetime_geq`, so Cloudflare closed the range at
   query time and a default 24h lookback became `1d` plus network delay — Free

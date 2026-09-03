@@ -309,7 +309,8 @@ function sendCached(res, filePath, maxAge) {
     `public, max-age=${maxAge}, stale-while-revalidate=${Math.min(maxAge, 86400)}`,
   );
   res.setHeader("Vary", "Accept");
-  res.sendFile(path.resolve(filePath));
+  // Cache dir is under .jskelet/; Express send ignores dotfiles by default.
+  res.sendFile(path.resolve(filePath), { dotfiles: "allow" });
 }
 
 /**
