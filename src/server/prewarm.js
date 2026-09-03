@@ -1,30 +1,42 @@
 /**
- * Sunucu açılışında sayfaları önden render edip HTML cache'ini doldurur.
+ * Sunucu açılışında veya ziyaret sırasında sayfaları önden render edip HTML
+ * cache'ini doldurur.
+ *
+ * İki karşılıklı dışlayan mod:
+ *
+ * 1. **Klasik** — `hooks.prewarmPaths()` listesi, açılış/`intervalSeconds`
+ *    turları, `priority` / `rotate` / `max`.
+ * 2. **onVisit** — herkese açık bir sayfa servis edilince HTML'deki
+ *    aynı-origin linkler kuyruğa alınır; tıklanabilir komşular ısınır.
  *
  * Next'teki build-time prerender'ın karşılığı, ama çıktı diske yazılmaz:
  * HTML cache süreç belleğinde yaşadığı için ısıtma da süreç ayağa kalkınca
- * yapılır. Kazanç aynı — ilk ziyaretçi soğuk render'ı beklemez — fakat veri
- * dondurulmaz: her girdi route'un `revalidate` süresiyle yaşlanır ve
- * stale-while-revalidate ile arkada tazelenir.
+ * (veya trafik geldikçe) yapılır.
  *
  * Isıtma gerçek HTTP istekleriyle yapılır: cache anahtarı, sıkıştırma ve
- * middleware zinciri normal trafikle bire bir aynı olsun. Hangi yolların
- * ısıtılacağını uygulama `hooks.prewarmPaths()` ile bildirir; genelde
- * sitemap üreten fonksiyonun aynısıdır.
- *
- * On binlerce yolluk bir sitede tur bir "damla damla" tarayıcıya dönüşür:
- * `priority` desenleri her turda başa alınır, geri kalan kuyruk turlar
- * arasında kaldığı yerden devam eder (`rotate`) ve `rps` toplam hızı upstream
- * kotasının altında tutar. Amaç, kimse gelmese bile hiçbir sayfanın soğuk
- * kalmaması — ama bunu API'yi düşürmeden yapmak.
+ * middleware zinciri normal trafikle bire bir aynı olsun.
  */
 import process from "node:process";
 import { getConfig, hook } from "../config/index.js";
 import { getRequestContext } from "../http/request-context.js";
-import { takeInvalidatedPaths } from "./html-cache.js";
+import { isHtmlCacheFresh, takeInvalidatedPaths } from "./html-cache.js";
 import { getDataCacheStats } from "./data-cache.js";
 import { isTransientStatus } from "./upstream-tracking.js";
 import { upstreamCooldownMs } from "./upstream-limiter.js";
+
+/** Klasik turu yöneten env'ler; `onVisit` ile birlikte yasak. */
+const CLASSIC_PREWARM_ENV = [
+  "PREWARM_MAX",
+  "PREWARM_INTERVAL_SECONDS",
+  "PREWARM_DELAY_MS",
+  "PREWARM_RETRY_DELAY_MS",
+];
+
+/**
+ * onVisit turu sürerken concurrency/rps. Klasik moda dokunmaz (`null`).
+ * @type {{ concurrency: number | null, rps: number | null }}
+ */
+const visitWarmSettings = { concurrency: null, rps: null };
 
 /**
  * Isıtmanın canlı durumu. Dev araçları bunu okuyup ilerlemeyi gösterir;
@@ -127,6 +139,15 @@ function num(value, fallback) {
  * @returns {number}
  */
 function setting(envKey, configKey, fallback) {
+  if (
+    visitWarmSettings.concurrency != null &&
+    configKey === "concurrency"
+  ) {
+    return visitWarmSettings.concurrency;
+  }
+  if (visitWarmSettings.rps != null && configKey === "rps") {
+    return visitWarmSettings.rps;
+  }
   return num(process.env[envKey], num(getConfig().prewarm?.[configKey], fallback));
 }
 
@@ -421,13 +442,18 @@ export async function prewarm({ origin, quiet = false, paths: only }) {
 
   // Dev'de tek işçi: tarama, o an tarayıcıda açtığın sayfanın render'ıyla CPU
   // için yarışmasın.
-  const concurrency = setting("PREWARM_CONCURRENCY", "concurrency", isDev ? 1 : 4);
+  const concurrency = setting(
+    "PREWARM_CONCURRENCY",
+    "concurrency",
+    isDev ? 1 : 4,
+  );
 
   // Render tek bir olay döngüsünde çalışıyor: aralıksız bir tur, geliştirme
   // sırasında sayfa isteklerini ve dev panelinin kanalını arkasında bekletiyor.
   // Dev'de varsayılan bir hız freni bu yüzden var; üretimde ısıtma bir kez
   // olup bittiği için fren yalnızca istenirse (`prewarm.rps`) devreye girer.
-  const rps = num(process.env.PREWARM_RPS, num(getConfig().prewarm?.rps, isDev ? 4 : 0));
+  // onVisit turlarında `visitWarmSettings.rps` `setting()` üzerinden iner.
+  const rps = setting("PREWARM_RPS", "rps", isDev ? 4 : 0);
   const pace = createPacer(rps);
 
   const all = only?.length ? only : await collectPaths();
@@ -554,8 +580,213 @@ export async function prewarm({ origin, quiet = false, paths: only }) {
 }
 
 /**
- * Açılışta ısıtmayı tetikler. `listen` geri çağrısından çağrılır; isteğe
- * bağlı olarak periyodik tekrarlar. Hiçbir hata süreci düşürmez.
+ * Speculation Rules `href_matches` benzeri dışlama: tam yol veya `/*` öneki.
+ *
+ * @param {string} pathname
+ * @param {string[]} patterns
+ * @returns {boolean}
+ */
+function matchesHrefExclude(pathname, patterns) {
+  for (const pattern of patterns) {
+    if (typeof pattern !== "string" || !pattern) continue;
+    if (pattern.endsWith("/*")) {
+      const base = pattern.slice(0, -2);
+      if (pathname === base || pathname.startsWith(`${base}/`)) return true;
+      continue;
+    }
+    if (pathname === pattern) return true;
+  }
+  return false;
+}
+
+/**
+ * HTML içindeki aynı-origin `<a href>` yollarını DOM sırasıyla (üstten alta)
+ * toplar. Speculation Rules ile aynı muafiyetler: `nofollow`, `_blank`,
+ * `data-no-prefetch`, `prewarmSkip`, `navigation.exclude`.
+ *
+ * @param {string} html
+ * @param {{ limit?: number, basePath?: string }} [options]
+ * @returns {string[]}
+ */
+export function extractSameOriginLinks(html, options = {}) {
+  if (typeof html !== "string" || !html) return [];
+
+  const limit = Math.max(1, Math.floor(Number(options.limit) || 20));
+  const { prewarmSkip, navigation } = getConfig();
+  const exclude = navigation?.exclude ?? [];
+
+  /** @type {string[]} */
+  const links = [];
+  const seen = new Set();
+  const tagRe = /<a\b([^>]*)>/gi;
+  let match;
+
+  while ((match = tagRe.exec(html)) !== null && links.length < limit) {
+    const attrs = match[1];
+    if (/\btarget\s*=\s*(?:"_blank"|'_blank'|_blank)(?=[\s>]|$)/i.test(attrs)) {
+      continue;
+    }
+    if (/\bdata-no-prefetch\b/i.test(attrs)) continue;
+
+    const relMatch = attrs.match(
+      /\brel\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i,
+    );
+    const rel = relMatch?.[1] ?? relMatch?.[2] ?? relMatch?.[3] ?? "";
+    if (/\bnofollow\b/i.test(rel)) continue;
+
+    const hrefMatch = attrs.match(
+      /\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i,
+    );
+    const href = hrefMatch?.[1] ?? hrefMatch?.[2] ?? hrefMatch?.[3];
+    if (!href) continue;
+
+    const path = normalizeWarmPath(href, options.basePath);
+    if (!path) continue;
+    if (prewarmSkip.some((prefix) => path.startsWith(prefix))) continue;
+    if (matchesHrefExclude(path, exclude)) continue;
+    if (seen.has(path)) continue;
+
+    seen.add(path);
+    links.push(path);
+  }
+
+  return links;
+}
+
+/**
+ * @param {string} href
+ * @param {string} [basePath] Ziyaret edilen sayfa; göreli href çözümü için.
+ * @returns {string | null}
+ */
+function normalizeWarmPath(href, basePath = "/") {
+  const trimmed = href.trim();
+  if (!trimmed || trimmed.startsWith("#")) return null;
+  if (/^(mailto|tel|javascript|data):/i.test(trimmed)) return null;
+
+  try {
+    const basePathname = basePath.startsWith("/") ? basePath : `/${basePath}`;
+    const url = new URL(trimmed, `https://warm.invalid${basePathname}`);
+    // Dış origin veya `https://…` mutlak linkler elenir; yalnızca site-içi
+    // path / göreli href ısınır.
+    if (url.origin !== "https://warm.invalid") return null;
+    return url.pathname || "/";
+  } catch {
+    return null;
+  }
+}
+
+/** @type {string | null} */
+let visitOrigin = null;
+/** @type {string[]} */
+const visitPending = [];
+/** @type {Set<string>} */
+const visitQueued = new Set();
+let visitDraining = false;
+
+/**
+ * Ziyaret ısıtması açık mı? `PREWARM=0` her iki modu da keser.
+ *
+ * @returns {boolean}
+ */
+export function isOnVisitPrewarm() {
+  if (process.env.PREWARM === "0") return false;
+  try {
+    return getConfig().prewarm?.onVisit?.enabled === true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Yanıt gövdesindeki linkleri soğuksa kuyruğa alır. İstek yolunu bloklamamak
+ * için `route()` bunu `queueMicrotask` ile çağırır.
+ *
+ * @param {string} html
+ * @param {{ path: string, req?: { get?: (name: string) => string | undefined,
+ *   headers?: Record<string, unknown> } }} context
+ * @returns {void}
+ */
+export function noteVisitWarm(html, context) {
+  if (!isOnVisitPrewarm() || !visitOrigin) return;
+  if (!context?.path || typeof html !== "string") return;
+
+  const ua =
+    context.req?.get?.("user-agent") ??
+    /** @type {string | undefined} */ (context.req?.headers?.["user-agent"]);
+  if (ua && ua === getConfig().brand.prewarmUserAgent) return;
+
+  const perPage = Number(getConfig().prewarm?.onVisit?.perPage) || 20;
+  const links = extractSameOriginLinks(html, {
+    limit: perPage,
+    basePath: context.path,
+  });
+
+  for (const path of links) {
+    if (path === context.path) continue;
+    if (isHtmlCacheFresh(path)) continue;
+    if (visitQueued.has(path)) continue;
+    visitQueued.add(path);
+    visitPending.push(path);
+  }
+
+  enqueueInvalidatedForVisit();
+  if (visitPending.length) void drainVisitWarm();
+}
+
+/**
+ * Invalidate edilmiş yolları da kuyruğa alır (klasik turdaki
+ * `takeInvalidatedPaths` karşılığı).
+ *
+ * @returns {void}
+ */
+function enqueueInvalidatedForVisit() {
+  for (const path of takeInvalidatedPaths()) {
+    if (visitQueued.has(path)) continue;
+    visitQueued.add(path);
+    visitPending.push(path);
+  }
+}
+
+async function drainVisitWarm() {
+  if (visitDraining || !visitOrigin) return;
+  visitDraining = true;
+
+  const onVisit = getConfig().prewarm?.onVisit ?? {};
+
+  try {
+    while (visitPending.length) {
+      enqueueInvalidatedForVisit();
+
+      const batch = visitPending.splice(0, 32);
+      for (const path of batch) visitQueued.delete(path);
+
+      const cold = batch.filter((path) => !isHtmlCacheFresh(path));
+      if (!cold.length) continue;
+
+      // Klasik `prewarm()` turunu yeniden kullan: retry, progress, UA aynı.
+      // onVisit.concurrency / rps verilmişse `visitWarmSettings` ile iner;
+      // yoksa `prewarm()` kendi (env → config → isDev) zincirine düşer.
+      visitWarmSettings.concurrency = onVisit.concurrency;
+      visitWarmSettings.rps = onVisit.rps;
+
+      try {
+        await prewarm({ origin: visitOrigin, paths: cold, quiet: true });
+      } catch (error) {
+        console.error("[prewarm] onVisit warm failed", error);
+      } finally {
+        visitWarmSettings.concurrency = null;
+        visitWarmSettings.rps = null;
+      }
+    }
+  } finally {
+    visitDraining = false;
+    if (visitPending.length) void drainVisitWarm();
+  }
+}
+
+/**
+ * Açılışta ısıtmayı tetikler. `listen` geri çağrısından çağrılır.
+ * `onVisit` modunda zamanlayıcı yok: yalnızca origin kaydı ve kuyruk.
  *
  * @param {{ port: number }} options
  * @returns {void}
@@ -563,12 +794,30 @@ export async function prewarm({ origin, quiet = false, paths: only }) {
 export function startPrewarm({ port }) {
   const config = getConfig();
   if (process.env.PREWARM === "0") return;
+
+  const origin = `http://127.0.0.1:${port}`;
+
+  if (config.prewarm?.onVisit?.enabled) {
+    const classicEnv = CLASSIC_PREWARM_ENV.filter((key) => process.env[key]);
+    if (classicEnv.length) {
+      throw new Error(
+        "[prewarm] onVisit mode cannot be used with " +
+          `${classicEnv.join(", ")}. Those env vars belong to classic prewarm.`,
+      );
+    }
+
+    visitOrigin = origin;
+    console.log(
+      `[prewarm] onVisit mode — warming links from each public page response`,
+    );
+    return;
+  }
+
   if (process.env.PREWARM !== "1" && config.prewarm?.enabled === false) return;
   // Isıtacak yol bildirmeyen bir projede zamanlayıcı kurmanın anlamı yok.
   if (typeof config.hooks?.prewarmPaths !== "function") return;
 
   const isDev = process.env.NODE_ENV === "development";
-  const origin = `http://127.0.0.1:${port}`;
 
   // Hız frenli bir tur `intervalSeconds`'tan uzun sürebilir; üst üste binen
   // turlar `prewarmProgress`'i bozar ve upstream'e iki kat yük bindirir.

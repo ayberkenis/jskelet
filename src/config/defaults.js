@@ -50,7 +50,11 @@ export const DEFAULT_DEV_GATE_BYPASS = [
   "/favicon.ico",
 ];
 
-/** Prewarm ayarlarının kod içi varsayılanları. */
+/**
+ * Klasik (liste tabanlı) prewarm ayarları. `onVisit` modu bunlarla birlikte
+ * kullanılamaz — ya açılış/`prewarmPaths` turu, ya ziyaret edilen sayfadaki
+ * linkleri ısıtma.
+ */
 export const DEFAULT_PREWARM = {
   enabled: true,
   max: 400,
@@ -84,6 +88,41 @@ export const DEFAULT_PREWARM = {
    */
   priority: [],
 };
+
+/**
+ * Ziyaret tabanlı ısıtma. Bir sayfa servis edilince HTML'deki aynı-origin
+ * linkler kuyruğa alınır; bir sonraki tıklama (veya başka ziyaretçi) çoğu
+ * zaman HIT görür. Klasik `prewarm` alanlarıyla karşılıklı dışlayıcıdır.
+ */
+export const DEFAULT_PREWARM_ON_VISIT = {
+  enabled: false,
+  /** Sayfa başına üstten alta en fazla kaç link kuyruğa alınır. */
+  perPage: 20,
+  /**
+   * Paralel işçi; `null` → klasik prewarm ile aynı varsayılan
+   * (prod 4 / dev 1) `startPrewarm` içinde çözülür.
+   * @type {number | null}
+   */
+  concurrency: null,
+  /**
+   * Saniyedeki istek tavanı; `null` → klasik ile aynı (prod 0 / dev 4).
+   * @type {number | null}
+   */
+  rps: null,
+};
+
+/** `onVisit` açıkken `cache().prewarm` kökünde yasak olan klasik alanlar. */
+export const CLASSIC_PREWARM_KEYS = [
+  "enabled",
+  "max",
+  "intervalSeconds",
+  "concurrency",
+  "delayMs",
+  "rps",
+  "retryDelayMs",
+  "rotate",
+  "priority",
+];
 
 /**
  * HTML önbelleğinin girdi sınırı. 500 girdi ortalama bir sayfa boyutunda

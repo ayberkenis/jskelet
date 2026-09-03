@@ -1052,19 +1052,68 @@ yönlenen gerçek bir istekle o edge'in önbelleğine giriyor; sunucudan
 cache'lememe kararının en sık sebepleri, ve bu panelde `dynamic` olarak
 görünür.
 
-## Prewarm — açılışta ısıtma
+## Prewarm — açılışta veya ziyarette ısıtma
 
 Next'teki build-time prerender'ın karşılığı, ama çıktı diske yazılmaz: önbellek
-süreç belleğinde yaşadığı için ısıtma da süreç ayağa kalkınca yapılır. Kazanç
-aynı — ilk ziyaretçi soğuk render'ı beklemez — fakat veri dondurulmaz; her girdi
-route'un `revalidate` süresiyle yaşlanır ve stale-while-revalidate ile arkada
-tazelenir.
+süreç belleğinde yaşadığı için ısıtma da süreç ayağa kalkınca (klasik mod) ya
+da trafik geldikçe (`onVisit`) yapılır. Kazanç aynı — tıklanan / komşu sayfa
+soğuk render'ı beklemez — fakat veri dondurulmaz; her girdi route'un
+`revalidate` süresiyle yaşlanır ve stale-while-revalidate ile arkada tazelenir.
 
 Isıtma **gerçek HTTP istekleriyle** yapılır (`http://127.0.0.1:<port>`), çünkü
 cache anahtarı, sıkıştırma ve middleware zinciri normal trafikle bire bir aynı
 olsun.
 
-### `hooks.prewarmPaths()`
+İki mod **karşılıklı dışlayıcıdır**. `cache().prewarm.onVisit` açıksa klasik
+alanlar (`max`, `priority`, `rotate`, `intervalSeconds`, …) ve
+`hooks.prewarmPaths` birlikte verilemez — config yüklenirken hata fırlar.
+Tersi de geçerli: klasik liste ısıtması kullanıyorsanız `onVisit` yazmayın.
+
+### Mod: `onVisit` — ziyaret edilen sayfanın linkleri
+
+Bir kullanıcı herkese açık, önbelleklenebilir bir sayfayı (`public` HTML, 200)
+aldığında framework yanıt HTML'indeki aynı-origin `<a href>` yollarını (üstten
+alta, `perPage` kadar) kuyruğa alır ve arka planda ısıtır. Bir sonraki tıklama
+veya aynı sayfaya gelen başka ziyaretçi çoğu zaman `HIT` görür.
+
+```js
+// jskelet.config.mjs
+export default {
+  async cache() {
+    return {
+      html: { "/": 60, "/haber/:slug": 300 },
+      prewarm: {
+        onVisit: {
+          perPage: 20,      // sayfa başına en fazla link
+          concurrency: 2,   // opsiyonel
+          rps: 4,           // opsiyonel; 0 = sınırsız
+        },
+      },
+    };
+  },
+};
+```
+
+`onVisit: true` de yeterlidir (varsayılan `perPage: 20`).
+
+Kurallar:
+
+- Yalnızca `route()` ile giden **public + cache'lenebilir** 200 HTML tetikler;
+  `private`, degraded veya `no-store` yanıtlar link çıkarmaz.
+- Isıtma isteğinin kendi UA'sı (`brand.prewarmUserAgent`) tetiklemez — sonsuz
+  crawl olmaz.
+- Zaten taze olan yollar kuyruğa girmez.
+- `nofollow`, `target="_blank"`, `data-no-prefetch`, `prewarmSkip` ve
+  `navigation.exclude` Speculation Rules ile aynı muafiyetleri paylaşır.
+- Query string ısıtılmaz (varsayılan cache politikası query'yi dinamik sayar).
+- Açılışta otomatik tur yoktur; ilk ziyaretçi o sayfa için hâlâ MISS
+  ödeyebilir. Kritik yolları deploy öncesi sıcak tutmak istiyorsanız klasik
+  modu veya readiness + seed tercih edin.
+- `PREWARM=0` onVisit'i de kapatır. `PREWARM_MAX` / `PREWARM_INTERVAL_SECONDS`
+  / `PREWARM_DELAY_MS` / `PREWARM_RETRY_DELAY_MS` onVisit ile birlikte
+  kullanılamaz (hata).
+
+### Mod: klasik — `hooks.prewarmPaths()`
 
 Hangi yolların ısıtılacağını uygulama bildirir; genelde sitemap üreten
 fonksiyonun aynısıdır.
@@ -1089,9 +1138,10 @@ Kurallar:
   `/api/`, `/_fragment/`, `/__jskelet/`. Oturuma bağlı sayfalar ısıtılmamalı.
 - Tekilleştirme **sırayı korur**: `priority` verilmediğinde uygulamanın verdiği
   sıra anlamlıdır — en önemli sayfaları başa koyun.
-- Bu hook tanımlı değilse ısıtma hiç kurulmaz; zamanlayıcı bile açılmaz.
+- Bu hook tanımlı değilse klasik ısıtma hiç kurulmaz; zamanlayıcı bile açılmaz.
+  (`onVisit` modunda hook **yasaktır**, yukarıya bakın.)
 
-### Tur mantığı
+### Tur mantığı (klasik)
 
 1. Liste toplanır. `max`'tan (varsayılan 400) uzunsa bir dilim seçilir:
    `priority` eşleşenler **her turda** başa alınır, kalan yerler kuyruktan
@@ -1272,8 +1322,12 @@ turunun gerçekten `MISS` → önbellek doldurup doldurmadığını buradan gör
   fazla `revalidate` + bir tazeleme turudur.
 - **Önbellek şişiyor.** Query parametreleri anahtara girdiği için kampanya
   parametreleri girdi çoğaltıyor olabilir.
-- **Isıtma hiç çalışmıyor.** `hooks.prewarmPaths` tanımlı değil, `PREWARM=0`
-  ayarlı ya da `cache().prewarm.enabled === false`.
+- **Isıtma hiç çalışmıyor.** Klasik modda `hooks.prewarmPaths` tanımlı değil,
+  `PREWARM=0` ayarlı ya da `cache().prewarm.enabled === false`. `onVisit`
+  modunda `listen` sonrası logda `onVisit mode` satırını ve public cache'li
+  bir sayfa gezildiğini doğrulayın.
+- **Config `onVisit` + `max` / `prewarmPaths` ile düşüyor.** İki mod karşılıklı
+  dışlayıcı; yalnızca birini kullanın.
 - **Isıtma turu API'yi 429'a sokuyor.** `rps` verilmemiş. `concurrency`
   düşürmek yeterli değil; kotayı koruyan ayar toplam hız. Kalıcı çözüm veri
   önbelleği: ikinci turdan sonra ısıtma upstream'e gitmez.

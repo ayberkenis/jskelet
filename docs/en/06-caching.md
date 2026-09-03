@@ -1051,20 +1051,69 @@ before anything else: `Cache-Control: private`, `Set-Cookie` and query string
 settings are the most common reasons an edge decides not to cache, and they
 show up as `dynamic` in this panel.
 
-## Prewarm — warming up at startup
+## Prewarm — warming at startup or on visit
 
 The equivalent of Next's build-time prerender, except the output is not written
-to disk: since the cache lives in process memory, the warm-up also happens when
-the process comes up. The gain is the same — the first visitor does not wait
-for a cold render — but the data is not frozen; every entry ages with the
-route's `revalidate` and is refreshed in the background with
-stale-while-revalidate.
+to disk: since the cache lives in process memory, the warm-up happens when the
+process comes up (classic mode) or as traffic arrives (`onVisit`). The gain is
+the same — the clicked / neighbouring page does not wait for a cold render —
+but the data is not frozen; every entry ages with the route's `revalidate` and
+is refreshed in the background with stale-while-revalidate.
 
 The warm-up is done with **real HTTP requests**
 (`http://127.0.0.1:<port>`), so that the cache key, the compression and the
 middleware chain are exactly the same as with normal traffic.
 
-### `hooks.prewarmPaths()`
+The two modes are **mutually exclusive**. If `cache().prewarm.onVisit` is on,
+classic fields (`max`, `priority`, `rotate`, `intervalSeconds`, …) and
+`hooks.prewarmPaths` must not be set together — config load throws. The reverse
+holds too: if you use classic list warming, do not set `onVisit`.
+
+### Mode: `onVisit` — links from the page just visited
+
+When a user receives a public, cacheable page (`public` HTML, 200), the
+framework takes same-origin `<a href>` paths from the response HTML (top to
+bottom, up to `perPage`) and warms them in the background. The next click, or
+another visitor to the same neighbourhood, usually sees a `HIT`.
+
+```js
+// jskelet.config.mjs
+export default {
+  async cache() {
+    return {
+      html: { "/": 60, "/news/:slug": 300 },
+      prewarm: {
+        onVisit: {
+          perPage: 20,      // at most this many links per page
+          concurrency: 2,   // optional
+          rps: 4,           // optional; 0 = unlimited
+        },
+      },
+    };
+  },
+};
+```
+
+`onVisit: true` is enough (default `perPage: 20`).
+
+Rules:
+
+- Only **public + cacheable** 200 HTML from `route()` triggers it; `private`,
+  degraded or `no-store` responses do not extract links.
+- The warmer's own UA (`brand.prewarmUserAgent`) does not trigger — no crawl
+  loop.
+- Paths that are already fresh are not enqueued.
+- `nofollow`, `target="_blank"`, `data-no-prefetch`, `prewarmSkip` and
+  `navigation.exclude` share the same exemptions as Speculation Rules.
+- Query strings are not warmed (default cache policy treats query as dynamic).
+- There is no automatic startup pass; the first visitor to a page may still pay
+  a MISS. If you need critical paths hot before traffic, prefer classic mode or
+  readiness + a seed.
+- `PREWARM=0` turns onVisit off too. `PREWARM_MAX` / `PREWARM_INTERVAL_SECONDS`
+  / `PREWARM_DELAY_MS` / `PREWARM_RETRY_DELAY_MS` cannot be used with onVisit
+  (error).
+
+### Mode: classic — `hooks.prewarmPaths()`
 
 The application declares which paths get warmed; usually it is the very same
 function that produces the sitemap.
@@ -1090,11 +1139,10 @@ Rules:
   not be warmed.
 - Deduplication **preserves order**: when no `priority` is given, the order the
   application provides is meaningful — put the most important pages first.
-- If this hook is not defined the warm-up is never set up; not even the timer
-  is started.
+- If this hook is not defined the classic warm-up is never set up; not even the
+  timer is started. (In `onVisit` mode the hook is **forbidden** — see above.)
 
-### Round logic
-
+### Round logic (classic)
 1. The list is collected. If it is longer than `max` (400 by default) a slice is
    selected: the paths matching `priority` are taken first **on every round**,
    and the remaining slots are filled from the queue.
@@ -1277,8 +1325,12 @@ filled the cache.
   lag is at most `revalidate` + one refresh round.
 - **The cache is bloating.** Because query parameters go into the key, campaign
   parameters may be multiplying entries.
-- **The warm-up never runs.** `hooks.prewarmPaths` is not defined, `PREWARM=0`
-  is set, or `cache().prewarm.enabled === false`.
+- **The warm-up never runs.** In classic mode `hooks.prewarmPaths` is not
+  defined, `PREWARM=0` is set, or `cache().prewarm.enabled === false`. In
+  `onVisit` mode check the `onVisit mode` log line after `listen` and that a
+  public cacheable page was visited.
+- **Config fails with `onVisit` + `max` / `prewarmPaths`.** The two modes are
+  mutually exclusive; use only one.
 - **The warm-up round pushes the API into 429.** No `rps` was given. Lowering
   `concurrency` is not enough; the setting that protects the quota is the total
   rate. The lasting fix is the data cache: after the second round the warm-up

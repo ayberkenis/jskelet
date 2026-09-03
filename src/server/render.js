@@ -41,7 +41,7 @@ import * as html from "../views/helpers/html.js";
 import * as tags from "../views/helpers/tags.js";
 import { loadComponents } from "../views/components/loader.js";
 import { renderStatusPage } from "./status-page.js";
-import { suppressForPrewarm } from "./prewarm.js";
+import { suppressForPrewarm, noteVisitWarm } from "./prewarm.js";
 import {
   ensureTemplatesCompiled,
   getComponentDirs,
@@ -395,6 +395,17 @@ export function route(controller, options = {}) {
       // ETag kişiye özel HTML için kullanıcıya özgü bir doğrulayıcıdır ve
       // `no-store` ile birlikte hiçbir işe yaramaz; üretilmesi engellenir.
       await sendHtml(req, res, result.html, result.encoded, { etag: publicCache });
+
+      // onVisit: yanıt gittikten sonra linkleri kuyruğa al — TTFB'yi şişirmez.
+      // Yalnızca herkese açık, önbelleklenebilir 200 HTML; private / degraded
+      // sayfadaki linkler kişiye özel veya eksik olabilir.
+      if (publicCache && result.status === 200 && result.html) {
+        const pagePath = req.path;
+        const pageHtml = result.html;
+        queueMicrotask(() => {
+          noteVisitWarm(pageHtml, { path: pagePath, req });
+        });
+      }
     } catch (error) {
       if (isRedirectError(error)) {
         // Oturuma bağlı bir yönlendirme de kişiye özeldir: "giriş yapmalısın"

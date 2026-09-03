@@ -10,6 +10,11 @@ one is listed under a **Breaking** heading.
 
 ### Added
 
+- Visit-driven HTML prewarm (`cache().prewarm.onVisit`): after each public
+  cacheable page response, same-origin links in the HTML are warmed in the
+  background (document order, `perPage` cap). Mutually exclusive with classic
+  prewarm (`max` / `priority` / `rotate` / `hooks.prewarmPaths`, etc.) — mixing
+  them fails at config load.
 - Runtime remote image optimizer: set `images.remote.allowHosts` to proxy
   allowlisted http(s) images through `/_jskelet/image?url=&w=&q=` as resized
   webp (disk cache under `.jskelet/image-cache/`). `image()` rewrites matching

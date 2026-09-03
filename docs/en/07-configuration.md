@@ -902,6 +902,11 @@ edges hold this page" has no exact answer — is in
 
 ### `cache().prewarm`
 
+Two modes: **classic** (list + startup pass) or **`onVisit`** (links from the
+page just visited). They cannot be combined — config load throws.
+
+#### Classic fields
+
 | Field | Type | Default | Meaning |
 | --- | --- | --- | --- |
 | `enabled` | `boolean` | `true` | If `false`, no prewarming happens (can be overridden with `PREWARM=1`) |
@@ -930,6 +935,24 @@ prewarm: {
 }
 ```
 
+#### `onVisit`
+
+| Field | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `onVisit` | `true \| false \| object` | off | Visit-driven warming |
+| `onVisit.perPage` | `number` | `20` | At most how many links per page (top to bottom) |
+| `onVisit.concurrency` | `number` | same as classic | Parallel workers |
+| `onVisit.rps` | `number` | same as classic | Requests per second cap; `0` unlimited |
+
+```js
+prewarm: {
+  onVisit: { perPage: 20, rps: 4 },
+}
+```
+
+`hooks.prewarmPaths` and classic fields (`max`, `priority`, …) are **forbidden**
+with `onVisit`. Details: [06-caching.md](./06-caching.md).
+
 Each numeric field can be overridden by an environment variable of the same
 name; env takes precedence. Details: [06-caching.md](./06-caching.md).
 
@@ -946,7 +969,7 @@ its own default and warns — the page does not go down.
 | `layoutContext` | `({ pathname, metadata }) => object` | Layout locals; `lang`, `structuredData`, `extraHead` and `bodyClass` get special treatment | [04](./04-rendering.md) |
 | `notFound` | `() => object \| null` | 404 page definition; if `null`, the framework's error page | [03](./03-routing.md) |
 | `error` | `({ status, error }) => object \| string \| null` | Error pages other than 404 (and 404 when there is no `notFound`); a page definition or HTML directly | [03](./03-routing.md) |
-| `prewarmPaths` | `() => string[]` | Paths to prewarm; if it is not defined, prewarming is never set up | [06](./06-caching.md) |
+| `prewarmPaths` | `() => string[]` | Paths for classic prewarm; if omitted, the classic pass is never set up. **Forbidden** with `onVisit` | [06](./06-caching.md) |
 
 ```js
 hooks: {

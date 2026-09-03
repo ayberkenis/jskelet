@@ -815,3 +815,17 @@ export function getHtmlCacheEntries() {
     deps: entry.deps.size,
   }));
 }
+
+/**
+ * Yol (query'siz) için taze bir HTML girdisi var mı? Ziyaret ısıtması yalnızca
+ * soğuk / bayat hedefleri kuyruğa alır; HIT'leri yeniden çekmez.
+ *
+ * @param {string} pathname
+ * @returns {boolean}
+ */
+export function isHtmlCacheFresh(pathname) {
+  if (typeof pathname !== "string" || !pathname.startsWith("/")) return false;
+  const entry = store.get(pathname);
+  if (!entry) return false;
+  return Date.now() < entry.expiresAt;
+}

@@ -42,7 +42,9 @@ import {
   DEFAULT_NAVIGATION,
   DEFAULT_NAVIGATION_EXCLUDE,
   DEFAULT_PREWARM,
+  DEFAULT_PREWARM_ON_VISIT,
   DEFAULT_PREWARM_SKIP,
+  CLASSIC_PREWARM_KEYS,
   DEFAULT_REDIS,
   DEFAULT_SECURITY,
   DEFAULT_STATIC,
@@ -655,7 +657,7 @@ function normalizeCache(raw) {
     html.push({ pattern, seconds: value });
   }
 
-  const prewarm = { ...DEFAULT_PREWARM, ...(raw?.prewarm ?? {}) };
+  const prewarm = normalizePrewarm(raw?.prewarm);
   const queryRules = normalizeQueryRules(raw?.query);
   const maxEntries = Number(raw?.maxEntries);
 
@@ -685,6 +687,98 @@ function normalizeCache(raw) {
     // ayarların düz torbası olarak kalsın, her turda yeniden derlenmesin.
     prewarm,
     prewarmPriority: normalizePriority(prewarm.priority),
+  };
+}
+
+/**
+ * @param {unknown} raw
+ * @returns {{ enabled: boolean } & typeof DEFAULT_PREWARM_ON_VISIT}
+ */
+function normalizeOnVisit(raw) {
+  if (raw === true) {
+    return { ...DEFAULT_PREWARM_ON_VISIT, enabled: true };
+  }
+
+  if (raw == null || raw === false) {
+    return { ...DEFAULT_PREWARM_ON_VISIT, enabled: false };
+  }
+
+  if (typeof raw !== "object" || Array.isArray(raw)) {
+    throw new Error(
+      "[config] cache().prewarm.onVisit must be true, false, or an object",
+    );
+  }
+
+  const source = /** @type {Record<string, unknown>} */ (raw);
+  const perPage = Number(source.perPage);
+  const concurrency = Number(source.concurrency);
+  const rps = Number(source.rps);
+
+  return {
+    ...DEFAULT_PREWARM_ON_VISIT,
+    enabled: source.enabled !== false,
+    perPage:
+      Number.isFinite(perPage) && perPage > 0
+        ? Math.floor(perPage)
+        : DEFAULT_PREWARM_ON_VISIT.perPage,
+    concurrency:
+      Number.isFinite(concurrency) && concurrency > 0
+        ? Math.floor(concurrency)
+        : null,
+    rps: Number.isFinite(rps) && rps >= 0 ? rps : null,
+  };
+}
+
+/**
+ * Klasik liste ısıtması ile `onVisit` karşılıklı dışlayıcıdır. İkisini birden
+ * yazmak sessizce yanlış moda düşmesin diye yüklemede hata verir.
+ *
+ * @param {unknown} raw
+ * @returns {Record<string, unknown>}
+ */
+function normalizePrewarm(raw) {
+  const source =
+    raw && typeof raw === "object" && !Array.isArray(raw)
+      ? /** @type {Record<string, unknown>} */ ({ ...raw })
+      : {};
+
+  const onVisit = normalizeOnVisit(source.onVisit);
+
+  if (onVisit.enabled) {
+    const conflicts = Object.keys(source).filter(
+      (key) => key !== "onVisit" && CLASSIC_PREWARM_KEYS.includes(key),
+    );
+    if (conflicts.length) {
+      throw new Error(
+        "[config] cache().prewarm.onVisit cannot be combined with classic " +
+          `prewarm settings (${conflicts.join(", ")}). Use either onVisit or ` +
+          "classic settings (max, priority, rotate, …), not both.",
+      );
+    }
+
+    const unknown = Object.keys(source).filter((key) => key !== "onVisit");
+    if (unknown.length) {
+      throw new Error(
+        "[config] cache().prewarm.onVisit cannot be combined with " +
+          `${unknown.join(", ")}. On-visit mode only accepts the onVisit object.`,
+      );
+    }
+
+    return {
+      ...DEFAULT_PREWARM,
+      enabled: true,
+      onVisit,
+    };
+  }
+
+  // Klasik mod: `onVisit: false` yazılmış olabilir; diğer alanlar varsayılanlarla
+  // birleşir. `onVisit` anahtarı çözülmüş nesnede her zaman durur.
+  const classic = { ...source };
+  delete classic.onVisit;
+  return {
+    ...DEFAULT_PREWARM,
+    ...classic,
+    onVisit,
   };
 }
 
@@ -1042,6 +1136,17 @@ export async function loadConfig(options = {}) {
     images: normalizeImages(source.images),
     clientEnv: source.clientEnv ?? [],
   };
+
+  if (
+    config.prewarm?.onVisit?.enabled &&
+    typeof config.hooks?.prewarmPaths === "function"
+  ) {
+    throw new Error(
+      "[config] hooks.prewarmPaths() cannot be used with cache().prewarm.onVisit. " +
+        "On-visit mode warms links from each response; classic mode uses prewarmPaths. " +
+        "Choose one.",
+    );
+  }
 
   // Dev'de build ve sunucu ayrı alt süreçler; üçü de aynı özeti basınca satır
   // banner'ın ve build bloğunun arasına üç kez giriyor. Özeti dış süreç basar.

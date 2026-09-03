@@ -882,6 +882,11 @@ tam cevabı olmadığı — [06-cache.md](./06-cache.md) içinde.
 
 ### `cache().prewarm`
 
+İki mod: **klasik** (liste + açılış turu) veya **`onVisit`** (ziyaret edilen
+sayfadaki linkler). Birlikte verilemez — config yüklenirken hata.
+
+#### Klasik alanlar
+
 | Alan | Tip | Varsayılan | Anlamı |
 | --- | --- | --- | --- |
 | `enabled` | `boolean` | `true` | `false` ise ısıtma yapılmaz (`PREWARM=1` ile ezilebilir) |
@@ -910,6 +915,24 @@ prewarm: {
 }
 ```
 
+#### `onVisit`
+
+| Alan | Tip | Varsayılan | Anlamı |
+| --- | --- | --- | --- |
+| `onVisit` | `true \| false \| object` | kapalı | Ziyaret tabanlı ısıtma |
+| `onVisit.perPage` | `number` | `20` | Sayfa başına üstten alta en fazla link |
+| `onVisit.concurrency` | `number` | klasik ile aynı | Paralel işçi |
+| `onVisit.rps` | `number` | klasik ile aynı | Saniyedeki tavan; `0` sınırsız |
+
+```js
+prewarm: {
+  onVisit: { perPage: 20, rps: 4 },
+}
+```
+
+`hooks.prewarmPaths` ve klasik alanlar (`max`, `priority`, …) `onVisit` ile
+**yasaktır**. Ayrıntı: [06-cache.md](./06-cache.md).
+
 Sayısal alanların her biri aynı adı taşıyan ortam değişkeniyle ezilebilir; env
 önceliklidir. Ayrıntı: [06-cache.md](./06-cache.md).
 
@@ -926,7 +949,7 @@ varsayılanına döner ve uyarır — sayfa düşmez.
 | `layoutContext` | `({ pathname, metadata }) => object` | Layout local'leri; `lang`, `structuredData`, `extraHead`, `bodyClass` özel yorumlanır | [04](./04-render-ve-sablonlar.md) |
 | `notFound` | `() => object \| null` | 404 sayfa tanımı; `null` ise framework'ün hata sayfası | [03](./03-routing.md) |
 | `error` | `({ status, error }) => object \| string \| null` | 404 dışındaki hata sayfaları (ve `notFound` yoksa 404); sayfa tanımı ya da doğrudan HTML | [03](./03-routing.md) |
-| `prewarmPaths` | `() => string[]` | Isıtılacak yollar; tanımlı değilse ısıtma hiç kurulmaz | [06](./06-cache.md) |
+| `prewarmPaths` | `() => string[]` | Klasik ısıtmada ısıtılacak yollar; tanımlı değilse klasik tur kurulmaz. `onVisit` ile birlikte **yasak** | [06](./06-cache.md) |
 
 ```js
 hooks: {

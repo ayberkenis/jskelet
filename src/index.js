@@ -77,7 +77,7 @@ export {
 } from "./server/cloudflare.js";
 // Upstream hız freninin host başına durumu: healthcheck ve teşhis uçları için.
 export { getUpstreamLimiterStatus } from "./server/upstream-limiter.js";
-export { prewarm, prewarmProgress } from "./server/prewarm.js";
+export { prewarm, prewarmProgress, extractSameOriginLinks, isOnVisitPrewarm } from "./server/prewarm.js";
 export { createProxy } from "./server/middleware/upstream-proxy.js";
 export { getConfig, loadConfig } from "./config/index.js";
 export { attrs, cn, cx, esc, jsonScript } from "./views/helpers/html.js";
