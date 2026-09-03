@@ -10,8 +10,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <%- extraHead %>
     <% if (hasAsset('app.css')) { %>
-    <link rel="stylesheet" href="<%= asset('app.css') %>">
+    <link rel="stylesheet" href="<%= asset('app.css') %>" data-jskelet-css="app.css">
     <% } %>
+    <% styles.forEach(function (sheet) { %>
+      <% if (hasAsset(sheet)) { %>
+    <link rel="stylesheet" href="<%= asset(sheet) %>" data-jskelet-css="<%= sheet %>">
+      <% } %>
+    <% }); %>
     <%- headMeta %>
   </head>
   <body class="<%= bodyClass %> flex min-h-full flex-col">

@@ -8,9 +8,9 @@
     <div class="mt-3"><%- tagList(post.tags) %></div>
   </header>
 
-  <div class="mt-8 space-y-4">
+  <div class="blog-post-prose mt-8">
     <% post.body.forEach(function (paragraph) { %>
-    <p class="max-w-prose leading-relaxed"><%= paragraph %></p>
+    <p class="leading-relaxed"><%= paragraph %></p>
     <% }); %>
   </div>
 

@@ -630,7 +630,7 @@ function handleServerMessage(payload) {
   }
 
   if (payload.type === "css") {
-    swapStylesheet(payload.href);
+    swapStylesheet(payload.href, payload.name);
     return;
   }
 
@@ -664,13 +664,18 @@ function startFallback() {
 
 /**
  * Yeni sheet yüklenmeden eskisi kaldırılmaz; böylece stilsiz bir kare oluşmaz.
+ * `name` varsa `data-jskelet-css` ile doğru link seçilir (sayfa sheet'leri).
+ *
  * @param {string} href
+ * @param {string} [name] Manifest anahtarı (`app.css`, `home.css`, …)
  */
-function swapStylesheet(href) {
-  const current = document.querySelector('link[rel="stylesheet"]');
+function swapStylesheet(href, name) {
+  const current = name
+    ? document.querySelector(`link[rel="stylesheet"][data-jskelet-css="${CSS.escape(name)}"]`)
+    : document.querySelector('link[rel="stylesheet"]');
   if (!current || current.getAttribute("href") === href) return;
 
-  const next = current.cloneNode();
+  const next = /** @type {HTMLLinkElement} */ (current.cloneNode());
   next.href = href;
   next.addEventListener("load", () => current.remove(), { once: true });
   current.after(next);

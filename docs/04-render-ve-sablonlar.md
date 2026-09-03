@@ -151,8 +151,13 @@ kopyalamaktır.
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <%- extraHead %>
     <% if (hasAsset('app.css')) { %>
-    <link rel="stylesheet" href="<%= asset('app.css') %>">
+    <link rel="stylesheet" href="<%= asset('app.css') %>" data-jskelet-css="app.css">
     <% } %>
+    <% styles.forEach(function (sheet) { %>
+      <% if (hasAsset(sheet)) { %>
+    <link rel="stylesheet" href="<%= asset(sheet) %>" data-jskelet-css="<%= sheet %>">
+      <% } %>
+    <% }); %>
     <%- headMeta %>
     <% structuredData.forEach(function (item) { %>
     <script type="application/ld+json"><%- jsonScript(item) %></script>
@@ -177,9 +182,10 @@ Dikkat edilecek noktalar:
 
 - **`extraHead` en başta.** Kaynak ipuçlarını (`preconnect`, LCP `preload`)
   geciktirmek doğrudan LCP'ye yazılır.
-- **Tek, render-blocking stylesheet** ve gerekçesi
-  [02-mimari.md](./02-mimari.md)'de. Build çalışmadıysa `hasAsset('app.css')`
-  false olur ve etiket hiç basılmaz.
+- **Global `app.css` render-blocking** ve gerekçesi
+  [02-mimari.md](./02-mimari.md)'de. Controller `styles: [...]` ile ek sayfa
+  sheet'leri de aynı şekilde basılır. Build çalışmadıysa `hasAsset` false olur
+  ve etiket hiç basılmaz.
 - **`hasAsset` kontrolleri** build eksikken sayfanın 404 veren dosyaları
   istememesini sağlar.
 - **Devtools script'i** yalnızca `NODE_ENV=development` iken basılır; prod
@@ -196,6 +202,7 @@ Dikkat edilecek noktalar:
 | `body` | `string` | Sayfa şablonunun render çıktısı |
 | `bodyClass` | `string` | controller `bodyClass` → `context.bodyClass` → `""` |
 | `entries` | `string[]` | controller `entries`; varsayılan `[]` |
+| `styles` | `string[]` | controller `styles`; varsayılan `[]` |
 | `pathname` | `string` | `req.path`; **varsayılan boş string** |
 | `lang` | `string` | `context.lang` → `brand.lang` → `"en"` |
 | `devtools` | `boolean` | `NODE_ENV === "development"` |

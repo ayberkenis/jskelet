@@ -10,6 +10,10 @@ one is listed under a **Breaking** heading.
 
 ### Added
 
+- Route-level stylesheets: put files in `styles/pages/*.css` and load them from
+  the controller with `styles: ["home.css"]` (same contract as island
+  `entries`). The layout emits them after global `app.css`; dev hot-swaps any
+  changed `.css` manifest key without a full reload.
 - Dev overlay Errors tab now lists failed SSR and browser `fetch` calls with
   page path, API URL, optional island name, and expandable response-body
   details (JSON instead of `[object Object]`). Server `console.error` /

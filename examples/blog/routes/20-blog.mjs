@@ -38,9 +38,10 @@ export default function register(app, { route, notFound }) {
             openGraph: { type: "article" },
           },
           data: { post, related: relatedTo(post) },
-          // Bu sayfa `lightweight-charts` gibi ağır bir modül kullanmıyor
-          // ama kullansa, sayfaya özel entry'yi burada bildirirdi:
-          //   entries: ["chart.js"]
+          // Sayfaya özel stylesheet (`styles/pages/blog-post.css`) ve ağır bir
+          // island entry örneği:
+          styles: ["blog-post.css"],
+          // entries: ["chart.js"]
         };
       },
       { revalidate: 300 },

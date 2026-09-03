@@ -151,8 +151,13 @@ most practical way to move to your own layout is to copy that file to
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <%- extraHead %>
     <% if (hasAsset('app.css')) { %>
-    <link rel="stylesheet" href="<%= asset('app.css') %>">
+    <link rel="stylesheet" href="<%= asset('app.css') %>" data-jskelet-css="app.css">
     <% } %>
+    <% styles.forEach(function (sheet) { %>
+      <% if (hasAsset(sheet)) { %>
+    <link rel="stylesheet" href="<%= asset(sheet) %>" data-jskelet-css="<%= sheet %>">
+      <% } %>
+    <% }); %>
     <%- headMeta %>
     <% structuredData.forEach(function (item) { %>
     <script type="application/ld+json"><%- jsonScript(item) %></script>
@@ -177,9 +182,10 @@ Points to watch:
 
 - **`extraHead` comes first.** Delaying resource hints (`preconnect`, LCP
   `preload`) writes straight into LCP.
-- **A single, render-blocking stylesheet**, with the reasoning in
-  [02-architecture.md](./02-architecture.md). If the build has not run,
-  `hasAsset('app.css')` is false and the tag is never emitted.
+- **Global `app.css` is render-blocking**, with the reasoning in
+  [02-architecture.md](./02-architecture.md). Controller `styles: [...]` adds
+  page sheets the same way. If the build has not run, `hasAsset` is false and
+  the tag is never emitted.
 - **The `hasAsset` checks** keep the page from requesting files that 404 when
   the build is missing.
 - **The devtools script** is emitted only when `NODE_ENV=development`; it does
@@ -196,6 +202,7 @@ Points to watch:
 | `body` | `string` | The render output of the page template |
 | `bodyClass` | `string` | controller `bodyClass` → `context.bodyClass` → `""` |
 | `entries` | `string[]` | controller `entries`; defaults to `[]` |
+| `styles` | `string[]` | controller `styles`; defaults to `[]` |
 | `pathname` | `string` | `req.path`; **defaults to the empty string** |
 | `lang` | `string` | `context.lang` → `brand.lang` → `"en"` |
 | `devtools` | `boolean` | `NODE_ENV === "development"` |

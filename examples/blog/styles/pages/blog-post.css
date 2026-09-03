@@ -1,0 +1,13 @@
+/**
+ * Blog yazı detayı — sayfaya özel kurallar.
+ *
+ * Tailwind utility'leri globals.css'te kalır; burada yalnızca bu sayfanın
+ * ihtiyacı olan ekstra stiller. Controller: styles: ["blog-post.css"].
+ */
+.blog-post-prose {
+  max-width: 42rem;
+}
+
+.blog-post-prose p + p {
+  margin-top: 1rem;
+}

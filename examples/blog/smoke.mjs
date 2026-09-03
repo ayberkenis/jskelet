@@ -9,7 +9,7 @@ const BASE = process.env.BASE ?? "http://localhost:3210";
 const CASES = [
   ["/", 200, /Son yazılar/],
   ["/blog", 200, /data-island="search"/],
-  ["/blog/html-cache-ve-swr", 200, /dk okuma/],
+  ["/blog/html-cache-ve-swr", 200, /data-jskelet-css="blog-post\.css"/],
   ["/etiket/cache", 200, /etiketli yazılar/],
   ["/iletisim", 200, /data-island="contact-form"/],
   ["/iletisim?sent=1", 200, /Mesajınız alındı/],

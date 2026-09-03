@@ -68,8 +68,13 @@ They are passed to templates automatically; in server code,
 
 ```ejs
 <% if (hasAsset('app.css')) { %>
-<link rel="stylesheet" href="<%= asset('app.css') %>">
+<link rel="stylesheet" href="<%= asset('app.css') %>" data-jskelet-css="app.css">
 <% } %>
+<% styles.forEach(function (sheet) { %>
+  <% if (hasAsset(sheet)) { %>
+<link rel="stylesheet" href="<%= asset(sheet) %>" data-jskelet-css="<%= sheet %>">
+  <% } %>
+<% }); %>
 ```
 
 - `asset(name)` returns the hashed URL if it is in the manifest, otherwise
@@ -88,10 +93,11 @@ hashes) and once in prod.
 ### Manifest consistency in watch mode
 
 On a watch pass, a recompiled asset is written to a new hash and the old one is
-deleted. That is why the manifest has to be updated too (`patchManifest`):
-otherwise the HTML asks for the deleted file, gets a 404, and the page stays
-unstyled or JS-less for the rest of the dev session. Both the CSS and the client
-tasks patch their own key on every pass; the other keys are preserved.
+deleted. That is why the manifest has to be updated too (`patchManifest` /
+CSS `syncCssManifest`): otherwise the HTML asks for the deleted file, gets a
+404, and the page stays unstyled or JS-less for the rest of the dev session.
+Both the CSS and the client tasks refresh their own keys on every pass; the
+other keys are preserved.
 
 ## CSS — Tailwind v4
 
@@ -106,9 +112,32 @@ The pipeline: PostCSS + `@tailwindcss/postcss` → minification with lightningcs
   noticeably.
 - **lightningcss is optional:** without it, Tailwind's own output is used, and it
   is only a few kB bigger.
-- The output is a single file and the layout loads it render-blocking. The
-  measurement-based reasoning for not producing a separate "critical CSS" is in
-  [02-architecture.md](./02-architecture.md).
+- The global output is `app.css` and the layout loads it render-blocking on every
+  page. The measurement-based reasoning for not producing a separate "critical
+  CSS" is in [02-architecture.md](./02-architecture.md).
+
+### Page stylesheets (`styles/pages/`)
+
+Same contract as island `entries`. Each file under `styles/pages/*.css` becomes
+its own hashed asset (`home.css` → `/assets/home.<hash>.css`). The controller
+loads it only on the pages that need it:
+
+```js
+return {
+  view: "pages/home",
+  styles: ["home.css"],
+};
+```
+
+The directory is `pages/` next to the `paths.styles` file (if `styles` moves,
+pages stays beside it). If the directory is missing or empty, the step only
+produces the global sheet.
+
+Page CSS is for page-specific rules. Keep Tailwind utilities in the global
+sheet — a full `@import "tailwindcss"` in a page file duplicates utility output.
+
+After `app.css`, the layout emits a `<link data-jskelet-css="…">` for each name
+in `styles`; if `hasAsset` is false the tag is omitted.
 
 ### `@source` directives are mandatory
 

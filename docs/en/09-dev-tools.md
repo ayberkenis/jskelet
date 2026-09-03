@@ -121,7 +121,7 @@ rewritten on every build round, change detection is done through the manifest.
 
 | What changed | Behavior |
 | --- | --- |
-| Only `app.css` | **CSS hot-swap:** the stylesheet is swapped, the page is not reloaded. State and scroll position are preserved. |
+| Only `.css` keys | **CSS hot-swap:** each changed stylesheet is swapped, the page is not reloaded. State and scroll position are preserved. |
 | `main.js`, the sprite, another asset, or more than one key | **Full reload** |
 
 In both cases the HTML cache is cleared first: the stored HTML carries the old

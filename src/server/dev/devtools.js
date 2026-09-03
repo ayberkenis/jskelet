@@ -426,8 +426,12 @@ function watchManifest() {
         // sayfa silinmiş dosyayı istemeye devam eder.
         clearHtmlCache();
 
-        if (changed.length === 1 && changed[0] === "app.css") {
-          broadcast({ type: "css", href: next["app.css"] });
+        // Yalnızca stylesheet anahtarları değiştiyse hot-swap; JS/sprite için
+        // tam yenileme gerekir. Birden fazla sayfa sheet'i de desteklenir.
+        if (changed.every((key) => key.endsWith(".css"))) {
+          for (const name of changed) {
+            broadcast({ type: "css", name, href: next[name] });
+          }
           return;
         }
 

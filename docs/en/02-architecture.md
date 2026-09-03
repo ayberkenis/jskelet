@@ -147,9 +147,15 @@ resource hints (`preconnect`, LCP `preload`) at the **very beginning** of the
 No separate "critical CSS" is produced. In measurement, because the inline
 critical CSS did not fully cover the first viewport, the page reflowed once the
 sheet arrived (CLS 0.307 on a list page) and the same ~27 KB was repeated in
-every HTML response. Leaving a single compressed sheet render-blocking is both
-faster and free of CLS; on the second visit it already comes from the
+every HTML response. Leaving the compressed global `app.css` render-blocking is
+both faster and free of CLS; on the second visit it already comes from the
 `immutable` cache.
+
+Page-specific rules can use `styles/pages/*.css` plus controller
+`styles: [...]` ([08-build.md](./08-build.md)); those are also render-blocking
+but only on the pages that ask for them. Keep Tailwind utilities in the global
+sheet — a full `@import "tailwindcss"` in a page sheet duplicates utility
+output.
 
 The same logic applies to icons: instead of a separate request per icon, an SVG
 sprite is produced at build time from only the symbols actually used in the

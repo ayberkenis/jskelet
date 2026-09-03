@@ -2,9 +2,9 @@
   `hooks.layoutContext()` döndürdüğü her alan burada local: nav, pathname,
   structuredData, bodyClass.
 
-  Bu sitede font preload yok, çünkü web font de yok. Head'de tek indirilebilir
-  kaynak stylesheet; JS entry defer edilmiş modül olduğu için render'ı bloke
-  etmiyor.
+  Bu sitede font preload yok, çünkü web font de yok. Head'de global stylesheet
+  ve isteğe bağlı sayfa sheet'leri; JS entry defer edilmiş modül olduğu için
+  render'ı bloke etmiyor.
 -%>
 <!DOCTYPE html>
 <%#
@@ -30,8 +30,13 @@
     <%# Kaynak ipuçları en başta; preconnect'i geciktirmek doğrudan LCP'ye yazılır. %>
     <%- extraHead %>
     <% if (hasAsset('app.css')) { %>
-    <link rel="stylesheet" href="<%= asset('app.css') %>">
+    <link rel="stylesheet" href="<%= asset('app.css') %>" data-jskelet-css="app.css">
     <% } %>
+    <% styles.forEach(function (sheet) { %>
+      <% if (hasAsset(sheet)) { %>
+    <link rel="stylesheet" href="<%= asset(sheet) %>" data-jskelet-css="<%= sheet %>">
+      <% } %>
+    <% }); %>
     <%- headMeta %>
     <% structuredData.forEach(function (item) { %>
     <script type="application/ld+json"><%- jsonScript(item) %></script>

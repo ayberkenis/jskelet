@@ -64,8 +64,13 @@ dosya adlarını okunur tutuyor. Hash'li olmaları sayesinde bu dosyalara
 
 ```ejs
 <% if (hasAsset('app.css')) { %>
-<link rel="stylesheet" href="<%= asset('app.css') %>">
+<link rel="stylesheet" href="<%= asset('app.css') %>" data-jskelet-css="app.css">
 <% } %>
+<% styles.forEach(function (sheet) { %>
+  <% if (hasAsset(sheet)) { %>
+<link rel="stylesheet" href="<%= asset(sheet) %>" data-jskelet-css="<%= sheet %>">
+  <% } %>
+<% }); %>
 ```
 
 - `asset(name)` manifest'te varsa hash'li URL'i, yoksa `/assets/<name>` döner.
@@ -85,7 +90,8 @@ Watch turunda yeniden derlenen varlık yeni bir hash'e yazılıp eskisi silinir.
 yüzden manifest de güncellenmek zorunda (`patchManifest`): aksi hâlde HTML
 silinmiş dosyayı isteyip 404 alır ve sayfa dev oturumunun kalanında stilsiz ya
 da JS'siz kalır. CSS ve client görevlerinin ikisi de her turda kendi anahtarını
-yamalar; diğer anahtarlar korunur.
+yamalar; diğer anahtarlar korunur. CSS tarafı watch'ta `syncCssManifest` ile
+tüm `.css` anahtarlarını günceller (silinen sayfa sheet'leri de düşer).
 
 ## CSS — Tailwind v4
 
@@ -100,9 +106,31 @@ minifikasyon → `writeAsset("app.css", …)`.
   şekilde yavaşlatıyor.
 - **lightningcss opsiyoneldir:** yoksa Tailwind'in kendi çıktısı kullanılır,
   yalnızca birkaç kB daha büyük olur.
-- Çıktı tek bir dosyadır ve layout onu render-blocking olarak yükler. Ayrı bir
-  "critical CSS" üretilmemesinin ölçüm gerekçesi
+- Global çıktı `app.css`'tir ve layout onu her sayfada render-blocking olarak
+  yükler. Ayrı bir "critical CSS" üretilmemesinin ölçüm gerekçesi
   [02-mimari.md](./02-mimari.md)'de.
+
+### Sayfa stylesheet'leri (`styles/pages/`)
+
+Island `entries` ile aynı sözleşme. `styles/pages/*.css` altındaki her dosya
+ayrı bir hash'li varlıktır (`home.css` → `/assets/home.<hash>.css`). Controller
+yalnızca istediği sayfada yükler:
+
+```js
+return {
+  view: "pages/home",
+  styles: ["home.css"],
+};
+```
+
+Dizin, `paths.styles` dosyasının yanındaki `pages/` klasörüdür (`styles` taşınırsa
+pages de yanında kalır). Dizin yoksa veya boşsa adım yalnızca global sheet üretir.
+
+Sayfa CSS'i sayfaya özel kurallar içindir. Tailwind utility'leri global sheet'te
+kalmalı — dosyada tam `@import "tailwindcss"` utility çıktısını tekrarlar.
+
+Layout `app.css`ten sonra `styles` dizisindeki her sheet için
+`<link data-jskelet-css="…">` basar; `hasAsset` false ise etiket yok.
 
 ### `@source` direktifleri zorunludur
 

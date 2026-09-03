@@ -117,7 +117,7 @@ yeniden yazıldığı için değişiklik tespiti manifest üzerinden yapılır.
 
 | Değişen | Davranış |
 | --- | --- |
-| Yalnızca `app.css` | **CSS hot-swap:** stylesheet takas edilir, sayfa yenilenmez. Durum ve kaydırma korunur. |
+| Yalnızca `.css` anahtarları | **CSS hot-swap:** değişen her stylesheet takas edilir, sayfa yenilenmez. Durum ve kaydırma korunur. |
 | `main.js`, sprite, başka bir varlık ya da birden fazla anahtar | **Tam yenileme** |
 
 Her iki durumda önce HTML önbelleği temizlenir: saklanan HTML eski hash'li varlık

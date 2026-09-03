@@ -144,9 +144,14 @@ geciktirmek doğrudan LCP'ye yazılır.
 
 Ayrı bir "critical CSS" üretilmez. Ölçümde inline kritik CSS ilk ekranı tam
 kapsamadığı için sheet gelince sayfa yeniden akıyordu (bir liste sayfasında CLS
-0.307) ve aynı ~27 KB her HTML yanıtında tekrar ediyordu. Sıkıştırılmış tek
-sheet'i render-blocking bırakmak hem daha hızlı hem CLS'siz; ikinci ziyarette
-zaten `immutable` önbellekten geliyor.
+0.307) ve aynı ~27 KB her HTML yanıtında tekrar ediyordu. Sıkıştırılmış global
+`app.css`'i render-blocking bırakmak hem daha hızlı hem CLS'siz; ikinci
+ziyarette zaten `immutable` önbellekten geliyor.
+
+Sayfaya özel kurallar için `styles/pages/*.css` + controller `styles: [...]`
+eklenebilir ([08-build.md](./08-build.md)); bunlar da render-blocking basılır
+ama yalnızca ilgili sayfada. Tailwind utility'leri global sheet'te kalır —
+sayfa sheet'inde tam `@import "tailwindcss"` utility çıktısını tekrarlar.
 
 Aynı mantık ikonlarda da var: her ikon için ayrı istek yerine, build zamanında
 yalnızca kaynakta kullanılan sembollerden bir SVG sprite üretilir. Tüm Phosphor

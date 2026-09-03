@@ -3,7 +3,7 @@
  *
  * Controller sözleşmesi:
  *   async (ctx) => { view, data?, metadata?, status?, revalidate?, head?,
- *                    bodyClass?, entries? }
+ *                    bodyClass?, entries?, styles? }
  * `ctx` → { params, query, pathname, req }
  *
  * `route()` üç kapsamı belirli bir sırayla iç içe kurar:
@@ -218,7 +218,8 @@ export async function renderView(view, data = {}) {
  * Sayfayı layout içinde render eder.
  *
  * @param {{ view: string, data?: object, metadata?: object, head?: string,
- *   bodyClass?: string, entries?: string[], pathname?: string }} page
+ *   bodyClass?: string, entries?: string[], styles?: string[],
+ *   pathname?: string }} page
  * @returns {Promise<string>}
  */
 export async function renderPage(page) {
@@ -258,6 +259,7 @@ export async function renderPage(page) {
       (context.extraHead ?? ""),
     bodyClass: page.bodyClass ?? context.bodyClass ?? "",
     entries: page.entries ?? [],
+    styles: page.styles ?? [],
     devtools: isDev,
     devBasePath: config.brand.devBasePath,
     body,

@@ -17,10 +17,15 @@
     <% if (hasAsset('inter-400.woff2')) { %>
     <link rel="preload" href="<%= asset('inter-400.woff2') %>" as="font" type="font/woff2" crossorigin>
     <% } %>
-    <%# Tek, küçük ve render-blocking stylesheet — gerekçesi docs/02-mimari.md %>
+    <%# Global + sayfa sheet'leri — gerekçesi docs/02-mimari.md %>
     <% if (hasAsset('app.css')) { %>
-    <link rel="stylesheet" href="<%= asset('app.css') %>">
+    <link rel="stylesheet" href="<%= asset('app.css') %>" data-jskelet-css="app.css">
     <% } %>
+    <% styles.forEach(function (sheet) { %>
+      <% if (hasAsset(sheet)) { %>
+    <link rel="stylesheet" href="<%= asset(sheet) %>" data-jskelet-css="<%= sheet %>">
+      <% } %>
+    <% }); %>
     <%- headMeta %>
     <% structuredData.forEach(function (item) { %>
     <script type="application/ld+json"><%- jsonScript(item) %></script>

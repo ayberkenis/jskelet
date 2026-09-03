@@ -6,8 +6,8 @@
   noktası olarak kullanın.
 
   Kullanılabilir local'ler: metadata, headMeta, extraHead, structuredData,
-  body, bodyClass, entries, pathname, lang, devtools, devBasePath, asset,
-  hasAsset + tüm html/tag helper'ları ve views/components/** export'ları.
+  body, bodyClass, entries, styles, pathname, lang, devtools, devBasePath,
+  asset, hasAsset + tüm html/tag helper'ları ve views/components/** export'ları.
   `hooks.layoutContext()` döndürdüğü her alan da buraya eklenir.
 -%>
 <!DOCTYPE html>
@@ -18,10 +18,16 @@
     <%# Kaynak ipuçları en başta: preconnect ve LCP preload'ını geciktirmek
         doğrudan LCP'ye yazılır. Sayfaya özel head buradan gelir. %>
     <%- extraHead %>
-    <%# Tek, render-blocking stylesheet — build çalışmadıysa hiç basılmaz. %>
+    <%# Global sheet + controller `styles: [...]` sayfa sheet'leri.
+        data-jskelet-css: dev hot-swap doğru link'i bulsun diye. %>
     <% if (hasAsset('app.css')) { %>
-    <link rel="stylesheet" href="<%= asset('app.css') %>">
+    <link rel="stylesheet" href="<%= asset('app.css') %>" data-jskelet-css="app.css">
     <% } %>
+    <% styles.forEach(function (sheet) { %>
+      <% if (hasAsset(sheet)) { %>
+    <link rel="stylesheet" href="<%= asset(sheet) %>" data-jskelet-css="<%= sheet %>">
+      <% } %>
+    <% }); %>
     <%- headMeta %>
     <% structuredData.forEach(function (item) { %>
     <script type="application/ld+json"><%- jsonScript(item) %></script>
