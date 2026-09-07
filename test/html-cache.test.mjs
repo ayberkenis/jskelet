@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import { afterEach, test } from "node:test";
 import {
   clearHtmlCache,
+  earlyRefreshLeadMs,
   getHtmlCacheSize,
   invalidateHtmlCache,
+  sweepEarlyExpiry,
   takeInvalidatedPaths,
   withHtmlCache,
 } from "../src/server/html-cache.js";
@@ -197,4 +199,89 @@ test("a visited path leaves the prewarm queue", async () => {
   await withHtmlCache("/a?", 60, producer);
 
   assert.deepEqual(takeInvalidatedPaths(), [], "ziyaret edilen yol ısıtılmaz");
+});
+
+test("early refresh lead accounts for produce time and caps at half ttl", () => {
+  assert.equal(earlyRefreshLeadMs(30, 200), 100, "ttl/2 üst sınır");
+  assert.equal(earlyRefreshLeadMs(200, 10_000), 400, "produceMs * 2");
+  assert.equal(earlyRefreshLeadMs(10, 10_000), 250, "alt sınır 250ms");
+  assert.equal(earlyRefreshLeadMs(0, 10_000), 1000, "ölçüm yoksa varsayılan 500*2");
+});
+
+test("a fresh hit in the early window refreshes in the background", async () => {
+  let calls = 0;
+  const producer = async () => {
+    calls += 1;
+    await sleep(30);
+    return { html: `render ${calls}`, status: 200 };
+  };
+
+  // produceMs ~30 → lead = min(max(60,250), ttl/2). ttl=200ms → lead=100ms.
+  const ttl = 0.2;
+  await withHtmlCache("/a", ttl, producer);
+  assert.equal(calls, 1);
+
+  await sleep(40);
+  const mid = await withHtmlCache("/a", ttl, producer);
+  assert.equal(mid.cached, true);
+  assert.equal(mid.stale, false);
+  assert.equal(mid.early, false);
+  assert.equal(calls, 1, "erken pencereden önce ek render yok");
+
+  await sleep(80);
+  const early = await withHtmlCache("/a", ttl, producer);
+  assert.equal(early.cached, true);
+  assert.equal(early.stale, false);
+  assert.equal(early.early, true);
+  assert.equal(early.html, "render 1", "taze HIT anında eski html");
+
+  await sleep(50);
+  assert.equal(calls, 2, "erken pencerede arka plan tazeleme");
+});
+
+test("an in-flight refresh keeps the entry past staleUntil", async () => {
+  let calls = 0;
+  const producer = async () => {
+    calls += 1;
+    if (calls === 1) return { html: "render 1", status: 200 };
+    await sleep(120);
+    return { html: "render 2", status: 200 };
+  };
+
+  // 50 ms TTL → staleUntil 100 ms. 70 ms'de bayat istek yavaş tazeleme başlatır;
+  // 110 ms'de (staleUntil geçmiş) girdi hâlâ servis edilmeli.
+  const ttl = 0.05;
+  await withHtmlCache("/a", ttl, producer);
+  await sleep(70);
+
+  const stale = await withHtmlCache("/a", ttl, producer);
+  assert.equal(stale.cached, true);
+  assert.equal(stale.stale, true);
+
+  await sleep(50);
+  const still = await withHtmlCache("/a", ttl, producer);
+  assert.equal(still.cached, true, "uçuştayken drop edilmemeli");
+  assert.equal(still.html, "render 1");
+
+  await sleep(100);
+  assert.equal(calls, 2);
+});
+
+test("sweepEarlyExpiry soft-stales early entries for the warm queue", async () => {
+  const producer = async () => {
+    await sleep(30);
+    return { html: "x", status: 200 };
+  };
+
+  const ttl = 0.2;
+  await withHtmlCache("/a?", ttl, producer);
+  assert.equal(sweepEarlyExpiry(), 0, "henüz erken değil");
+
+  await sleep(120);
+  assert.equal(sweepEarlyExpiry(), 1);
+  assert.deepEqual(takeInvalidatedPaths(), ["/a"]);
+
+  const hit = await withHtmlCache("/a?", ttl, producer);
+  assert.equal(hit.cached, true);
+  assert.equal(hit.stale, true, "soft-bayat: ziyaretçi MISS ödemez");
 });

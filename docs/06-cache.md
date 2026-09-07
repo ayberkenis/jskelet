@@ -142,15 +142,29 @@ Girdi yapısı:
 ```
 expiresAt  = now + ttl
 staleUntil = now + ttl * 2      (STALE_FACTOR = 1)
+produceMs  = son başarılı üretimin süresi (ms)
 ```
 
 Okuma davranışı:
 
 | Durum | Yanıt | Arka plan |
 | --- | --- | --- |
-| `now < expiresAt` | Önbellekteki HTML, `HIT` | — |
+| `now < expiresAt - leadMs` | Önbellekteki HTML, `HIT` | — |
+| `expiresAt - leadMs ≤ now < expiresAt` | Önbellekteki HTML, `HIT` | **Erken tazeleme** başlar |
 | `expiresAt ≤ now < staleUntil` | Önbellekteki HTML **anında**, `STALE` | Tazeleme başlatılır |
-| `now ≥ staleUntil` | Girdi silinir, taze render, `MISS` | — |
+| `now ≥ staleUntil` | Girdi silinir, taze render, `MISS` (uçuştaki tazeleme varken silinmez) | — |
+
+`leadMs` sayfanın load süresini hesaba katar:
+
+```
+leadMs = min(max(produceMs * 2, 250ms), ttl / 2)
+```
+
+Böylece yavaş bir sayfa TTL dolduğu anda hâlâ soğuk render'a düşmez: taze
+HTML çoğu zaman `expiresAt` gelmeden yazılmış olur. Trafik yoksa bir sweeper
+aynı pencerede girdiyi soft-bayatlatır ve ısıtma kuyruğuna alır; `startPrewarm`
+( `PREWARM=0` değilse) kuyruğu HTTP ile boşaltır — klasik `prewarmPaths`
+olmasa da.
 
 Stale penceresinde tazelemenin hatası isteği etkilemez: eski HTML pencere
 boyunca geçerli kalır ve hata yalnızca loglanır

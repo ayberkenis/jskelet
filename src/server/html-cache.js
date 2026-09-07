@@ -7,6 +7,11 @@
  * tazeleme turu` kadar geride olabilir. Fiyat gibi canlı alanlar istemcide
  * WebSocket'ten güncellendiği için bu gecikme ekranda görünmez.
  *
+ * TTL dolmadan önce de tazelenir (**erken tazeleme**): son başarılı üretimin
+ * süresi (`produceMs`) kadar önden arka plan refresh başlar, böylece yavaş
+ * bir sayfa TTL anında hâlâ soğuk render'a düşmez. Trafik yoksa sweeper
+ * girdiyi soft-bayatlatır ve ısıtma kuyruğuna alır.
+ *
  * TTL'in yanında ikinci bir tazelik kaynağı daha var: **hedefli
  * invalidation**. Bir içerik güncellendiğinde tüm önbelleği boşaltmak
  * (`clearHtmlCache()`) o an sıcak olan her sayfayı soğuk render'a çevirir;
@@ -50,9 +55,12 @@ import {
  * `encoded` haritası yanıt yolunda (`sendHtml`) doluyor, yani yazma anında
  * boş; `storeEncoded` açıkken harita büyüdüğünde girdi yeniden paylaşılır.
  *
+ * `produceMs`: son başarılı üretimin süresi. Erken tazeleme penceresi bundan
+ * türetilir; Redis'ten gelen kopyada yoksa varsayılan kullanılır.
+ *
  * @typedef {{ html: string, status: number, expiresAt: number,
  *   staleUntil: number, encoded: Map<string, Buffer>, deps: Set<string>,
- *   storedAt: number, sharedEncodings: number }} HtmlEntry
+ *   storedAt: number, sharedEncodings: number, produceMs: number }} HtmlEntry
  */
 
 /**
@@ -94,11 +102,26 @@ function trackDependencies() {
  */
 const STALE_FACTOR = 1;
 
+/**
+ * Redis'ten gelen veya süresi bilinmeyen girdiler için erken tazeleme lead'i.
+ * Ölçülmüş `produceMs` yokken aşırı iyimser (0) kalmamak için.
+ */
+const DEFAULT_PRODUCE_MS = 500;
+
+/** Erken tazelemenin alt sınırı — çok hızlı sayfalar da TTL'den önce ısınsın. */
+const EARLY_REFRESH_MIN_MS = 250;
+
+/** Trafiksiz girdileri erken pencerede soft-bayatlatma aralığı. */
+const EARLY_SWEEP_INTERVAL_MS = 1000;
+
 /** @type {Map<string, HtmlEntry>} */
 const store = new Map();
 
 /** @type {Map<string, Promise<{ html: string, status: number }>>} */
 const inflight = new Map();
+
+/** @type {ReturnType<typeof setInterval> | null} */
+let earlySweepTimer = null;
 
 /**
  * Uçuştaki her tazelemenin kimliği. Bir girdi tazelenirken invalidate
@@ -149,6 +172,54 @@ const purgedDeps = new Map();
 const MAX_PURGED_DEPS = 1000;
 
 /**
+ * Erken tazeleme lead'i: son render süresinin 2 katı (en az 250 ms), TTL'in
+ * yarısından fazla olamaz — kısa TTL'lerde sürekli refresh döngüsü olmasın.
+ *
+ * @param {number} produceMs
+ * @param {number} ttlMs
+ * @returns {number}
+ */
+export function earlyRefreshLeadMs(produceMs, ttlMs) {
+  const measured =
+    Number.isFinite(produceMs) && produceMs > 0 ? produceMs : DEFAULT_PRODUCE_MS;
+  const lead = Math.max(measured * 2, EARLY_REFRESH_MIN_MS);
+  if (!Number.isFinite(ttlMs) || ttlMs <= 0) return lead;
+  return Math.min(lead, ttlMs / 2);
+}
+
+/**
+ * @param {HtmlEntry} entry
+ * @returns {number}
+ */
+function entryTtlMs(entry) {
+  // Soft-bayatlatılmış girdide expiresAt 0; orijinal TTL storedAt farkından
+  // okunamaz. O durumda produceMs üzerinden güvenli bir üst sınır yeter.
+  if (entry.expiresAt > entry.storedAt) return entry.expiresAt - entry.storedAt;
+  return Math.max(entry.produceMs * 4, EARLY_REFRESH_MIN_MS * 2);
+}
+
+/**
+ * @param {HtmlEntry} entry
+ * @param {number} [now]
+ * @returns {boolean}
+ */
+function isEarly(entry, now = Date.now()) {
+  if (now >= entry.expiresAt) return false;
+  const lead = earlyRefreshLeadMs(entry.produceMs, entryTtlMs(entry));
+  return now >= entry.expiresAt - lead;
+}
+
+/**
+ * @param {unknown} value
+ * @returns {number}
+ */
+function normalizeProduceMs(value) {
+  const n = Number(value);
+  if (Number.isFinite(n) && n >= 0) return Math.round(n);
+  return DEFAULT_PRODUCE_MS;
+}
+
+/**
  * Girdiyi ters indeksten söker. Bu adım atlanırsa indeks, düşen girdilerin
  * anahtarlarını tutmaya devam eder ve sessizce sızar.
  *
@@ -183,7 +254,7 @@ function drop(key) {
 /**
  * @param {string} key
  * @returns {{ html: string, status: number, encoded: Map<string, Buffer>,
- *   stale: boolean } | null}
+ *   stale: boolean, early: boolean } | null}
  */
 function read(key) {
   const entry = store.get(key);
@@ -191,8 +262,12 @@ function read(key) {
 
   const now = Date.now();
   if (now >= entry.staleUntil) {
-    drop(key);
-    return null;
+    // Uçuştaki tazeleme bitene kadar girdiyi tut: yavaş upstream'de
+    // staleUntil dolup MISS'e düşmek erken tazelemenin amacını bozar.
+    if (!inflight.has(key)) {
+      drop(key);
+      return null;
+    }
   }
 
   // LRU: erişilen girdiyi sona taşı.
@@ -206,11 +281,13 @@ function read(key) {
     share(key, entry);
   }
 
+  const stale = now >= entry.expiresAt;
   return {
     html: entry.html,
     status: entry.status,
     encoded: entry.encoded,
-    stale: now >= entry.expiresAt,
+    stale,
+    early: !stale && isEarly(entry, now),
   };
 }
 
@@ -234,6 +311,7 @@ function share(key, entry) {
     storedAt: entry.storedAt,
     expiresAt: entry.expiresAt,
     staleUntil: entry.staleUntil,
+    produceMs: entry.produceMs,
     deps: [...entry.deps],
   };
 
@@ -298,6 +376,7 @@ async function readShared(key) {
     deps,
     storedAt,
     sharedEncodings: encoded.size,
+    produceMs: normalizeProduceMs(payload.produceMs),
   };
 }
 
@@ -306,8 +385,9 @@ async function readShared(key) {
  * @param {{ html: string, status: number }} value
  * @param {number} ttlSeconds
  * @param {Set<string> | null} deps Render sırasında okunan veri anahtarları.
+ * @param {number} [produceMs] Son üretimin süresi (ms).
  */
-function write(key, value, ttlSeconds, deps = null) {
+function write(key, value, ttlSeconds, deps = null, produceMs = DEFAULT_PRODUCE_MS) {
   const now = Date.now();
 
   /** @type {HtmlEntry} */
@@ -322,6 +402,7 @@ function write(key, value, ttlSeconds, deps = null) {
     deps: deps ?? new Set(),
     storedAt: now,
     sharedEncodings: 0,
+    produceMs: normalizeProduceMs(produceMs),
   };
 
   install(key, entry);
@@ -385,6 +466,9 @@ function refresh(key, ttlSeconds, producer) {
   const pending = inflight.get(key);
   if (pending) return pending;
 
+  // Tazeleme sürerken staleUntil dolmasın: drop → MISS yolu kapanır.
+  extendStaleWhileRefreshing(key);
+
   const token = {};
   tokens.set(key, token);
 
@@ -395,6 +479,17 @@ function refresh(key, ttlSeconds, producer) {
 
   inflight.set(key, task);
   return task;
+}
+
+/**
+ * @param {string} key
+ */
+function extendStaleWhileRefreshing(key) {
+  const entry = store.get(key);
+  if (!entry) return;
+  const lead = earlyRefreshLeadMs(entry.produceMs, entryTtlMs(entry));
+  const floor = Date.now() + lead;
+  if (entry.staleUntil < floor) entry.staleUntil = floor;
 }
 
 /**
@@ -436,7 +531,7 @@ async function produce(key, ttlSeconds, producer, token) {
   // öncesinde başlamış demektir; yazmak az önce düşürüleni geri koyardı.
   const valid = tokens.get(key) === token && !readsPurgedData(deps, startedAt);
   if (valid && value.status === 200 && !value.degraded && value.storable !== false) {
-    write(key, value, ttlSeconds, deps);
+    write(key, value, ttlSeconds, deps, Date.now() - startedAt);
   }
 
   return value;
@@ -447,7 +542,7 @@ async function produce(key, ttlSeconds, producer, token) {
  * @param {number} ttlSeconds 0 → cache yok
  * @param {() => Promise<{ html: string, status: number }>} producer
  * @returns {Promise<{ html: string, status: number, cached: boolean,
- *   stale?: boolean, encoded?: Map<string, Buffer> }>}
+ *   stale?: boolean, early?: boolean, encoded?: Map<string, Buffer> }>}
  */
 export async function withHtmlCache(key, ttlSeconds, producer) {
   if (!ttlSeconds) {
@@ -460,7 +555,8 @@ export async function withHtmlCache(key, ttlSeconds, producer) {
   if (hit) {
     // Süresi geçmiş girdi anında döner; tazeleme arkada yürür ve hatası
     // isteği etkilemez (eski HTML stale penceresi boyunca geçerli kalır).
-    if (hit.stale) {
+    // Erken pencerede de aynı: hâlâ HIT, ama TTL dolmadan taze HTML yazılsın.
+    if (hit.stale || hit.early) {
       invalidated.delete(key);
       void refresh(key, ttlSeconds, producer).catch((error) => {
         console.error(`[html-cache] background refresh failed: ${key}`, error);
@@ -828,4 +924,43 @@ export function isHtmlCacheFresh(pathname) {
   const entry = store.get(pathname);
   if (!entry) return false;
   return Date.now() < entry.expiresAt;
+}
+
+/**
+ * Erken tazeleme penceresine girmiş (veya TTL'i dolmuş) trafiksiz girdileri
+ * soft-bayatlatır ve ısıtma kuyruğuna alır. HTTP ısıtması producer'sız
+ * çalıştığı için soft-bayat şart: taze HIT yenileme tetiklemez.
+ *
+ * @returns {number} İşaretlenen girdi sayısı.
+ */
+export function sweepEarlyExpiry() {
+  const now = Date.now();
+  let marked = 0;
+
+  for (const [key, entry] of store) {
+    if (inflight.has(key)) continue;
+    // Zaten soft-bayat / kuyrukta — her saniye yeniden ekleme.
+    if (entry.expiresAt === 0) continue;
+    if (now < entry.expiresAt && !isEarly(entry, now)) continue;
+
+    entry.expiresAt = 0;
+    if (invalidated.size < MAX_INVALIDATED) invalidated.add(key);
+    marked += 1;
+  }
+
+  return marked;
+}
+
+/**
+ * Trafiksiz sayfaların TTL öncesi soft-bayatlatılması. `startPrewarm` açar;
+ * `PREWARM=0` iken hiç kurulmaz. `unref` — süreç kapanışını geciktirmez.
+ *
+ * @returns {void}
+ */
+export function startEarlyExpirySweep() {
+  if (earlySweepTimer) return;
+  earlySweepTimer = setInterval(() => {
+    sweepEarlyExpiry();
+  }, EARLY_SWEEP_INTERVAL_MS);
+  earlySweepTimer.unref();
 }

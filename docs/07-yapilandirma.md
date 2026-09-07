@@ -622,7 +622,9 @@ Ayrıntı: [03-routing.md](./03-routing.md).
 
 Desen → saniye eşlemesi. Eşleşen kural, route'un kendi `revalidate` değerini
 **ezer**. Negatif ya da sonlu olmayan değerler yok sayılır; `0` "önbellekleme"
-anlamına gelir.
+anlamına gelir. TTL dolmadan önce framework, son render süresine göre erken
+arka plan tazelemesi başlatır (ayrı bir config alanı yok; ayrıntı
+[06-cache.md](./06-cache.md)).
 
 ```js
 html: {

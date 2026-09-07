@@ -150,15 +150,29 @@ The entry structure:
 ```
 expiresAt  = now + ttl
 staleUntil = now + ttl * 2      (STALE_FACTOR = 1)
+produceMs  = duration of the last successful produce (ms)
 ```
 
 Read behaviour:
 
 | State | Response | Background |
 | --- | --- | --- |
-| `now < expiresAt` | The cached HTML, `HIT` | — |
+| `now < expiresAt - leadMs` | The cached HTML, `HIT` | — |
+| `expiresAt - leadMs ≤ now < expiresAt` | The cached HTML, `HIT` | **Early refresh** starts |
 | `expiresAt ≤ now < staleUntil` | The cached HTML **immediately**, `STALE` | A refresh is started |
-| `now ≥ staleUntil` | The entry is deleted, fresh render, `MISS` | — |
+| `now ≥ staleUntil` | The entry is deleted, fresh render, `MISS` (not while a refresh is in flight) | — |
+
+`leadMs` accounts for the page’s load time:
+
+```
+leadMs = min(max(produceMs * 2, 250ms), ttl / 2)
+```
+
+So a slow page does not fall back to a cold render the moment TTL ends: fresh
+HTML is usually written before `expiresAt`. With no traffic, a sweeper
+soft-stales the entry in the same window and queues it for warming;
+`startPrewarm` (unless `PREWARM=0`) drains that queue over HTTP — even when
+classic `prewarmPaths` is absent.
 
 A failure of the refresh inside the stale window does not affect the request:
 the old HTML stays valid for the whole window and the error is only logged

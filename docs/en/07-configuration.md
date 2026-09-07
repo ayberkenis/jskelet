@@ -635,7 +635,9 @@ Details: [03-routing.md](./03-routing.md).
 
 A pattern → seconds mapping. A matching rule **overrides** the route's own
 `revalidate` value. Negative or non-finite values are ignored; `0` means "no
-caching".
+caching". Before TTL ends the framework starts an early background refresh
+based on the last render duration (no separate config field; see
+[06-caching.md](./06-caching.md)).
 
 The one exception is `route(fn, { private: true })`: on that route a matching
 pattern is ignored. The lock is deliberately one-way — a mistake in the other

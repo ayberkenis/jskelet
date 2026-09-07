@@ -19,7 +19,7 @@
 import process from "node:process";
 import { getConfig, hook } from "../config/index.js";
 import { getRequestContext } from "../http/request-context.js";
-import { isHtmlCacheFresh, takeInvalidatedPaths } from "./html-cache.js";
+import { isHtmlCacheFresh, takeInvalidatedPaths, startEarlyExpirySweep } from "./html-cache.js";
 import { getDataCacheStats } from "./data-cache.js";
 import { isTransientStatus } from "./upstream-tracking.js";
 import { upstreamCooldownMs } from "./upstream-limiter.js";
@@ -786,7 +786,8 @@ async function drainVisitWarm() {
 
 /**
  * Açılışta ısıtmayı tetikler. `listen` geri çağrısından çağrılır.
- * `onVisit` modunda zamanlayıcı yok: yalnızca origin kaydı ve kuyruk.
+ * `onVisit` modunda klasik zamanlayıcı yok; yine de erken-TTL invalidation
+ * drain'i çalışır — soft-bayatlayan sweeper'ın kuyruğu boşalmasın.
  *
  * @param {{ port: number }} options
  * @returns {void}
@@ -796,6 +797,11 @@ export function startPrewarm({ port }) {
   if (process.env.PREWARM === "0") return;
 
   const origin = `http://127.0.0.1:${port}`;
+
+  // Klasik `prewarmPaths` olmasa da TTL öncesi soft-bayatlayan girdiler
+  // HTTP ile ısıtılsın. `PREWARM=0` yukarıda her şeyi keser.
+  startEarlyExpirySweep();
+  startExpiryWarmDrain(origin);
 
   if (config.prewarm?.onVisit?.enabled) {
     const classicEnv = CLASSIC_PREWARM_ENV.filter((key) => process.env[key]);
@@ -814,7 +820,8 @@ export function startPrewarm({ port }) {
   }
 
   if (process.env.PREWARM !== "1" && config.prewarm?.enabled === false) return;
-  // Isıtacak yol bildirmeyen bir projede zamanlayıcı kurmanın anlamı yok.
+  // Isıtacak yol bildirmeyen bir projede klasik tur zamanlayıcısı gerekmez;
+  // expiry drain yine de yukarıda kuruldu.
   if (typeof config.hooks?.prewarmPaths !== "function") return;
 
   const isDev = process.env.NODE_ENV === "development";
@@ -847,4 +854,51 @@ export function startPrewarm({ port }) {
   // kuyruğun bir dilimini alır, yeterli tur sonunda liste baştan sona ısınır.
   const interval = setting("PREWARM_INTERVAL_SECONDS", "intervalSeconds", 0);
   if (interval > 0) setInterval(() => void run(), interval * 1000).unref();
+}
+
+/** @type {string | null} */
+let expiryOrigin = null;
+
+/** @type {boolean} */
+let expiryDraining = false;
+
+/** @type {ReturnType<typeof setInterval> | null} */
+let expiryDrainTimer = null;
+
+/**
+ * Soft-bayat / invalidate kuyruğunu periyodik boşaltır. Klasik tur ve onVisit
+ * aynı kuyruğu da okur; bu drain `prewarmPaths` yokken de çalışır.
+ *
+ * @param {string} origin
+ * @returns {void}
+ */
+function startExpiryWarmDrain(origin) {
+  expiryOrigin = origin;
+  if (expiryDrainTimer) return;
+  expiryDrainTimer = setInterval(() => {
+    void drainExpiryWarm();
+  }, 1000);
+  expiryDrainTimer.unref();
+}
+
+/**
+ * @returns {Promise<void>}
+ */
+async function drainExpiryWarm() {
+  if (expiryDraining || !expiryOrigin) return;
+
+  const paths = takeInvalidatedPaths();
+  if (!paths.length) return;
+
+  expiryDraining = true;
+  try {
+    const cold = paths.filter((path) => !isHtmlCacheFresh(path));
+    if (!cold.length) return;
+
+    await prewarm({ origin: expiryOrigin, paths: cold, quiet: true });
+  } catch (error) {
+    console.error("[prewarm] expiry warm failed", error);
+  } finally {
+    expiryDraining = false;
+  }
 }

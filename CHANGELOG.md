@@ -10,6 +10,12 @@ one is listed under a **Breaking** heading.
 
 ### Added
 
+- Early HTML cache refresh before TTL expiry: the last successful produce time
+  (`produceMs`) sets a lead window (`min(max(produceMs×2, 250ms), ttl/2)`). A
+  still-fresh `HIT` in that window revalidates in the background; idle entries
+  are soft-staled by a sweeper and drained over HTTP even without classic
+  `prewarmPaths` (`PREWARM=0` disables both). In-flight refreshes no longer drop
+  the entry when `staleUntil` elapses.
 - Route-level stylesheets: put files in `styles/pages/*.css` and load them from
   the controller with `styles: ["home.css"]` (same contract as island
   `entries`). The layout emits them after global `app.css`; dev hot-swaps any
