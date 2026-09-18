@@ -1,12 +1,12 @@
 /**
  * JSkelet island runtime'ının tarayıcı tarafı API'si.
  *
- * `client/entries/main.js` içinde:
+ * `client/entries/main.js` (veya `main.ts`) içinde:
  *
  *   import { registerAll, start } from "jskelet/client";
  *
  *   registerAll({
- *     counter: () => import("../islands/counter.js"),
+ *     counter: () => import("../islands/counter.ts"),
  *   });
  *
  *   start();

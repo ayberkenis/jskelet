@@ -6,9 +6,7 @@
 export declare function compileAll(config: {
     root: string;
     dirs: Record<string, string>;
-}, options?: {
-    quiet?: boolean;
-}): Promise<{
+}, _options?: {}): Promise<{
     count: number;
     manifest: Record<string, string>;
     outDir: string;
