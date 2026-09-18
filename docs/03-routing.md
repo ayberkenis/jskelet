@@ -35,6 +35,10 @@ gerekmez:
 | `redirect` | `jskelet` → `redirect` |
 | `permanentRedirect` | `jskelet` → `permanentRedirect` |
 | `seeOther` | `jskelet` → `seeOther` |
+| `ogHandler` | `jskelet` → `ogHandler` |
+| `ogImage` | `jskelet` → `ogImage` |
+| `sendOgImage` | `jskelet` → `sendOgImage` |
+| `ImageResponse` | `jskelet` → `ImageResponse` |
 
 İstersen doğrudan import da edebilirsin; `api` yalnızca kolaylık:
 

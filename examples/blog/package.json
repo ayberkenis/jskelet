@@ -11,7 +11,8 @@
   },
   "dependencies": {
     "ioredis": "^6.0.0",
-    "jskelet": "file:../.."
+    "jskelet": "file:../..",
+    "sharp": "^0.35.4"
   },
   "devDependencies": {
     "@phosphor-icons/core": "^2.1.1",

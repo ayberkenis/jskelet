@@ -57,8 +57,9 @@ npm --prefix examples/minimal run dev
 
 **`examples/blog/`** — dinamik route (`/blog/:slug`), etiket sayfaları,
 `redirects`/`rewrites`/`headers`/`cache` yapılandırmasının tamamı, fragment ile
-gelen sekme panelleri, form gönderimi, prewarm, `robots.txt`/`sitemap.xml`/`rss.xml`
-ve dört island (tema, sekme, arama, form).
+gelen sekme panelleri, form gönderimi, prewarm, `robots.txt`/`sitemap.xml`/`rss.xml`,
+dinamik OG görselleri (`/og/blog/:slug.png`) ve dört island (tema, sekme, arama,
+form).
 
 ```bash
 npm --prefix examples/blog install

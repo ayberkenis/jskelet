@@ -36,6 +36,10 @@ don't have to import things one by one in every file:
 | `redirect` | `jskelet` → `redirect` |
 | `permanentRedirect` | `jskelet` → `permanentRedirect` |
 | `seeOther` | `jskelet` → `seeOther` |
+| `ogHandler` | `jskelet` → `ogHandler` |
+| `ogImage` | `jskelet` → `ogImage` |
+| `sendOgImage` | `jskelet` → `sendOgImage` |
+| `ImageResponse` | `jskelet` → `ImageResponse` |
 
 You can also import directly if you prefer; `api` is only a convenience:
 

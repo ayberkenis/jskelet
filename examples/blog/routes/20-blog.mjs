@@ -7,6 +7,7 @@
  * almaz** çünkü status 404.
  */
 import { getPost, getPosts, getPostsByTag, getTags } from "../lib/posts.js";
+import { ogImageUrl } from "../lib/og.js";
 
 export default function register(app, { route, notFound }) {
   app.get(
@@ -35,7 +36,12 @@ export default function register(app, { route, notFound }) {
             title: post.title,
             description: post.excerpt,
             canonical: `/blog/${post.slug}`,
-            openGraph: { type: "article" },
+            openGraph: {
+              type: "article",
+              image: ogImageUrl(post.slug),
+              imageWidth: 1200,
+              imageHeight: 630,
+            },
           },
           data: { post, related: relatedTo(post) },
           // Sayfaya özel stylesheet (`styles/pages/blog-post.css`) ve ağır bir

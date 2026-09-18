@@ -14,8 +14,9 @@
  *
  * Modül sözleşmesi: default export ya da `register` adlı named export,
  * `(app, api) => void | Promise<void>` imzasıyla. `api` içinde `route`,
- * `fragment`, `renderView`, `renderPage` ve `notFound`/`redirect` hazır gelir,
- * böylece route dosyaları framework'ten tek tek import yapmak zorunda kalmaz.
+ * `fragment`, `renderView`, `renderPage`, `notFound`/`redirect` ve
+ * `ogHandler` hazır gelir, böylece route dosyaları framework'ten tek tek
+ * import yapmak zorunda kalmaz.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -29,6 +30,7 @@ import {
   redirect,
   seeOther,
 } from "../http/control-flow.js";
+import { ImageResponse, ogHandler, ogImage, sendOgImage } from "./og-image.js";
 
 const isDev = process.env.NODE_ENV === "development";
 
@@ -96,6 +98,10 @@ const api = {
   redirect,
   permanentRedirect,
   seeOther,
+  ogHandler,
+  ogImage,
+  sendOgImage,
+  ImageResponse,
 };
 
 /**

@@ -38,6 +38,16 @@ export {
 export { reportUpstreamFailure } from "./server/upstream-tracking.js";
 export { asset, hasAsset, optimizedImage, getSpriteIds } from "./server/assets.js";
 export { remoteImageUrl, parseAllowedRemoteUrl } from "./server/image-optimizer.js";
+export {
+  ImageResponse,
+  OG_SIZE,
+  buildOgSvg,
+  escapeXml,
+  ogHandler,
+  ogImage,
+  sendOgImage,
+  wrapText,
+} from "./server/og-image.js";
 export { headHints } from "./server/head-hints.js";
 export { renderHeadMeta } from "./server/metadata.js";
 export {

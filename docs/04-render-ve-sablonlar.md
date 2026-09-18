@@ -511,6 +511,64 @@ return {
 `renderHeadMeta(metadata)` fonksiyonu dışa açıktır; layout dışında (ör. bir
 fragment ya da e-posta) aynı etiketleri üretmek gerekirse kullanılabilir.
 
+## Dinamik OG görselleri
+
+Next.js `ImageResponse` / `opengraph-image.tsx` karşılığı. JSX yok: kart
+alanları (`title`, `description`, `siteName`, renkler) ya da ham `svg` verilir.
+`sharp` (opsiyonel peer) kuruluysa PNG, yoksa SVG döner. Sosyal kazıyıcıların
+çoğu PNG beklediği için prod'da `sharp` önerilir.
+
+HTML değil görsel döndüğü için `route()` kullanılmaz — `ogHandler` düz bir
+Express handler üretir. `notFound()` ve `null` dönüşü 404 olur.
+
+```js
+// routes/35-og.mjs
+export default function register(app, { ogHandler, notFound }) {
+  app.get(
+    "/og/blog/:slug.png",
+    ogHandler(async ({ params }) => {
+      const post = getPost(params.slug);
+      if (!post) notFound();
+      return {
+        title: post.title,
+        description: post.excerpt,
+        siteName: "Blog",
+      };
+    }),
+  );
+}
+```
+
+Sayfa metadata'sında mutlak URL ve boyut verin:
+
+```js
+openGraph: {
+  type: "article",
+  image: `${SITE_URL}/og/blog/${post.slug}.png`,
+  imageWidth: 1200,
+  imageHeight: 630,
+},
+```
+
+Ham SVG veya Next benzeri sınıf:
+
+```js
+import { ImageResponse, sendOgImage, OG_SIZE } from "jskelet";
+
+app.get("/og/custom.png", async (req, res) => {
+  const image = new ImageResponse(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630">…</svg>`,
+    OG_SIZE,
+  );
+  await image.send(res);
+  // veya: await sendOgImage(res, { title: "…", format: "svg" });
+});
+```
+
+Varsayılan `Cache-Control`:
+`public, max-age=0, s-maxage=86400, stale-while-revalidate=604800`.
+`cacheControl` seçeneğiyle ezilir. Çalışan örnek: `examples/blog/routes/35-og.mjs`.
+
 ## Hook'lar
 
 Hook'lar `jskelet.config.mjs` → `hooks` altında tanımlanır. Hepsi opsiyonel,

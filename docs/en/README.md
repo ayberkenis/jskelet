@@ -62,8 +62,8 @@ npm --prefix examples/minimal run dev
 **`examples/blog/`** — a dynamic route (`/blog/:slug`), tag pages, the whole of
 the `redirects`/`rewrites`/`headers`/`cache` configuration, tab panels arriving
 as fragments, form submission, prewarm,
-`robots.txt`/`sitemap.xml`/`rss.xml` and four islands (theme, tabs, search,
-form).
+`robots.txt`/`sitemap.xml`/`rss.xml`, dynamic OG images (`/og/blog/:slug.png`)
+and four islands (theme, tabs, search, form).
 
 ```bash
 npm --prefix examples/blog install

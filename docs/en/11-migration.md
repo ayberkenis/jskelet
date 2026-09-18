@@ -41,6 +41,7 @@ will feel familiar. The *reasons* behind the differences are in
 | `loading.js` / Suspense | — | The server HTML is complete; no skeleton needed |
 | Streaming SSR | — | The response is a single chunk |
 | `generateMetadata()` | Controller `metadata` + `hooks.metadata()` | Same field names ([04](./04-rendering.md)) |
+| `opengraph-image.tsx` / `ImageResponse` | `ogHandler` + `ImageResponse` / `sendOgImage` | SVG or card fields → PNG (`sharp`); [04](./04-rendering.md) |
 | `generateStaticParams()` | `hooks.prewarmPaths()` | Warming at startup time, not build time |
 | Route Handlers (`route.js`) | A plain Express handler | `app.get/post(...)` |
 | Middleware (`middleware.ts`) | Express middleware + config `rewrites`/`headers`/`redirects` | `app.use(...)` |
@@ -69,6 +70,7 @@ header manually.
 | `next/link` | `link({ href, text })` — `jskelet/tags` | `title` automatic, `rel`/`target` automatic for external links |
 | `next/link` prefetching | `navigation: { prefetch, prerender }` | Speculation Rules; no client runtime ([07](./07-configuration.md)) |
 | `next/image` | `image({ src, alt, priority })` — `jskelet/tags` | `srcset` from the build manifest |
+| `next/og` `ImageResponse` | `ImageResponse` / `ogHandler` — `jskelet` | No JSX; SVG or `title`/`description` card |
 | `next/font/google` | `fonts: [{ family, weights }]` | Self-hosted woff2, committed |
 | `@phosphor-icons/react` | `icon({ name, weight })` — `jskelet/tags` | Build-time SVG sprite |
 | `react-dom` preconnect/preload | `preconnect: [...]` + `headHints()` | ([04](./04-rendering.md)) |

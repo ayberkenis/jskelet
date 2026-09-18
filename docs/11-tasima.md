@@ -40,6 +40,7 @@ alt kümesine benzetildi — `next.config` sözdizimi, Metadata API, `notFound()
 | `loading.js` / Suspense | — | Sunucu HTML'i tam; iskelet gerekmiyor |
 | Streaming SSR | — | Yanıt tek parça |
 | `generateMetadata()` | Controller `metadata` + `hooks.metadata()` | Aynı alan adları ([04](./04-render-ve-sablonlar.md)) |
+| `opengraph-image.tsx` / `ImageResponse` | `ogHandler` + `ImageResponse` / `sendOgImage` | SVG veya kart alanları → PNG (`sharp`); [04](./04-render-ve-sablonlar.md) |
 | `generateStaticParams()` | `hooks.prewarmPaths()` | Build zamanı değil, açılış zamanı ısıtma |
 | Route Handlers (`route.js`) | Düz Express handler'ı | `app.get/post(...)` |
 | Middleware (`middleware.ts`) | Express middleware + config `rewrites`/`headers`/`redirects` | `app.use(...)` |
@@ -68,6 +69,7 @@ başlığı elle okuyun.
 | `next/link` | `link({ href, text })` — `jskelet/tags` | `title` otomatik, dış bağlantıya `rel`/`target` otomatik |
 | `next/link` prefetch'i | `navigation: { prefetch, prerender }` | Speculation Rules; client runtime'ı yok ([07](./07-yapilandirma.md)) |
 | `next/image` | `image({ src, alt, priority })` — `jskelet/tags` | `srcset` build manifest'inden |
+| `next/og` `ImageResponse` | `ImageResponse` / `ogHandler` — `jskelet` | JSX yok; SVG veya `title`/`description` kartı |
 | `next/font/google` | `fonts: [{ family, weights }]` | Self-host woff2, commit edilir |
 | `@phosphor-icons/react` | `icon({ name, weight })` — `jskelet/tags` | Build zamanı SVG sprite |
 | `react-dom` preconnect/preload | `preconnect: [...]` + `headHints()` | ([04](./04-render-ve-sablonlar.md)) |

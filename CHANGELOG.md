@@ -10,6 +10,10 @@ one is listed under a **Breaking** heading.
 
 ### Added
 
+- Dynamic Open Graph images (Next.js `ImageResponse` / `opengraph-image`):
+  `ogImage`, `sendOgImage`, `ogHandler`, and `ImageResponse` turn card fields or
+  raw SVG into PNG when `sharp` is installed (SVG fallback otherwise). Wired in
+  `examples/blog` as `/og/blog/:slug.png` and `metadata.openGraph.image`.
 - Early HTML cache refresh before TTL expiry: the last successful produce time
   (`produceMs`) sets a lead window (`min(max(produceMs×2, 250ms), ttl/2)`). A
   still-fresh `HIT` in that window revalidates in the background; idle entries

@@ -522,6 +522,64 @@ The `renderHeadMeta(metadata)` function is exported; it can be used when you
 need to produce the same tags outside the layout (for example in a fragment or
 an email).
 
+## Dynamic OG images
+
+Counterpart to Next.js `ImageResponse` / `opengraph-image.tsx`. There is no JSX:
+pass card fields (`title`, `description`, `siteName`, colours) or a raw `svg`.
+With the optional `sharp` peer installed the response is PNG; otherwise SVG.
+Most social scrapers expect PNG, so install `sharp` in production.
+
+Because the response is an image, not HTML, do not use `route()` — `ogHandler`
+returns a plain Express handler. `notFound()` and a `null` return yield 404.
+
+```js
+// routes/35-og.mjs
+export default function register(app, { ogHandler, notFound }) {
+  app.get(
+    "/og/blog/:slug.png",
+    ogHandler(async ({ params }) => {
+      const post = getPost(params.slug);
+      if (!post) notFound();
+      return {
+        title: post.title,
+        description: post.excerpt,
+        siteName: "Blog",
+      };
+    }),
+  );
+}
+```
+
+Point page metadata at the absolute URL and size:
+
+```js
+openGraph: {
+  type: "article",
+  image: `${SITE_URL}/og/blog/${post.slug}.png`,
+  imageWidth: 1200,
+  imageHeight: 630,
+},
+```
+
+Raw SVG or a Next-like class:
+
+```js
+import { ImageResponse, sendOgImage, OG_SIZE } from "jskelet";
+
+app.get("/og/custom.png", async (req, res) => {
+  const image = new ImageResponse(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630">…</svg>`,
+    OG_SIZE,
+  );
+  await image.send(res);
+  // or: await sendOgImage(res, { title: "…", format: "svg" });
+});
+```
+
+Default `Cache-Control`:
+`public, max-age=0, s-maxage=86400, stale-while-revalidate=604800`.
+Override with `cacheControl`. Working example: `examples/blog/routes/35-og.mjs`.
+
 ## Hooks
 
 Hooks are defined in `jskelet.config.mjs` under `hooks`. They are all optional

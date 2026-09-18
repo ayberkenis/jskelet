@@ -42,7 +42,7 @@ export default {
   navigation: {
     prefetch: "moderate",
     viewTransition: true,
-    exclude: ["/rss.xml", "/sitemap.xml"],
+    exclude: ["/rss.xml", "/sitemap.xml", "/og/:path*"],
   },
 
   /** Build zamanı indirilip `public/fonts/` altına konur, sonra commit edilir. */
