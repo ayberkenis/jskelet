@@ -10,6 +10,14 @@ one is listed under a **Breaking** heading.
 
 ### Added
 
+- Shared cross-subdomain cookies: `brand.sharedCookieRoots` plus
+  `writeSharedCookie` / `clearSharedCookie` on server (`jskelet/cookies`) and
+  client (`jskelet/client`). `Secure` follows https / `x-forwarded-proto` (not
+  `NODE_ENV`); the client read-back fails into handoff when the browser rejects
+  `Domain`. Optional `auth.crossSubdomainHandoff` mounts
+  `POST /_jskelet/auth/handoff` (one-time ticket → `?handoff=`) and documents a
+  `window.name` bridge. Large tokens are refused — put a short session id in the
+  cookie, not a JWT.
 - HTML cache key vary (`cache().vary`): `host: true` adds the public Host
   (`x-forwarded-host` or `Host`, lowercase, no port) as `h=…|` before the path;
   optional `headers` and `fn(req)` add further segments. Required on host-based

@@ -453,4 +453,23 @@ export const DEFAULT_BRAND = {
   devBasePath: "/__jskelet/dev",
   prewarmUserAgent: "jskelet-prewarm",
   devTokenCookie: "dev_token",
+  /**
+   * Paylaşımlı cookie Domain kökleri (örn. `.investvio.com`, `.localhost`).
+   * `writeSharedCookie` host bunlardan birine uyuyorsa Domain olarak yazar.
+   * @type {string[]}
+   */
+  sharedCookieRoots: [],
+};
+
+/**
+ * Kimlik / alt alan handoff. Framework oturum vermez; yalnızca çapraz-subdomain
+ * cookie köprüsü opsiyoneldir.
+ */
+export const DEFAULT_AUTH = {
+  /**
+   * `true` veya `{ ttlSeconds?, path?, maxValueBytes? }`.
+   * Açıkken `POST /_jskelet/auth/handoff` ve `?handoff=` redeem middleware'i.
+   * @type {boolean | { enabled?: boolean, ttlSeconds?: number, path?: string, maxValueBytes?: number }}
+   */
+  crossSubdomainHandoff: false,
 };

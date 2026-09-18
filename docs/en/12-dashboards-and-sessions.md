@@ -131,6 +131,97 @@ cookie is simply not sent on cross-site POSTs.
 Cookies are **signed, not encrypted**. The value is readable, so store the
 identifier of a secret rather than the secret itself.
 
+## Cross-subdomain: shared cookies
+
+Host-based i18n (`tr.example.com` / `en.example.com`) often needs a session on
+every locale host. The supported pattern is a **short session id** plus an
+optional `Domain=.example.com` — do not put a JWT or a large access token in a
+shared cookie (`large token ≠ shared cookie`).
+
+```js
+// jskelet.config.mjs
+export default {
+  brand: {
+    sharedCookieRoots: [".investvio.com", ".localhost"],
+  },
+  auth: {
+    crossSubdomainHandoff: true, // POST /_jskelet/auth/handoff
+  },
+};
+```
+
+### Server
+
+```js
+import { writeSharedCookie } from "jskelet/cookies";
+
+export function startSession(res, req, sessionId) {
+  const result = writeSharedCookie(res, "sid", sessionId, {
+    req,
+    maxAge: 60 * 60 * 8,
+  });
+  // result.ok === false → result.handoff; the client should use handoff
+  return result;
+}
+```
+
+`Secure` follows the **protocol** (`https` / `x-forwarded-proto`), not
+`NODE_ENV`. The Domain is set when the request Host matches
+`sharedCookieRoots`. Values larger than ~512 bytes are refused with
+`handoff: true`.
+
+### Client
+
+```js
+import {
+  writeSharedCookie,
+  createHandoffUrl,
+  handoffViaWindowName,
+  consumeWindowNameHandoff,
+} from "jskelet/client";
+
+const result = writeSharedCookie("sid", sessionId, {
+  roots: [".investvio.com", ".localhost"],
+  maxAge: 60 * 60 * 8,
+});
+
+if (!result.ok && result.handoff) {
+  const url = await createHandoffUrl({
+    name: "sid",
+    value: sessionId,
+    next: "https://tr.investvio.com/panel",
+  });
+  if (url) location.assign(url);
+  else handoffViaWindowName("https://tr.investvio.com/panel", {
+    name: "sid",
+    value: sessionId,
+  });
+}
+
+// On the target host (layout / island bootstrap):
+consumeWindowNameHandoff();
+```
+
+If `roots` is omitted, the client reads
+`<html data-jskelet-cookie-roots=".investvio.com,.localhost">`. After writing,
+a **read-back** runs; if the browser rejected the Domain, `handoff: true`.
+
+### Handoff ticket
+
+With `auth.crossSubdomainHandoff` on:
+
+1. `POST /_jskelet/auth/handoff` `{ name, value, next }` → `{ url }` (with `?handoff=`)
+2. On the target host a GET middleware redeems the one-time ticket, sets the
+   cookie (shared Domain first, else host-only), and 303-redirects without
+   `handoff`
+
+`next` must be under the same `sharedCookieRoots`. Tickets live ~60s in process
+memory. Do not put a JWT in the URL.
+
+The `window.name` bridge is the cookie-less fallback:
+`handoffViaWindowName` on the source page, `consumeWindowNameHandoff` on the
+target.
+
 ## CSRF
 
 The framework parses the request body (`express.urlencoded` + `express.json`),

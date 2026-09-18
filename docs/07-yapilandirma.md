@@ -186,13 +186,37 @@ birleştirilir.
 | `prewarmUserAgent` | `string` | `"jskelet-prewarm"` | Isıtma isteklerinin UA'sı; dev paneli bunu filtreler |
 | `devTokenCookie` | `string` | `"dev_token"` | Dev gate'in çerez ve query parametresi adı |
 | `lang` | `string` | — | `<html lang>` varsayılanı. Verilmezse layout `"en"` kullanır. |
+| `sharedCookieRoots` | `string[]` | `[]` | Paylaşımlı cookie Domain kökleri (örn. `.investvio.com`, `.localhost`). [12](./12-panel-ve-oturum.md) |
 
 `lang` için öncelik sırası: `hooks.layoutContext()` → `lang` **>** `brand.lang`
 **>** `"en"`.
 
 ```js
-brand: { lang: "tr", poweredBy: "Örnek", cacheHeader: "X-Ornek-Cache" }
+brand: {
+  lang: "tr",
+  poweredBy: "Örnek",
+  sharedCookieRoots: [".investvio.com", ".localhost"],
+}
 ```
+
+## `auth`
+
+**Tip:** `object` — **Varsayılan:** `{ crossSubdomainHandoff: false }`
+
+Kimlik framework'te yok; bu bölüm yalnızca alt alan adları arasında kısa
+session id taşımak için handoff köprüsünü açar.
+
+| Alan | Tip | Varsayılan | Anlamı |
+| --- | --- | --- | --- |
+| `crossSubdomainHandoff` | `boolean \| object` | `false` | `true` veya `{ ttlSeconds?, path?, maxValueBytes? }` → `POST /_jskelet/auth/handoff` + `?handoff=` redeem |
+
+```js
+auth: {
+  crossSubdomainHandoff: { ttlSeconds: 60 },
+},
+```
+
+Ayrıntı ve `window.name` yedeği: [12-panel-ve-oturum.md](./12-panel-ve-oturum.md).
 
 ## `layout`
 

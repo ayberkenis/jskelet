@@ -144,6 +144,7 @@ export function parseCookies(req) {
  * @property {Date} [expires]
  * @property {boolean} [httpOnly] Varsayılan `true`.
  * @property {boolean} [secure] Varsayılan: development dışında `true`.
+ *   `writeSharedCookie` protokole bakarak ezer (`https` → Secure).
  * @property {"Strict" | "Lax" | "None"} [sameSite] Varsayılan `Lax`.
  */
 
@@ -255,3 +256,4 @@ export function getSignedCookie(req, name) {
 export function randomToken(bytes = 32) {
   return crypto.randomBytes(bytes).toString("base64url");
 }
+

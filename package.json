@@ -1,6 +1,6 @@
 {
   "name": "jskelet",
-  "version": "0.5.3",
+  "version": "0.5.4",
   "description": "A framework that feels like no framework: Express 5 + build-time .jsk (or EJS) SSR, vanilla JS islands, Tailwind v4 and an in-process HTML TTL cache.",
   "type": "module",
   "license": "MIT",
@@ -33,7 +33,7 @@
     "./client": "./src/client/index.js",
     "./html": "./src/views/helpers/html.js",
     "./tags": "./src/views/helpers/tags.js",
-    "./cookies": "./src/http/cookies.js",
+    "./cookies": "./src/http/cookies-entry.js",
     "./log": "./src/log.mjs",
     "./register": "./src/runtime/register.mjs",
     "./layout": "./src/templates/layout.ejs"

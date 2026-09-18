@@ -191,13 +191,38 @@ shallow-merged with the defaults.
 | `prewarmUserAgent` | `string` | `"jskelet-prewarm"` | UA of prewarm requests; the dev panel filters on it |
 | `devTokenCookie` | `string` | `"dev_token"` | Name of the dev gate's cookie and query parameter |
 | `lang` | `string` | — | Default for `<html lang>`. If not given, the layout uses `"en"`. |
+| `sharedCookieRoots` | `string[]` | `[]` | Shared cookie Domain roots (e.g. `.investvio.com`, `.localhost`). [12](./12-dashboards-and-sessions.md) |
 
 Precedence for `lang`: `hooks.layoutContext()` → `lang` **>** `brand.lang`
 **>** `"en"`.
 
 ```js
-brand: { lang: "tr", poweredBy: "Example", cacheHeader: "X-Example-Cache" }
+brand: {
+  lang: "tr",
+  poweredBy: "Example",
+  sharedCookieRoots: [".investvio.com", ".localhost"],
+}
 ```
+
+## `auth`
+
+**Type:** `object` — **Default:** `{ crossSubdomainHandoff: false }`
+
+The framework does not provide identity; this section only opens the
+cross-subdomain handoff bridge for a short session id.
+
+| Field | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `crossSubdomainHandoff` | `boolean \| object` | `false` | `true` or `{ ttlSeconds?, path?, maxValueBytes? }` → `POST /_jskelet/auth/handoff` + `?handoff=` redeem |
+
+```js
+auth: {
+  crossSubdomainHandoff: { ttlSeconds: 60 },
+},
+```
+
+Details and the `window.name` fallback:
+[12-dashboards-and-sessions.md](./12-dashboards-and-sessions.md).
 
 ## `layout`
 

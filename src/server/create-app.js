@@ -21,6 +21,9 @@
  *      body parser'dan önce, admin ile aynı katmanda.
  *   5. body parser'lar — statikten sonra: görsel isteklerinde gövde ayrıştırma
  *      maliyeti ödenmesin.
+ *   5b. auth handoff (açıksa) — POST bilet + `?handoff=` redeem; csrf'den
+ *      önce değil sonra: JSON gövde parser'ı hazır olsun. Redeem GET route
+ *      render'ından önce olmalı.
  *   6. csrf — body parser'lardan sonra olmalı: token form alanından okunuyor.
  *      Rewrite'lardan önce, çünkü kontrol istemcinin gördüğü yola bakar.
  *   7. rewrites(afterFiles) — statik denendikten sonra, sayfalardan önce.
@@ -148,6 +151,17 @@ export async function createApp(options = {}) {
 
   app.use(express.urlencoded({ extended: false, limit: "64kb" }));
   app.use(express.json({ limit: "256kb" }));
+
+  const handoff = config.auth?.crossSubdomainHandoff;
+  if (
+    handoff === true ||
+    (handoff &&
+      typeof handoff === "object" &&
+      /** @type {{ enabled?: boolean }} */ (handoff).enabled !== false)
+  ) {
+    const { mountAuthHandoff } = await import("./auth/handoff.js");
+    mountAuthHandoff(app);
+  }
 
   app.use(csrf());
 

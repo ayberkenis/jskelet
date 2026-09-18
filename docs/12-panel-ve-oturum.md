@@ -129,6 +129,94 @@ kapatıyor — cookie çapraz site POST'larında hiç gönderilmiyor.
 Cookie **şifrelenmiyor**, imzalanıyor. Değer okunabilir; gizli kalması gereken
 veriyi değil, onun kimliğini koyun.
 
+## Alt alan adları: paylaşımlı cookie
+
+Host tabanlı i18n (`tr.example.com` / `en.example.com`) oturumu alt alanlar
+arasında paylaşmak ister. Çözüm **kısa session id** + isteğe bağlı
+`Domain=.example.com` — JWT veya büyük access token paylaşımlı cookie'ye
+konmaz (`large token ≠ shared cookie`).
+
+```js
+// jskelet.config.mjs
+export default {
+  brand: {
+    sharedCookieRoots: [".investvio.com", ".localhost"],
+  },
+  auth: {
+    crossSubdomainHandoff: true, // POST /_jskelet/auth/handoff
+  },
+};
+```
+
+### Sunucu
+
+```js
+import { writeSharedCookie } from "jskelet/cookies";
+
+export function startSession(res, req, sessionId) {
+  const result = writeSharedCookie(res, "sid", sessionId, {
+    req,
+    maxAge: 60 * 60 * 8,
+  });
+  // result.ok === false → result.handoff; istemci handoff denemeli
+  return result;
+}
+```
+
+`Secure` **protokole** bakılır (`https` / `x-forwarded-proto`), `NODE_ENV`'e
+değil. Domain, isteğin Host'u `sharedCookieRoots` ile eşleşince yazılır.
+Değer ~512 baytı aşarsa yazım reddedilir ve `handoff: true` döner.
+
+### İstemci
+
+```js
+import {
+  writeSharedCookie,
+  createHandoffUrl,
+  handoffViaWindowName,
+  consumeWindowNameHandoff,
+} from "jskelet/client";
+
+const result = writeSharedCookie("sid", sessionId, {
+  roots: [".investvio.com", ".localhost"],
+  maxAge: 60 * 60 * 8,
+});
+
+if (!result.ok && result.handoff) {
+  const url = await createHandoffUrl({
+    name: "sid",
+    value: sessionId,
+    next: "https://tr.investvio.com/panel",
+  });
+  if (url) location.assign(url);
+  else handoffViaWindowName("https://tr.investvio.com/panel", {
+    name: "sid",
+    value: sessionId,
+  });
+}
+
+// Hedef host'ta (layout / island bootstrap):
+consumeWindowNameHandoff();
+```
+
+`roots` verilmezse `<html data-jskelet-cookie-roots=".investvio.com,.localhost">`
+okunur. Yazımdan sonra **read-back** yapılır; tarayıcı Domain'i reddettiyse
+`handoff: true`.
+
+### Handoff bileti
+
+`auth.crossSubdomainHandoff` açıkken:
+
+1. `POST /_jskelet/auth/handoff` `{ name, value, next }` → `{ url }` (`?handoff=` ekli)
+2. Hedef host'ta GET middleware bileti tek kullanımlık tüketir, cookie yazar
+   (önce shared Domain, olmazsa host-only), `handoff` query'siz 303
+
+`next` yalnızca aynı `sharedCookieRoots` altındaki host'lara izinli. Bilet
+~60 sn, süreç belleğinde. JWT URL'ye konmaz.
+
+`window.name` köprüsü cookie'siz yedek: kaynakta `handoffViaWindowName`,
+hedeefte `consumeWindowNameHandoff`.
+
 ## CSRF
 
 Gövdeyi framework ayrıştırıyor (`express.urlencoded` + `express.json`), yani

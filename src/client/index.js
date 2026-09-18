@@ -33,3 +33,13 @@ export {
   getOverlayRoot,
 } from "./dom.js";
 export { startSafeImages } from "./safe-image.js";
+export {
+  clearSharedCookie,
+  consumeWindowNameHandoff,
+  createHandoffUrl,
+  handoffViaWindowName,
+  readCookie,
+  resolveSharedCookieDomain,
+  SHARED_COOKIE_WARN_BYTES,
+  writeSharedCookie,
+} from "./shared-cookie.js";

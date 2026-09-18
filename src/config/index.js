@@ -21,6 +21,7 @@
  *                   maxEntries?: number,
  *                   data?: {...}, redis?: {...}, prewarm?: {...} }
  *   admin()     → { enabled?, basePath?, allowIps?, blockBots?, … }
+ *   auth        → { crossSubdomainHandoff?: boolean | object }
  *   logs        → { console?, kinds?, file?, s3? }
  *
  * Fonksiyon olmayan bölümler (`brand`, `security`, `static`, `navigation`…)
@@ -33,6 +34,7 @@ import { pathToFileURL } from "node:url";
 import { compilePattern, matchPattern } from "./pattern.js";
 import {
   DEFAULT_ADMIN,
+  DEFAULT_AUTH,
   DEFAULT_BRAND,
   DEFAULT_CLOUDFLARE,
   DEFAULT_DATA_CACHE,
@@ -126,6 +128,7 @@ const CONFIG_FILE = "jskelet.config.mjs";
  * @property {Record<string, unknown>} prewarm
  * @property {{ source: string, test: (pathname: string) => boolean }[]} prewarmPriority
  * @property {Record<string, unknown>} brand
+ * @property {{ crossSubdomainHandoff: boolean | Record<string, unknown> }} auth
  * @property {Record<string, Function>} hooks
  * @property {string} layout Layout `.ejs` dosyasının mutlak yolu.
  * @property {string[] | null} routes Açık route modülü listesi.
@@ -897,6 +900,59 @@ function normalizeNavigation(raw, brand) {
  */
 
 /**
+ * @param {unknown} raw
+ * @returns {Record<string, unknown>}
+ */
+function normalizeBrand(raw) {
+  const source = /** @type {Record<string, unknown>} */ (raw ?? {});
+  const roots = asArray(
+    source.sharedCookieRoots ?? DEFAULT_BRAND.sharedCookieRoots,
+    "brand.sharedCookieRoots",
+  )
+    .filter((entry) => typeof entry === "string")
+    .map((entry) => {
+      const trimmed = String(entry).trim().toLowerCase();
+      if (!trimmed) return null;
+      return trimmed.startsWith(".") ? trimmed : `.${trimmed}`;
+    })
+    .filter((entry) => entry !== null);
+
+  return {
+    ...DEFAULT_BRAND,
+    ...source,
+    sharedCookieRoots: roots,
+  };
+}
+
+/**
+ * @param {unknown} raw
+ * @returns {{ crossSubdomainHandoff: boolean | Record<string, unknown> }}
+ */
+function normalizeAuth(raw) {
+  if (raw == null || typeof raw !== "object" || Array.isArray(raw)) {
+    return { ...DEFAULT_AUTH };
+  }
+
+  const source = /** @type {Record<string, unknown>} */ (raw);
+  const handoff = source.crossSubdomainHandoff;
+
+  if (handoff === true || handoff === false || handoff == null) {
+    return {
+      crossSubdomainHandoff: handoff === true,
+    };
+  }
+
+  if (typeof handoff === "object" && !Array.isArray(handoff)) {
+    return { crossSubdomainHandoff: { ...handoff } };
+  }
+
+  console.warn(
+    "[config] auth.crossSubdomainHandoff must be boolean or object, ignoring it",
+  );
+  return { ...DEFAULT_AUTH };
+}
+
+/**
  * Güvenlik bölümü. `csrf.exclude` desenleri burada derlenir: her istekte
  * yeniden derlemek gereksiz, ve bozuk bir desen sunucuyu düşürmemeli.
  *
@@ -1132,7 +1188,8 @@ export async function loadConfig(options = {}) {
     prewarmPriority,
   } = normalizeCache(cache);
   const dirs = resolveDirs(root, source.paths);
-  const brand = { ...DEFAULT_BRAND, ...(source.brand ?? {}) };
+  const brand = normalizeBrand(source.brand);
+  const auth = normalizeAuth(source.auth);
 
   config = {
     root,
@@ -1157,6 +1214,7 @@ export async function loadConfig(options = {}) {
     prewarm,
     prewarmPriority,
     brand,
+    auth,
     hooks: source.hooks ?? {},
     layout: resolveLayout(dirs, source.layout),
     routes: Array.isArray(source.routes) ? source.routes : null,
