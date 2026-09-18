@@ -43,10 +43,10 @@ const memo = new Map();
  * @returns {Promise<string | null>} Hiçbir kaynaktan okunamazsa `null`
  */
 export async function readSource(file) {
-  // Geliştirmede sıra tersine döner ve önbelleğe alınmaz: belge üzerinde
-  // çalışırken kaydettiğin dosyayı görmek istersin, dala gönderilmiş hâlini
-  // değil.
-  if (process.env.NODE_ENV !== "production") {
+  // Geliştirmede ve `file:` ile bağlanmış monorepo kurulumunda sıra yerel
+  // dosyadan başlar: `jskelet start` production olsa bile GitHub'daki eski
+  // CHANGELOG, henüz push edilmemiş yerel notları gizlemesin.
+  if (process.env.NODE_ENV !== "production" || isLinkedPackage()) {
     const local = readLocal(file);
     if (local !== null) return local;
   }
@@ -66,6 +66,22 @@ export async function readSource(file) {
   const local = readLocal(file);
   if (local !== null) memo.set(file, { text: local, at: Date.now() });
   return local;
+}
+
+/**
+ * Örnek uygulamalar `jskelet: "file:../.."` ile bağlandığında paket bir
+ * symlink'tir; o zaman depodaki dosya "kurulu" dosyadır.
+ *
+ * @returns {boolean}
+ */
+function isLinkedPackage() {
+  try {
+    return fs
+      .lstatSync(path.join(getConfig().root, "node_modules", "jskelet"))
+      .isSymbolicLink();
+  } catch {
+    return false;
+  }
 }
 
 /**

@@ -60,7 +60,7 @@ body:
     id: version
     attributes:
       label: JSkelet version
-      placeholder: 0.1.2
+      placeholder: 0.5.4
     validations:
       required: true
 
