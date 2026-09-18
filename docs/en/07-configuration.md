@@ -92,7 +92,7 @@ export default {
   watch: ["data"],
 
   fonts: [{ family: "Inter", weights: [400, 600, 700] }],
-  icons: { scan: ["views", "client", "routes", "lib"] },
+  icons: { dir: "icons", scan: ["views", "client", "routes", "lib"] },
   images: { widths: [400, 800, 1200], quality: 78, skip: ["downloads"] },
   clientEnv: ["PUBLIC_WS_URL"],
 
@@ -500,21 +500,29 @@ fonts: [
 
 ## `icons`
 
-**Type:** `{ scan?: string[] } | false` — **Default:** `{}`
+**Type:** `{ scan?: string[], dir?: string } | false` — **Default:** `{ dir: "icons" }`
 
-Phosphor SVG sprite generation.
+SVG icon sprite generation. The source is chosen **XOR**: if the `icons.dir`
+directory exists, only the flat SVGs there are used; otherwise
+`@phosphor-icons/core` (when installed).
 
 | Value | Result |
 | --- | --- |
-| `{}` (default) | The sprite is generated; scanned directories are `["views", "client", "routes", "lib"]` |
+| `{}` (default) | `dir: "icons"`; scanned directories are `["views", "client", "routes", "lib", "features", "shared"]` |
+| `{ dir: "assets/icons" }` | Changes the local SVG root |
 | `{ scan: [...] }` | Changes the scanned directories |
 | `false` | The sprite step is skipped entirely |
 
-If `@phosphor-icons/core` is not in the application's `node_modules`, the step is
-silently skipped. Details: [08-build.md](./08-build.md).
+A local directory (when present) uses flat file names: `house.svg` →
+`house:regular`, `house-bold.svg` → `house:bold`. An empty `icons/` directory
+does not fall back to Phosphor — delete the directory to open the fallback.
+Details: [08-build.md](./08-build.md).
 
 ```js
-icons: { scan: ["views", "client", "routes", "lib", "content"] }
+icons: {
+  dir: "icons",
+  scan: ["views", "client", "routes", "lib", "content"],
+}
 ```
 
 ## `images`

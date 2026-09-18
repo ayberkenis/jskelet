@@ -1,65 +1,74 @@
 <%#
-  Sürüm notları. Liste kurulu paketin CHANGELOG.md dosyasından ayrıştırılıyor
-  (`lib/changelog.js`), künye `lib/release.js` üzerinden paketten okunuyor;
-  "güncel" etiketi listeye elle yazılmıyor, hesaplanıyor. npm'deki `latest`
-  etiketi de gösteriliyor — kayıt defterine ulaşılamazsa o satır hiç basılmaz.
+  Sürüm notları. Liste CHANGELOG.md'den ayrıştırılıyor; üstteki sayılar da
+  aynı kayıttan hesaplanıyor — uydurma kanal / yıldız yok.
 -%>
 <section class="glow relative overflow-hidden border-b border-slate-200 dark:border-white/10">
   <div class="grid-surface pointer-events-none absolute inset-0" aria-hidden="true"></div>
-  <div class="wrapper relative py-20 sm:py-28">
-    <%- sectionHead(t.changelog.hero) %>
+  <div class="wrapper relative py-16 sm:py-24">
+    <div class="flex flex-wrap items-start justify-between gap-4">
+      <%- sectionHead(t.changelog.hero) %>
+      <%- link({
+        href: "https://github.com/ayberkenis/jskelet/blob/master/CHANGELOG.md",
+        html: `${esc(t.changelog.sourceLink)}${icon({ name: "ArrowSquareOut", size: 14 })}`,
+        rel: "noopener",
+        class: "inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 hover:text-cyan-700 dark:text-slate-400 dark:hover:text-brand-300",
+      }) %>
+    </div>
 
-    <div class="mt-10 flex flex-wrap items-center gap-4">
-      <div class="inline-flex items-center gap-3 rounded-2xl border border-cyan-200 bg-white/70 px-5 py-4 shadow-sm backdrop-blur dark:border-cyan-400/25 dark:bg-white/[0.06]">
-        <span class="inline-flex size-10 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-400 text-ink-950 shadow-lg shadow-brand-400/25">
-          <%- icon({ name: "RocketLaunch", size: 20 }) %>
-        </span>
-        <span class="grid">
-          <span class="text-[11px] font-bold tracking-[0.16em] text-slate-600 uppercase dark:text-slate-400"><%= t.changelog.currentLabel %></span>
-          <span class="font-mono text-xl font-bold">v<%= release.version %></span>
-        </span>
-      </div>
+    <%
+      const releasedEntries = entries.filter((entry) => !entry.unreleased);
+      const breakingCount = entries.filter((entry) =>
+        entry.groups.some((group) => group.type === "breaking"),
+      ).length;
+      const latestEntry = releasedEntries[0] || { version: release.version, date: "" };
+    %>
 
-      <% if (published) { %>
-      <div class="inline-flex items-center gap-3 rounded-2xl border border-slate-200 bg-white/70 px-5 py-4 shadow-sm backdrop-blur dark:border-white/10 dark:bg-white/[0.04]">
-        <span class="inline-flex size-10 items-center justify-center rounded-xl bg-slate-100 text-slate-700 dark:bg-white/10 dark:text-slate-200">
-          <%- icon({ name: "Package", size: 20 }) %>
-        </span>
-        <span class="grid">
-          <span class="text-[11px] font-bold tracking-[0.16em] text-slate-600 uppercase dark:text-slate-400"><%= t.changelog.npmLabel %></span>
-          <span class="font-mono text-xl font-bold">v<%= published.version %></span>
-        </span>
-      </div>
-      <% } %>
-
-      <p class="m-0 max-w-sm text-xs/5 text-slate-600 dark:text-slate-400">
-        <% if (published && published.newer) { %>
-        <%= t.changelog.npmNewer.replace("%s", published.version) %>
-        <% } else { %>
-        <%= t.changelog.currentNote %>
-        <% } %>
-      </p>
+    <div class="mt-10">
+      <%- changelogStats({
+        total: entries.length,
+        released: releasedEntries.length,
+        breaking: breakingCount,
+        latest: { version: latestEntry.version, date: latestEntry.date || "" },
+        labels: t.changelog,
+      }) %>
     </div>
   </div>
 </section>
 
-<section class="wrapper py-14">
+<section
+  class="wrapper py-12 sm:py-14"
+  data-island="changelog-browse"
+  data-island-eager
+  data-island-props='<%= JSON.stringify({
+    showing: t.changelog.showing,
+    page: t.changelog.pageLabel,
+    empty: t.changelog.searchEmpty,
+  }) %>'
+>
   <% if (!entries.length) { %>
-  <p class="m-0 rounded-3xl border border-slate-200 bg-white p-6 text-sm/6 text-slate-600 dark:border-white/10 dark:bg-white/[0.03] dark:text-slate-400">
+  <p class="m-0 rounded-2xl border border-slate-200 bg-white p-6 text-sm/6 text-slate-600 dark:border-white/10 dark:bg-white/[0.03] dark:text-slate-400">
     <%= t.changelog.empty %>
   </p>
   <% } else { %>
-  <%- versionRail({ entries, labels: t.changelog, current: release.version }) %>
-  <div class="mt-10 grid gap-4" data-island="changelog-jump">
-    <% for (const [index, entry] of entries.entries()) { %>
+  <%- changelogToolbar({ labels: t.changelog, total: entries.length }) %>
+
+  <div class="mt-8 grid gap-5" data-changelog-list>
+    <%
+      const latestVersion = releasedEntries[0] && releasedEntries[0].version;
+      entries.forEach(function (entry) {
+    %>
     <%- changelogEntry({
       entry,
-      labels: t.changelog,
+      labels: {
+        ...t.changelog,
+        copyDone: t.ui.copied,
+        copyFailed: t.ui.copyFailed,
+      },
       current: entry.version === release.version,
-      open: index === 0,
+      latest: entry.version === latestVersion,
       render: renderChange,
     }) %>
-    <% } %>
+    <% }); %>
   </div>
   <% } %>
 </section>

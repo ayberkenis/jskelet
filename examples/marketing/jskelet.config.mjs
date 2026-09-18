@@ -142,6 +142,8 @@ export default {
         openGraph: {
           siteName: "JSkelet",
           type: "website",
+          // Sayfa controller'ları kendi kartını `/og/:locale/:page.png` ile
+          // basar; burada yalnızca metadata'sız yanıtlar için sabit fallback.
           image: "https://cdn.ayberkenis.com.tr/jskelet/jskelet.png",
         },
         twitter: { card: "summary_large_image" },

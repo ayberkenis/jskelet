@@ -10,7 +10,8 @@ import { getPost } from "../lib/posts.js";
 
 export default function register(app, { ogHandler, notFound }) {
   app.get(
-    "/og/blog/:slug.png",
+    // Express 5: `:slug.png` → `.` regex sanılır; uzantı kaçışlı yazılmalı.
+    "/og/blog/:slug\\.png",
     ogHandler(async ({ params }) => {
       const post = getPost(params.slug);
       if (!post) notFound();

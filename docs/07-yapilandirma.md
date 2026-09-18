@@ -88,7 +88,7 @@ export default {
   watch: ["data"],
 
   fonts: [{ family: "Inter", weights: [400, 600, 700] }],
-  icons: { scan: ["views", "client", "routes", "lib"] },
+  icons: { dir: "icons", scan: ["views", "client", "routes", "lib"] },
   images: { widths: [400, 800, 1200], quality: 78, skip: ["indirmeler"] },
   clientEnv: ["PUBLIC_WS_URL"],
 
@@ -487,21 +487,27 @@ fonts: [
 
 ## `icons`
 
-**Tip:** `{ scan?: string[] } | false` — **Varsayılan:** `{}`
+**Tip:** `{ scan?: string[], dir?: string } | false` — **Varsayılan:** `{ dir: "icons" }`
 
-Phosphor SVG sprite üretimi.
+SVG ikon sprite üretimi. Kaynak **XOR** seçilir: `icons.dir` dizini varsa
+yalnızca oradaki düz SVG'ler; yoksa `@phosphor-icons/core` (kuruluysa).
 
 | Değer | Sonuç |
 | --- | --- |
-| `{}` (varsayılan) | Sprite üretilir; taranan dizinler `["views", "client", "routes", "lib", "features", "shared"]` |
+| `{}` (varsayılan) | `dir: "icons"`; taranan dizinler `["views", "client", "routes", "lib", "features", "shared"]` |
+| `{ dir: "assets/icons" }` | Yerel SVG kökü değiştirilir |
 | `{ scan: [...] }` | Taranan dizinler değiştirilir |
 | `false` | Sprite adımı tamamen atlanır |
 
-`@phosphor-icons/core` uygulamanın `node_modules`'ünde yoksa adım sessizce
-atlanır. Ayrıntı: [08-build.md](./08-build.md).
+Yerel dizin (varsa) düz dosya adları kullanır: `house.svg` → `house:regular`,
+`house-bold.svg` → `house:bold`. Boş bir `icons/` dizini Phosphor'a düşmez —
+dizini silmek fallback'i açar. Ayrıntı: [08-build.md](./08-build.md).
 
 ```js
-icons: { scan: ["views", "client", "routes", "lib", "content"] }
+icons: {
+  dir: "icons",
+  scan: ["views", "client", "routes", "lib", "content"],
+}
 ```
 
 ## `images`

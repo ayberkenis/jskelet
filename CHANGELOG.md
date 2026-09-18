@@ -8,6 +8,29 @@ one is listed under a **Breaking** heading.
 
 ## [Unreleased]
 
+### Added
+
+- Local flat `icons/` directory as the exclusive SVG sprite source when present
+  (`icons.dir`, default `"icons"`): `house.svg` / `house-bold.svg` file names,
+  XOR with `@phosphor-icons/core` (Phosphor only when the directory is absent).
+  The hashed sprite still lands under `public/assets/` and is precompressed.
+
+### Fixed
+
+- Open Graph routes with a `.png` suffix (`/og/…/:slug.png`) now escape the
+  dot for Express 5 / path-to-regexp, so the handler matches again instead of
+  falling through to the HTML 404.
+
+### Changed
+
+- Marketing example copy (EN/TR) reflects 0.5.x cache surfaces: host `vary`,
+  early refresh, classic vs `onVisit` prewarm, local `icons/`, shared cookies,
+  and `opengraph-image` → `ogHandler` on the migrate table. Pages now serve
+  per-locale dynamic OG cards at `/og/:locale/:page.png`.
+- Marketing changelog page restyled like a release-notes browser: measured
+  summary cards, search and newest/oldest sort, paginated open release cards
+  with Latest / Released badges and GitHub links (still driven by `CHANGELOG.md`).
+
 ## [0.5.4] - 2026-09-18
 
 ### Added

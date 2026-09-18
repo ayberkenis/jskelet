@@ -20,6 +20,7 @@ import {
   getDoc,
 } from "../lib/docs.js";
 import { LOCALES, PAGES, alternatePaths, localePath } from "../lib/i18n.js";
+import { ogImageUrl } from "../lib/og.js";
 import { getPayload } from "../lib/payload.js";
 import { getNextSampleEstimate } from "../lib/next-estimate.js";
 import { COMMANDS, getPublishedRelease, getRelease } from "../lib/release.js";
@@ -58,6 +59,11 @@ export default function register(app, { route, notFound }) {
               description: t.pages[key].description,
               canonical: pathname,
               locale: t.ogLocale,
+              openGraph: {
+                image: ogImageUrl(locale, key),
+                imageWidth: 1200,
+                imageHeight: 630,
+              },
               // Şema hreflang bilmiyor; ham etiket için ayrılmış alan bu.
               extraTags: hreflangTags(basePath),
             },
@@ -118,6 +124,11 @@ function registerDocs(app, { route, notFound }, { locale, t, paths }) {
               description: summarize(doc.intro),
               canonical: pathname,
               locale: t.ogLocale,
+              openGraph: {
+                image: ogImageUrl(locale, `docs-${entry.slug}`),
+                imageWidth: 1200,
+                imageHeight: 630,
+              },
               extraTags: hreflangTags(basePath),
             },
             data: {

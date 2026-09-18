@@ -158,15 +158,15 @@ export default {
       points: [
         {
           tone: "good",
-          text: "The cache key is the path and query; on a hit the controller never runs.",
+          text: "The cache key is the path and query — add cache().vary.host when locale lives on the Host, so one language never leaks onto another.",
         },
         {
           tone: "good",
-          text: "Prewarm renders your pages at boot, so the first visitor never lands on a cold cache.",
+          text: "Fresh entries revalidate in the background before TTL expiry; idle ones soft-stale and drain over HTTP even without a classic prewarm list.",
         },
         {
           tone: "good",
-          text: "Every response carries its own cache status header, so measuring needs no extra tooling.",
+          text: "Prewarm at boot from a path list, or onVisit from same-origin links after each public response — pick one mode, not both.",
         },
         {
           tone: "good",
@@ -302,7 +302,7 @@ export default {
     {
       step: "2",
       title: "Warm HTML is looked up",
-      body: "On a hit the ready page returns instantly. If the TTL has expired the visitor still waits for nothing: the current HTML ships and the refresh starts behind it.",
+      body: "On a hit the ready page returns instantly. Near expiry a background refresh starts while the visitor still gets a HIT; after TTL the current HTML ships as STALE and rebuilds behind it.",
     },
     {
       step: "3",
@@ -390,7 +390,10 @@ export default {
       {
         label: "HTML caching",
         values: [
-          { text: "In-process TTL with stale-while-revalidate", tone: "good" },
+          {
+            text: "In-process TTL, early refresh, host vary, SWR",
+            tone: "good",
+          },
           { text: "ISR, tied to the platform and its storage", tone: "neutral" },
           { text: "Static build or the adapter's CDN", tone: "neutral" },
           { text: "None; you build it yourself", tone: "bad" },
@@ -637,22 +640,22 @@ export default {
       {
         slug: "caching",
         title: "Caching",
-        body: "TTLs, stale-while-revalidate, cache keys and prewarming.",
+        body: "TTLs, early refresh, host vary, stale-while-revalidate and prewarm modes.",
       },
       {
         slug: "build",
         title: "Build",
-        body: "The build pipeline, the manifest, Tailwind sources and the icon sprite.",
+        body: "The pipeline, page stylesheets, Tailwind sources, and icons from a local folder or Phosphor.",
       },
       {
         slug: "configuration",
         title: "Configuration",
-        body: "The complete configuration reference, field by field.",
+        body: "The complete configuration reference, field by field — including shared cookies and handoff.",
       },
       {
         slug: "dev-tools",
         title: "Dev tools",
-        body: "The development flow, the overlay, the report page and the dev gate.",
+        body: "The overlay with Errors and SEO tabs, the report page and the dev gate.",
       },
       {
         slug: "deployment",
@@ -731,7 +734,11 @@ export default {
       { from: "export const revalidate = 60", to: "A revalidate option on the route" },
       { from: "React client component", to: "An island element plus a mount function" },
       { from: "Suspense-deferred section", to: "A fragment endpoint rendered on demand" },
-      { from: "next/image, next/link", to: "The image() and link() helpers" },
+      { from: "next/image, next/link", to: "The image() and link() helpers (plus optional remote optimize)" },
+      {
+        from: "opengraph-image / ImageResponse",
+        to: "ogImage / ogHandler / ImageResponse (PNG when sharp is installed)",
+      },
       { from: "React Context / zustand", to: "createStore() for small cross-island state" },
     ],
   },
@@ -747,7 +754,7 @@ export default {
     },
     {
       q: "The cache lives in process memory. What happens with multiple instances?",
-      a: "Each instance keeps its own L1 cache, so a cold boot still needs a warm-up and TTLs can drift. Prewarming closes most of that gap; an optional Redis tier shares HTML and broadcasts invalidateHtmlCache() / clearHtmlCache() to every replica over pub/sub. Targeted invalidation itself is first-class either way.",
+      a: "Each instance keeps its own L1 cache, so a cold boot still needs a warm-up and TTLs can drift. Early refresh and prewarm close most of that gap; an optional Redis tier shares HTML and broadcasts invalidateHtmlCache() / clearHtmlCache() to every replica over pub/sub. Targeted invalidation itself is first-class either way.",
     },
     {
       q: "Does it run without a build?",
@@ -755,20 +762,21 @@ export default {
     },
     {
       q: "Are Tailwind, sharp and the icon set required?",
-      a: "None of them. They are optional peer dependencies: if a package is missing, its build step is skipped silently. A broken config behaves the same way — it warns and falls back instead of taking the site down.",
+      a: "None of them. Drop SVGs in icons/ and the sprite builds from that folder alone; otherwise @phosphor-icons/core is the optional peer. Tailwind and sharp skip themselves when missing. A broken config warns and falls back instead of taking the site down.",
     },
     {
       q: "How does theming work if the HTML is identical for everyone?",
-      a: "It is never decided on the server. Because cached HTML goes out identically to every visitor, per-person choices like theme and language are made in the browser; the theme button on this page is an eager island.",
+      a: "It is never decided on the server. Because cached HTML goes out identically to every visitor, per-person choices like theme and language are made in the browser; the theme button on this page is an eager island. Shared cookies across subdomains are a separate, opt-in path when you need a short session id on several hosts.",
     },
   ],
 
   changelog: {
     hero: {
       eyebrow: "Release history",
-      title: "What changed, and when.",
-      lead: "Every release with the features added, the behaviour changed and the bugs fixed. The version at the top is the one you install today.",
+      title: "JSkelet release notes and version history",
+      lead: "Browse every published release from the project changelog — what was added, changed, fixed or broken.",
     },
+    sourceLink: "source / GitHub",
     currentLabel: "Installed release",
     currentNote: "This is the version the install command resolves to right now.",
     npmLabel: "Latest on npm",
@@ -777,6 +785,29 @@ export default {
     dateLabel: "Released",
     empty:
       "The changelog file could not be read from the installed package, so there is nothing to list here.",
+    statTotal: "Total releases",
+    statTotalNote: "In this changelog",
+    statReleased: "Released",
+    statReleasedNote: "Versioned entries",
+    statBreaking: "Breaking",
+    statBreakingNote: "Releases with breaking changes",
+    statLatest: "Latest release",
+    statLatestNote: "Most recent versioned entry",
+    searchLabel: "Search releases",
+    searchPlaceholder: "Search by version, for example 0.5.4",
+    sortLabel: "Sort order",
+    sortNewest: "Newest first",
+    sortOldest: "Oldest first",
+    showing: "Showing %s–%e of %t releases",
+    pageLabel: "Page %s / %t",
+    searchEmpty: "No releases match that search.",
+    prevPage: "Previous page",
+    nextPage: "Next page",
+    latestBadge: "Latest",
+    releasedBadge: "Released",
+    copyLink: "Copy link to this release",
+    openGithub: "Open on GitHub",
+    releasedMeta: "Released on %s",
     types: {
       added: "Added",
       changed: "Changed",
@@ -785,7 +816,7 @@ export default {
       breaking: "Breaking",
     },
     statuses: {
-      current: "current",
+      current: "installed",
       previous: "previous",
       unreleased: "unreleased",
     },
@@ -857,7 +888,7 @@ export default {
         {
           icon: "PuzzlePiece",
           title: "Optional extras",
-          body: "Tailwind, the icon set and the image encoder are optional. Skip one and its build step skips itself.",
+          body: "Tailwind, Phosphor (or your own icons/ folder) and sharp are optional. Skip one and its build step skips itself.",
         },
       ],
     },

@@ -249,16 +249,32 @@ bu dosyalara otomatik olarak `immutable` cache yazılır.
 
 ## İkon sprite
 
-`@phosphor-icons/core` içindeki tek tek SVG'lerden, **yalnızca kaynakta
-kullanılan** ikonlar için `<symbol>` seti üretir. Tüm seti göndermek 1500+ ikon,
-yani birkaç megabayt; kullanım taraması sprite'ı tipik olarak 10-30 sembolde
-tutuyor.
+**Yalnızca kaynakta kullanılan** ikonlar için bir `<symbol>` seti üretir. Tüm
+seti göndermek 1500+ ikon, yani birkaç megabayt; kullanım taraması sprite'ı
+tipik olarak 10-30 sembolde tutuyor. Çıktı hash'li `sprite.svg` olarak
+`public/assets/` altına yazılır ve precompress kapsamına girer.
+
+Kaynak **XOR** seçilir — ikisi birleştirilmez:
+
+1. `icons.dir` (varsayılan `icons/`) **dizin olarak varsa** yalnızca oradaki
+   düz SVG'ler. Boş dizin Phosphor'a düşmez; fallback için dizini silin.
+2. Aksi hâlde `@phosphor-icons/core` (uygulamanın `node_modules`'ünden). Kurulu
+   değilse adım sessizce atlanır.
+
+Yerel dosya adları:
+
+| Dosya | Sprite anahtarı |
+| --- | --- |
+| `icons/house.svg` | `house:regular` |
+| `icons/house-regular.svg` | `house:regular` |
+| `icons/arrow-right-bold.svg` | `arrow-right:bold` |
 
 - Sembol id'si: `<kebab-ad>-<weight>`, örn. `arrow-right-bold`.
-- Paket **uygulamanın** `node_modules`'ünden çözülür (ikon seti uygulamanın
-  devDependency'si); kurulu değilse adım sessizce atlanır.
-- Taranan dizinler varsayılan olarak `views`, `client`, `routes`, `lib`;
-  `icons.scan` ile değiştirilebilir. Taranan uzantılar: `.ejs`, `.js`, `.mjs`.
+- `viewBox` kaynak SVG'den `<symbol>`'e taşınır; yoksa `0 0 256 256`
+  (Phosphor ve `icon()` ile uyum için önerilen kutu).
+- Taranan dizinler varsayılan olarak `views`, `client`, `routes`, `lib`,
+  `features`, `shared`; `icons.scan` ile değiştirilebilir. Taranan uzantılar:
+  `.ejs`, `.jsk`, `.js`, `.mjs`.
 - Ağırlıklar: `thin`, `light`, `regular`, `bold`, `fill`, `duotone`. Tanınmayan
   bir ağırlık `regular` sayılır.
 
@@ -285,7 +301,7 @@ Bu uyarıyı görürseniz ya adı sabit yazın, ya `icons.scan` listesine ilgili
 dizini ekleyin, ya da adı bir yapılandırma alanında `icon: "XLogo"` biçiminde
 tutun.
 
-Phosphor'da bulunamayan adlar build sonunda özet olarak uyarılır:
+Kaynakta bulunamayan adlar build sonunda özet olarak uyarılır:
 `N icons missing → …`
 
 ## Görsel optimizasyonu
@@ -355,7 +371,7 @@ Bu dosyaları `staticPrecompressed` middleware'i servis eder; kopya yoksa istek
 | `tailwindcss` | CSS (peer) | Tailwind direktifleri çözülemez |
 | `lightningcss` | CSS minifikasyonu | Tailwind çıktısı kullanılır, birkaç kB daha büyük |
 | `sharp` | Görsel optimizasyonu | Adım atlanır; `image()` orijinali kullanır |
-| `@phosphor-icons/core` | İkon sprite | Adım atlanır; `icon()` boş `<use>` üretir |
+| `@phosphor-icons/core` | İkon sprite (yerel `icons/` yoksa) | Adım atlanır; `icon()` boş `<use>` üretir |
 
 CSS kullanmayacaksanız `paths.styles` dosyasını hiç oluşturmayın: adım uyarıyla
 atlanır ve postcss'e ihtiyaç kalmaz.

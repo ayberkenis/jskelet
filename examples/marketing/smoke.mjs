@@ -10,6 +10,7 @@ const BASE = process.env.BASE ?? "http://localhost:3000";
 const CASES = [
   // Varsayılan dil kökte.
   ["/", 200, /The skeleton of the web/],
+  ["/", 200, /og\/en\/home\.png/],
   ["/", 200, /data-island="theme-toggle"/],
   ["/", 200, /data-island="copy-command"/],
   ["/", 200, /hreflang="tr"/],
@@ -19,6 +20,7 @@ const CASES = [
   ["/migrate", 200, /Next\.js/],
   ["/docs", 200, /href="\/docs\/getting-started"/],
   ["/changelog", 200, /Release history/],
+  ["/changelog", 200, /data-island="changelog-browse"/],
   ["/download", 200, /data-island="copy-command"/],
 
   // Türkçe `/tr` altında, aynı İngilizce slug'larla.
@@ -31,6 +33,7 @@ const CASES = [
   ["/tr/migrate", 200, /Next\.js bilginizi/],
   ["/tr/docs", 200, /href="\/tr\/docs\/getting-started"/],
   ["/tr/changelog", 200, /Sürüm geçmişi/],
+  ["/tr/changelog", 200, /data-island="changelog-browse"/],
   ["/tr/download", 200, /Kurulumun tamamı/],
 
   // Belge bölümü: markdown paketin `docs/` dizininden okunup render ediliyor.
@@ -53,6 +56,12 @@ const CASES = [
   ["/sitemap.xml", 200, /<urlset/],
   ["/sitemap.xml", 200, /hreflang="x-default"/],
   ["/api/healthcheck", 200, /ok/],
+
+  // Dinamik OG kartları (sharp yoksa SVG, varsa PNG — ikisi de image/*).
+  ["/og/en/home.png", 200],
+  ["/og/tr/compare.png", 200],
+  ["/og/en/docs-caching.png", 200],
+  ["/og/xx/home.png", 404],
 
   // Rewrite: dil öneki altındaki sitemap aynı uca yazılıyor.
   ["/tr/sitemap.xml", 200, /<urlset/],

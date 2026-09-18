@@ -141,7 +141,7 @@ const CONFIG_FILE = "jskelet.config.mjs";
  * @property {string[]} prewarmSkip
  * @property {string[]} watch Dev sunucusunun izlediği ek dizinler.
  * @property {{ family: string, slug?: string, weights: number[] }[]} fonts
- * @property {{ scan?: string[] } | false} icons
+ * @property {{ scan?: string[], dir: string } | false} icons
  * @property {ImagesConfig | false} images
  * @property {string[]} clientEnv Client bundle'a gömülecek env anahtarları.
  */
@@ -988,6 +988,34 @@ function normalizeSecurity(raw) {
 }
 
 /**
+ * İkon sprite ayarları. `false` → adım atlanır. `dir` varsayılanı `"icons"`:
+ * o dizin varsa yalnızca yerel SVG'ler; yoksa Phosphor.
+ *
+ * @param {unknown} raw
+ * @returns {{ scan?: string[], dir: string } | false}
+ */
+function normalizeIcons(raw) {
+  if (raw === false) return false;
+
+  const source = /** @type {Record<string, any>} */ (raw ?? {});
+  const dir =
+    typeof source.dir === "string" && source.dir.trim()
+      ? source.dir.trim()
+      : "icons";
+
+  /** @type {{ scan?: string[], dir: string }} */
+  const icons = { dir };
+
+  if (source.scan != null) {
+    icons.scan = asArray(source.scan, "icons.scan")
+      .filter((entry) => typeof entry === "string" && entry.trim())
+      .map((entry) => String(entry).trim());
+  }
+
+  return icons;
+}
+
+/**
  * Build + runtime görsel ayarları. `false` → her iki yüzey de kapalı.
  * `remote.allowHosts` boşsa remote kapalı kalır (açık proxy olmasın).
  *
@@ -1237,7 +1265,7 @@ export async function loadConfig(options = {}) {
     // Build tarafı ayarları. Sunucu bunları okumaz ama config tek dosya
     // olsun diye aynı yerden geçer.
     fonts: source.fonts ?? [],
-    icons: source.icons ?? {},
+    icons: normalizeIcons(source.icons),
     images: normalizeImages(source.images),
     clientEnv: source.clientEnv ?? [],
   };

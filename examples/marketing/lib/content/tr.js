@@ -151,15 +151,15 @@ export default {
       points: [
         {
           tone: "good",
-          text: "Cache anahtarı yol ve query; HIT durumunda controller hiç çalışmaz.",
+          text: "Cache anahtarı yol ve query — locale Host'taysa cache().vary.host ekleyin; bir dilin HTML'i diğerine sızmasın.",
         },
         {
           tone: "good",
-          text: "Prewarm açılışta sayfaları render eder, yani ilk ziyaretçi soğuk cache'e denk gelmez.",
+          text: "Taze girdiler TTL bitmeden arka planda yenilenir; boşta kalanlar soft-stale olur ve klasik prewarm listesi olmasa da HTTP üzerinden boşalır.",
         },
         {
           tone: "good",
-          text: "Her yanıt kendi cache durumunu bir başlıkta taşır; ölçmek için ayrı bir araç gerekmez.",
+          text: "Açılışta yol listesinden prewarm, ya da her public yanıttan sonra onVisit ile same-origin linkler — iki moddan birini seçin, ikisini birden değil.",
         },
         {
           tone: "good",
@@ -291,7 +291,7 @@ export default {
     {
       step: "2",
       title: "Sıcak HTML aranır",
-      body: "HIT ise hazır sayfa anında döner. TTL dolmuşsa ziyaretçi yine beklemez: mevcut HTML gider, tazeleme arkada başlar.",
+      body: "HIT ise hazır sayfa anında döner. TTL'e yaklaşınca arka planda yenileme başlar, ziyaretçi yine HIT alır; TTL sonrası mevcut HTML STALE gider ve yeniden üretim arkada koşar.",
     },
     {
       step: "3",
@@ -379,7 +379,10 @@ export default {
       {
         label: "HTML önbelleği",
         values: [
-          { text: "Süreç içinde TTL, stale-while-revalidate ile", tone: "good" },
+          {
+            text: "Süreç içinde TTL, erken yenileme, host vary, SWR",
+            tone: "good",
+          },
           { text: "ISR; platforma ve deposuna bağlı", tone: "neutral" },
           { text: "Statik build ya da adapter'ın CDN'i", tone: "neutral" },
           { text: "Yok; kendiniz kurarsınız", tone: "bad" },
@@ -626,22 +629,22 @@ export default {
       {
         slug: "caching",
         title: "Cache",
-        body: "TTL, stale-while-revalidate, cache anahtarı ve ısıtma.",
+        body: "TTL, erken yenileme, host vary, stale-while-revalidate ve prewarm modları.",
       },
       {
         slug: "build",
         title: "Build",
-        body: "Build hattı, manifest, Tailwind kaynakları ve ikon sprite'ı.",
+        body: "Hattı, sayfa stylesheet'leri, Tailwind kaynakları ve yerel klasör ya da Phosphor'dan ikonlar.",
       },
       {
         slug: "configuration",
         title: "Yapılandırma",
-        body: "Alan alan, tam yapılandırma referansı.",
+        body: "Alan alan tam referans — paylaşımlı cookie ve handoff dahil.",
       },
       {
         slug: "dev-tools",
         title: "Dev araçları",
-        body: "Geliştirme akışı, overlay, rapor sayfası ve dev gate.",
+        body: "Errors ve SEO sekmeli overlay, rapor sayfası ve dev gate.",
       },
       {
         slug: "deployment",
@@ -720,7 +723,11 @@ export default {
       { from: "export const revalidate = 60", to: "Route üzerinde bir revalidate seçeneği" },
       { from: "React client component", to: "Bir island elementi ve bir mount fonksiyonu" },
       { from: "Suspense ile ertelenen bölüm", to: "İstek üzerine render edilen bir fragment ucu" },
-      { from: "next/image, next/link", to: "image() ve link() yardımcıları" },
+      { from: "next/image, next/link", to: "image() ve link() yardımcıları (isteğe bağlı remote optimize dahil)" },
+      {
+        from: "opengraph-image / ImageResponse",
+        to: "ogImage / ogHandler / ImageResponse (sharp varsa PNG)",
+      },
       { from: "React Context / zustand", to: "Island'lar arası küçük durum için createStore()" },
     ],
   },
@@ -736,7 +743,7 @@ export default {
     },
     {
       q: "Cache süreç belleğinde: birden fazla instance'ta ne olur?",
-      a: "Her instance kendi L1 önbelleğini tutar, yani soğuk açılışta ısınma gerekir ve TTL sınırları kayabilir. Isıtma bu boşluğun çoğunu kapatır; isteğe bağlı Redis katmanı HTML'i paylaşır ve invalidateHtmlCache() / clearHtmlCache() çağrılarını pub/sub ile her kopyaya yayar. Nokta atışı geçersizleme her iki modelde de birinci sınıf.",
+      a: "Her instance kendi L1 önbelleğini tutar, yani soğuk açılışta ısınma gerekir ve TTL sınırları kayabilir. Erken yenileme ve prewarm bu boşluğun çoğunu kapatır; isteğe bağlı Redis katmanı HTML'i paylaşır ve invalidateHtmlCache() / clearHtmlCache() çağrılarını pub/sub ile her kopyaya yayar. Nokta atışı geçersizleme her iki modelde de birinci sınıf.",
     },
     {
       q: "Build çıktısı olmadan çalışır mı?",
@@ -744,20 +751,21 @@ export default {
     },
     {
       q: "Tailwind, sharp ve ikon seti zorunlu mu?",
-      a: "Hiçbiri değil. Hepsi opsiyonel peer bağımlılık: paket kurulu değilse ilgili build adımı sessizce atlanır. Bozuk bir config de aynı şekilde davranır — siteyi düşürmek yerine uyarır ve varsayılana döner.",
+      a: "Hiçbiri değil. icons/ altına SVG koyun, sprite yalnızca o klasörden üretilir; yoksa @phosphor-icons/core opsiyonel peer'dır. Tailwind ve sharp yoksa adımları atlar. Bozuk config siteyi düşürmek yerine uyarır ve varsayılana döner.",
     },
     {
       q: "HTML herkese aynıysa tema nasıl çalışıyor?",
-      a: "Sunucuda hiç karara bağlanmıyor. Cache'lenen HTML her ziyaretçiye birebir aynı gittiği için tema ve dil gibi kişiye özel seçimler tarayıcıda yapılır; bu sayfadaki tema düğmesi de hemen bağlanan bir island.",
+      a: "Sunucuda hiç karara bağlanmıyor. Cache'lenen HTML her ziyaretçiye birebir aynı gittiği için tema ve dil gibi kişiye özel seçimler tarayıcıda yapılır; bu sayfadaki tema düğmesi de hemen bağlanan bir island. Birden fazla host'ta kısa bir oturum id'si gerekiyorsa paylaşımlı cookie'ler ayrı, isteğe bağlı bir yol.",
     },
   ],
 
   changelog: {
     hero: {
       eyebrow: "Sürüm geçmişi",
-      title: "Ne değişti, ne zaman.",
-      lead: "Her sürümde eklenen özellikler, değişen davranışlar ve düzeltilen hatalar. En üstteki sürüm bugün kurduğunuz sürüm.",
+      title: "JSkelet sürüm notları ve geçmişi",
+      lead: "Proje changelog'undaki her yayın: eklenenler, değişenler, düzeltmeler ve kırıcı değişiklikler.",
     },
+    sourceLink: "kaynak / GitHub",
     currentLabel: "Kurulu sürüm",
     currentNote: "Kurulum komutunun şu anda çözdüğü sürüm bu.",
     npmLabel: "npm'deki son sürüm",
@@ -765,6 +773,29 @@ export default {
     dateLabel: "Yayın",
     empty:
       "Kurulu paketten sürüm notları okunamadı; bu yüzden burada listelenecek bir kayıt yok.",
+    statTotal: "Toplam sürüm",
+    statTotalNote: "Bu changelog'da",
+    statReleased: "Yayınlanan",
+    statReleasedNote: "Sürüm numaralı kayıtlar",
+    statBreaking: "Kırıcı",
+    statBreakingNote: "Kırıcı değişiklik içeren sürümler",
+    statLatest: "Son sürüm",
+    statLatestNote: "En yeni numaralı kayıt",
+    searchLabel: "Sürüm ara",
+    searchPlaceholder: "Sürümle ara, örneğin 0.5.4",
+    sortLabel: "Sıralama",
+    sortNewest: "Yeniden eskiye",
+    sortOldest: "Eskiden yeniye",
+    showing: "%t sürümden %s–%e gösteriliyor",
+    pageLabel: "Sayfa %s / %t",
+    searchEmpty: "Aramayla eşleşen sürüm yok.",
+    prevPage: "Önceki sayfa",
+    nextPage: "Sonraki sayfa",
+    latestBadge: "Son",
+    releasedBadge: "Yayında",
+    copyLink: "Bu sürüme bağlantıyı kopyala",
+    openGithub: "GitHub'da aç",
+    releasedMeta: "%s tarihinde yayınlandı",
     types: {
       added: "Eklendi",
       changed: "Değişti",
@@ -773,7 +804,7 @@ export default {
       breaking: "Kırıcı",
     },
     statuses: {
-      current: "güncel",
+      current: "kurulu",
       previous: "önceki",
       unreleased: "yayınlanmadı",
     },
@@ -843,7 +874,7 @@ export default {
         {
           icon: "PuzzlePiece",
           title: "Opsiyonel ekler",
-          body: "Tailwind, ikon seti ve görsel kodlayıcı opsiyonel. Birini atlarsanız ilgili build adımı kendini atlar.",
+          body: "Tailwind, Phosphor (veya kendi icons/ klasörünüz) ve sharp isteğe bağlı. Birini atlayın, ilgili build adımı da atlar.",
         },
       ],
     },

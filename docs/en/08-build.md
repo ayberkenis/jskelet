@@ -259,17 +259,33 @@ Because the `.woff2` extension and the `/fonts/` prefix are in the default
 
 ## Icon sprite
 
-From the individual SVGs inside `@phosphor-icons/core`, it produces a `<symbol>`
-set for **only the icons actually used in the source**. Shipping the whole set
-means 1500+ icons, i.e. several megabytes; usage scanning typically keeps the
-sprite at 10-30 symbols.
+Produces a `<symbol>` set for **only the icons actually used in the source**.
+Shipping the whole set means 1500+ icons, i.e. several megabytes; usage scanning
+typically keeps the sprite at 10-30 symbols. The hashed `sprite.svg` is written
+under `public/assets/` and is covered by precompress.
+
+The source is chosen **XOR** — the two are never merged:
+
+1. If `icons.dir` (default `icons/`) **exists as a directory**, only the flat
+   SVGs there. An empty directory does not fall back to Phosphor; delete the
+   directory to open the fallback.
+2. Otherwise `@phosphor-icons/core` (from the application's `node_modules`). If
+   it is not installed, the step is silently skipped.
+
+Local file names:
+
+| File | Sprite key |
+| --- | --- |
+| `icons/house.svg` | `house:regular` |
+| `icons/house-regular.svg` | `house:regular` |
+| `icons/arrow-right-bold.svg` | `arrow-right:bold` |
 
 - Symbol id: `<kebab-name>-<weight>`, e.g. `arrow-right-bold`.
-- The package is resolved from the **application's** `node_modules` (the icon set
-  is the application's devDependency); if it is not installed, the step is
-  silently skipped.
-- The scanned directories default to `views`, `client`, `routes`, `lib`; they can
-  be changed with `icons.scan`. Scanned extensions: `.ejs`, `.js`, `.mjs`.
+- `viewBox` is copied from the source SVG onto the `<symbol>`; if missing,
+  `0 0 256 256` (recommended for Phosphor / `icon()` compatibility).
+- The scanned directories default to `views`, `client`, `routes`, `lib`,
+  `features`, `shared`; they can be changed with `icons.scan`. Scanned
+  extensions: `.ejs`, `.jsk`, `.js`, `.mjs`.
 - Weights: `thin`, `light`, `regular`, `bold`, `fill`, `duotone`. An
   unrecognised weight counts as `regular`.
 
@@ -296,8 +312,8 @@ If you see this warning, either write the name as a constant, or add the relevan
 directory to the `icons.scan` list, or keep the name in a configuration field in
 the form `icon: "XLogo"`.
 
-Names that cannot be found in Phosphor are warned about as a summary at the end
-of the build: `N icons missing → …`
+Names that cannot be found in the chosen source are warned about as a summary at
+the end of the build: `N icons missing → …`
 
 ## Image optimisation
 
@@ -373,7 +389,7 @@ copy, the request is handed over to `express.static`
 | `tailwindcss` | CSS (peer) | Tailwind directives cannot be resolved |
 | `lightningcss` | CSS minification | Tailwind's output is used, a few kB bigger |
 | `sharp` | Image optimisation | The step is skipped; `image()` uses the original |
-| `@phosphor-icons/core` | Icon sprite | The step is skipped; `icon()` produces an empty `<use>` |
+| `@phosphor-icons/core` | Icon sprite (when no local `icons/` dir) | The step is skipped; `icon()` produces an empty `<use>` |
 
 If you are not going to use CSS, simply never create the `paths.styles` file: the
 step is skipped with a warning and postcss is not needed.

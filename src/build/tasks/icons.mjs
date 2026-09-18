@@ -1,12 +1,17 @@
 /**
- * Phosphor SVG sprite üretimi.
+ * SVG ikon sprite üretimi.
  *
- * `@phosphor-icons/core` içindeki tek tek SVG'lerden, **yalnızca kaynakta
- * kullanılan** ikonlar için `<symbol>` seti üretir. Tüm seti göndermek 1500+
- * ikon, yani birkaç megabayt; kullanım taraması sprite'ı tipik olarak 10-30
- * sembolde tutuyor.
+ * Kaynak XOR seçilir: uygulama kökünde `icons/` (veya `icons.dir`) dizini
+ * varsa yalnızca oradaki düz SVG'ler; yoksa `@phosphor-icons/core`. İkisi
+ * birleştirilmez — boş bir `icons/` dizini Phosphor'a düşmez.
+ *
+ * Yalnızca kaynakta kullanılan ikonlar `<symbol>` olur. Tüm seti göndermek
+ * 1500+ ikon, yani birkaç megabayt; kullanım taraması sprite'ı tipik olarak
+ * 10-30 sembolde tutuyor. Çıktı `public/assets/` altında hash'li
+ * `sprite.svg` olduğu için mevcut precompress kapsamına girer.
  *
  * Sembol id'si: `<kebab-name>-<weight>` (örn. `arrow-right-bold`).
+ * Yerel dosya adı: `house.svg` → `house:regular`, `house-bold.svg` → `house:bold`.
  *
  * Tarama statik metin üzerinden yapıldığı için adı çalışma anında hesaplanan
  * bir `icon()` çağrısı sprite'a girmez. Bu yüzden ad taşıyan yapılandırma
@@ -41,6 +46,8 @@ const QUOTED_NAME = /["']([A-Z][A-Za-z0-9]*)["']/g;
 
 const WEIGHTS = new Set(["thin", "light", "regular", "bold", "fill", "duotone"]);
 
+const DEFAULT_VIEWBOX = "0 0 256 256";
+
 /**
  * `ArrowRightIcon` → `arrow-right`
  * @param {string} name
@@ -52,6 +59,50 @@ function toKebab(name) {
     .replace(/([a-z0-9])([A-Z])/g, "$1-$2")
     .replace(/([A-Z]+)([A-Z][a-z])/g, "$1-$2")
     .toLowerCase();
+}
+
+/**
+ * Düz dizin dosya adı → `name` + `weight`.
+ * `house.svg` / `house-regular.svg` → regular; `arrow-right-bold.svg` → bold.
+ *
+ * @param {string} fileName uzantılı veya uzantısız
+ * @returns {{ name: string, weight: string } | null}
+ */
+export function parseIconFileName(fileName) {
+  const base = String(fileName).replace(/\.svg$/i, "");
+  if (!base) return null;
+
+  let name = base;
+  let weight = "regular";
+
+  const dash = base.lastIndexOf("-");
+  if (dash > 0) {
+    const maybeWeight = base.slice(dash + 1);
+    if (WEIGHTS.has(maybeWeight)) {
+      name = base.slice(0, dash);
+      weight = maybeWeight;
+    }
+  }
+
+  // kebab: harf/rakam segmentleri, başta/sonda tire yok
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(name)) return null;
+
+  return { name, weight };
+}
+
+/**
+ * @param {import('../../config/index.js').ResolvedConfig} config
+ * @returns {string | null} mutlak dizin; yoksa veya dizin değilse null
+ */
+function resolveLocalIconsDir(config) {
+  const relative = config.icons?.dir ?? "icons";
+  const dir = path.resolve(config.root, relative);
+  try {
+    if (fs.statSync(dir).isDirectory()) return dir;
+  } catch {
+    // yok
+  }
+  return null;
 }
 
 /**
@@ -161,20 +212,79 @@ function scanUsedIcons(scanDirs) {
 }
 
 /**
+ * @param {string} svg
+ * @returns {{ body: string, viewBox: string }}
+ */
+function parseSvgParts(svg) {
+  const open = svg.match(/<svg\b[^>]*>/i)?.[0] ?? "";
+  const viewBox =
+    open.match(/\bviewBox\s*=\s*["']([^"']+)["']/i)?.[1]?.trim() ||
+    DEFAULT_VIEWBOX;
+  const body = svg
+    .replace(/^[\s\S]*?<svg[^>]*>/i, "")
+    .replace(/<\/svg>\s*$/i, "")
+    .trim();
+  return { body, viewBox };
+}
+
+/**
+ * Düz `icons/` altındaki `*.svg` dosyalarından `name:weight` → parça haritası.
+ *
+ * @param {string} dir
+ * @returns {Map<string, { body: string, viewBox: string }>}
+ */
+function indexLocalIcons(dir) {
+  /** @type {Map<string, { body: string, viewBox: string }>} */
+  const index = new Map();
+
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (!entry.isFile() || path.extname(entry.name).toLowerCase() !== ".svg") {
+      continue;
+    }
+
+    const parsed = parseIconFileName(entry.name);
+    if (!parsed) {
+      log.warn(`icon file ignored (bad name) → ${entry.name}`);
+      continue;
+    }
+
+    const key = `${parsed.name}:${parsed.weight}`;
+    const svg = fs.readFileSync(path.join(dir, entry.name), "utf8");
+    index.set(key, parseSvgParts(svg));
+  }
+
+  return index;
+}
+
+/**
  * @param {string} coreAssets
  * @param {string} name kebab
  * @param {string} weight
- * @returns {string | null}
+ * @returns {{ body: string, viewBox: string } | null}
  */
-function readIconBody(coreAssets, name, weight) {
+function readPhosphorIcon(coreAssets, name, weight) {
   const fileName = weight === "regular" ? `${name}.svg` : `${name}-${weight}.svg`;
   const filePath = path.join(coreAssets, weight, fileName);
 
   if (!fs.existsSync(filePath)) return null;
 
-  const svg = fs.readFileSync(filePath, "utf8");
-  const inner = svg.replace(/^[\s\S]*?<svg[^>]*>/, "").replace(/<\/svg>\s*$/, "");
-  return inner.trim();
+  return parseSvgParts(fs.readFileSync(filePath, "utf8"));
+}
+
+/**
+ * @param {Map<string, { body: string, viewBox: string }>} index
+ * @param {string} name
+ * @param {string} weight
+ * @returns {{ body: string, viewBox: string } | null}
+ */
+function readLocalIcon(index, name, weight) {
+  const exact = index.get(`${name}:${weight}`);
+  if (exact) return exact;
+
+  // `house.svg` regular sayılır; tarama `house:regular` ister.
+  if (weight === "regular") return index.get(`${name}:regular`) ?? null;
+
+  return null;
 }
 
 /**
@@ -182,10 +292,22 @@ function readIconBody(coreAssets, name, weight) {
  * @returns {Promise<Record<string, string>>}
  */
 export async function buildIconSprite(config) {
-  const coreAssets = resolveIconAssets(config.root);
-  if (!coreAssets) {
-    log.detail("@phosphor-icons/core not installed, skipped");
-    return {};
+  const localDir = resolveLocalIconsDir(config);
+  /** @type {Map<string, { body: string, viewBox: string }> | null} */
+  let localIndex = null;
+  /** @type {string | null} */
+  let coreAssets = null;
+
+  if (localDir) {
+    localIndex = indexLocalIcons(localDir);
+    const rel = path.relative(config.root, localDir) || ".";
+    log.detail(`icons from ${rel} (${localIndex.size} files)`);
+  } else {
+    coreAssets = resolveIconAssets(config.root);
+    if (!coreAssets) {
+      log.detail("@phosphor-icons/core not installed, skipped");
+      return {};
+    }
   }
 
   const scanDirs = (
@@ -198,15 +320,17 @@ export async function buildIconSprite(config) {
 
   for (const entry of used) {
     const [name, weight] = entry.split(":");
-    const body = readIconBody(coreAssets, name, weight);
+    const parts = localIndex
+      ? readLocalIcon(localIndex, name, weight)
+      : readPhosphorIcon(/** @type {string} */ (coreAssets), name, weight);
 
-    if (!body) {
+    if (!parts?.body) {
       missing.push(entry);
       continue;
     }
 
     symbols.push(
-      `<symbol id="${name}-${weight}" viewBox="0 0 256 256">${body}</symbol>`,
+      `<symbol id="${name}-${weight}" viewBox="${parts.viewBox}">${parts.body}</symbol>`,
     );
   }
 

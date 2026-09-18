@@ -1,5 +1,5 @@
 import { cn, esc } from "jskelet/html";
-import { icon } from "jskelet/tags";
+import { icon, link } from "jskelet/tags";
 
 /**
  * Sürüm notları ve indirme sayfasının blokları. Sürüm numarası, tarih ve
@@ -13,183 +13,297 @@ const TYPES = {
     icon: "Plus",
     class:
       "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-400/25 dark:bg-emerald-400/10 dark:text-emerald-200",
-    rule: "bg-emerald-400/70 dark:bg-emerald-400/50",
+    labelClass: "text-emerald-700 dark:text-emerald-300",
     bullet: "bg-emerald-500/70 dark:bg-emerald-400/70",
   },
   changed: {
     icon: "Wrench",
     class:
       "border-cyan-200 bg-cyan-50 text-cyan-800 dark:border-cyan-400/25 dark:bg-cyan-400/10 dark:text-cyan-200",
-    rule: "bg-cyan-400/70 dark:bg-cyan-400/50",
+    labelClass: "text-cyan-700 dark:text-brand-300",
     bullet: "bg-cyan-500/70 dark:bg-cyan-400/70",
   },
   fixed: {
     icon: "Bug",
     class:
       "border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-400/25 dark:bg-amber-400/10 dark:text-amber-100",
-    rule: "bg-amber-400/70 dark:bg-amber-400/50",
+    labelClass: "text-amber-800 dark:text-amber-200",
     bullet: "bg-amber-500/70 dark:bg-amber-400/70",
   },
   removed: {
     icon: "Minus",
     class:
       "border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-400/25 dark:bg-rose-400/10 dark:text-rose-200",
-    rule: "bg-rose-400/70 dark:bg-rose-400/50",
+    labelClass: "text-rose-700 dark:text-rose-300",
     bullet: "bg-rose-500/70 dark:bg-rose-400/70",
   },
   breaking: {
     icon: "Warning",
     class:
       "border-orange-300 bg-orange-50 text-orange-900 dark:border-orange-400/30 dark:bg-orange-400/10 dark:text-orange-100",
-    rule: "bg-orange-400/80 dark:bg-orange-400/60",
+    labelClass: "text-orange-800 dark:text-orange-200",
     bullet: "bg-orange-500/80 dark:bg-orange-400/70",
   },
 };
 
+const GITHUB = "https://github.com/ayberkenis/jskelet";
+
 /**
- * Tek bir sürüm kaydı, katlanır bir kart olarak. Bütün sürümleri açık basmak
- * sayfayı okunmaz bir duvara çeviriyordu; artık yalnızca `open` verilen kayıt
- * (varsayılan olarak en güncel sürüm) açık geliyor, diğerleri tek satırlık
- * künyeye iniyor.
+ * Üstteki dört ölçüm kartı. Değerler CHANGELOG + paket künyesinden gelir.
  *
- * `<details>` bilinçli tercih: JS inmese de kartlar açılıp kapanır. Çapa
- * bağlantısıyla gelen ziyaretçi için kapalı kartı açma işi
- * `client/islands/changelog-jump.js` island'ına ait.
+ * @param {{ total: number, released: number, breaking: number,
+ *   latest: { version: string, date: string }, labels: Record<string, string> }} props
+ * @returns {string}
+ */
+export function changelogStats({ total, released, breaking, latest, labels }) {
+  const cards = [
+    {
+      label: labels.statTotal,
+      value: String(total),
+      note: labels.statTotalNote,
+      icon: "Pulse",
+      tone: "plain",
+    },
+    {
+      label: labels.statReleased,
+      value: String(released),
+      note: labels.statReleasedNote,
+      icon: "CheckCircle",
+      tone: "good",
+    },
+    {
+      label: labels.statBreaking,
+      value: String(breaking),
+      note: labels.statBreakingNote,
+      icon: "Warning",
+      tone: "warn",
+    },
+    {
+      label: labels.statLatest,
+      value: latest.version ? `v${latest.version}` : "—",
+      note: latest.date || labels.statLatestNote,
+      icon: "Clock",
+      tone: "sky",
+    },
+  ];
+
+  const tones = {
+    plain: "border-slate-200 dark:border-white/10",
+    good: "border-emerald-200/80 dark:border-emerald-400/25",
+    warn: "border-orange-200/80 dark:border-orange-400/25",
+    sky: "border-cyan-200/80 dark:border-brand-400/30",
+  };
+
+  const iconTones = {
+    plain: "bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-slate-300",
+    good: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
+    warn: "bg-orange-500/15 text-orange-800 dark:text-orange-200",
+    sky: "bg-brand-400/15 text-cyan-700 dark:text-brand-300",
+  };
+
+  return `<div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+    ${cards
+      .map(
+        (card) => `<div class="${cn(
+          "rounded-2xl border bg-white/80 p-5 dark:bg-white/[0.04]",
+          tones[card.tone],
+        )}">
+          <div class="flex items-start justify-between gap-3">
+            <p class="m-0 text-[11px] font-bold tracking-[0.14em] text-slate-500 uppercase dark:text-slate-400">${esc(card.label)}</p>
+            <span class="${cn("inline-flex size-8 items-center justify-center rounded-lg", iconTones[card.tone])}" aria-hidden="true">${icon({ name: card.icon, size: 16 })}</span>
+          </div>
+          <p class="mt-3 mb-0 font-mono text-3xl font-bold tracking-tight tabular-nums">${esc(card.value)}</p>
+          <p class="mt-1 mb-0 text-xs text-slate-500 dark:text-slate-400">${esc(card.note)}</p>
+        </div>`,
+      )
+      .join("")}
+  </div>`;
+}
+
+/**
+ * Arama + sıralama araç çubuğu.
  *
- * Madde metinleri CHANGELOG.md'den geldiği için satır içi markdown taşıyor;
- * `render` verildiğinde HTML'e çevirme işi ona bırakılır, verilmezse metin
- * kaçırılarak basılır.
+ * @param {{ labels: Record<string, string>, total: number }} props
+ * @returns {string}
+ */
+export function changelogToolbar({ labels, total }) {
+  return `<div class="flex flex-col gap-3 lg:flex-row lg:items-center">
+    <label class="relative min-w-0 flex-1">
+      <span class="sr-only">${esc(labels.searchLabel)}</span>
+      <span class="pointer-events-none absolute top-1/2 left-3.5 -translate-y-1/2 text-slate-400">${icon({ name: "MagnifyingGlass", size: 16 })}</span>
+      <input
+        type="search"
+        data-changelog-search
+        placeholder="${esc(labels.searchPlaceholder)}"
+        autocomplete="off"
+        class="w-full rounded-xl border border-slate-200 bg-white py-3 pr-4 pl-10 text-sm text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:border-brand-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-slate-500 dark:focus:border-brand-400/50"
+      >
+    </label>
+    <div class="flex flex-wrap items-center gap-2" role="group" aria-label="${esc(labels.sortLabel)}">
+      <button
+        type="button"
+        data-changelog-sort="newest"
+        aria-pressed="true"
+        class="rounded-xl border border-brand-400/40 bg-brand-400/15 px-3.5 py-2.5 text-sm font-semibold text-cyan-900 dark:border-brand-400/35 dark:bg-brand-400/15 dark:text-brand-300"
+      >${esc(labels.sortNewest)}</button>
+      <button
+        type="button"
+        data-changelog-sort="oldest"
+        aria-pressed="false"
+        class="rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm font-semibold text-slate-600 hover:border-slate-300 dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-300 dark:hover:border-white/20"
+      >${esc(labels.sortOldest)}</button>
+    </div>
+  </div>
+  <div class="mt-4 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500 dark:text-slate-400">
+    <p class="m-0" data-changelog-count>${esc(
+      labels.showing
+        .replace("%s", "1")
+        .replace("%e", String(Math.min(8, total)))
+        .replace("%t", String(total)),
+    )}</p>
+    <div class="flex items-center gap-3">
+      <p class="m-0" data-changelog-page></p>
+      <div class="flex gap-1">
+        <button type="button" data-changelog-prev class="rounded-lg border border-slate-200 px-2.5 py-1 font-semibold hover:border-slate-300 dark:border-white/10 dark:hover:border-white/20" aria-label="${esc(labels.prevPage)}">←</button>
+        <button type="button" data-changelog-next class="rounded-lg border border-slate-200 px-2.5 py-1 font-semibold hover:border-slate-300 dark:border-white/10 dark:hover:border-white/20" aria-label="${esc(labels.nextPage)}">→</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+/**
+ * Tek sürüm kartı — release notes tarzı: her zaman açık.
  *
  * @param {{ entry: { version: string, date?: string, unreleased?: boolean,
  *   summary?: string, groups: Array<{ type: string, items: string[] }> },
- *   labels: { dateLabel: string, types: Record<string, string>,
- *   statuses: Record<string, string> }, current?: boolean, open?: boolean,
+ *   labels: Record<string, string>, current?: boolean, latest?: boolean,
  *   render?: (item: string) => string }} props
  * @returns {string}
  */
-export function changelogEntry({ entry, labels, current = false, open = false, render }) {
-  const status = entry.unreleased ? "unreleased" : current ? "current" : "previous";
-  const highlight = current && !entry.unreleased;
-
-  const groups = entry.groups
-    .map((group) => {
-      const type = TYPES[group.type] ?? TYPES.changed;
-
-      const items = group.items
-        .map(
-          (item) =>
-            `<li class="flex gap-3">
-              <span aria-hidden="true" class="${cn("mt-2.5 size-1.5 shrink-0 rounded-full", type.bullet)}"></span>
-              <span>${render ? render(item) : esc(item)}</span>
-            </li>`,
-        )
-        .join("");
-
-      return `<section class="relative overflow-hidden rounded-2xl border border-slate-200/80 bg-slate-50/70 p-5 pl-6 dark:border-white/5 dark:bg-white/[0.02]">
-        <span aria-hidden="true" class="${cn("absolute inset-y-0 left-0 w-1", type.rule)}"></span>
-        <div class="mb-4 flex items-center gap-2">
-          <span class="${cn("inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-bold tracking-wide uppercase", type.class)}">
-            ${icon({ name: type.icon, size: 12 })}${esc(labels.types[group.type] ?? group.type)}
-          </span>
-          <span class="font-mono text-xs text-slate-500 dark:text-slate-500">${group.items.length}</span>
-        </div>
-        <ul class="m-0 grid list-none gap-3 p-0 text-sm/7 text-slate-700 dark:text-slate-300">${items}</ul>
-      </section>`;
-    })
-    .join("");
-
+export function changelogEntry({
+  entry,
+  labels,
+  current = false,
+  latest = false,
+  render,
+}) {
   const title = entry.unreleased
     ? esc(labels.statuses.unreleased ?? "unreleased")
     : `v${esc(entry.version)}`;
 
-  const count = entry.groups.reduce((total, group) => total + group.items.length, 0);
+  const searchBlob = [
+    entry.version,
+    entry.date,
+    entry.summary,
+    ...entry.groups.flatMap((group) => [group.type, ...group.items]),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
 
-  return `<article id="v${esc(entry.version)}" class="scroll-mt-24">
-    <details class="${cn(
-      "group overflow-hidden rounded-3xl border",
-      highlight
-        ? "border-cyan-300 bg-gradient-to-br from-cyan-50/80 to-white shadow-lg shadow-cyan-950/5 dark:border-cyan-400/30 dark:from-cyan-400/[0.08] dark:to-white/[0.03]"
-        : "border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-white/[0.03]",
-    )}"${open ? " open" : ""}>
-      <summary class="flex cursor-pointer list-none flex-wrap items-center gap-3 p-5 sm:px-7 hover:bg-slate-50/80 [&::-webkit-details-marker]:hidden dark:hover:bg-white/[0.02]">
-        <span class="${cn(
-          "inline-flex size-9 shrink-0 items-center justify-center rounded-xl",
-          highlight
-            ? "bg-gradient-to-br from-brand-500 to-brand-400 text-ink-950 shadow-lg shadow-brand-400/25"
-            : "bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-slate-300",
-        )}">${icon({
-          name: highlight ? "RocketLaunch" : entry.unreleased ? "GitBranch" : "Tag",
-          size: 18,
-        })}</span>
+  const badges = [];
+  if (latest && !entry.unreleased) {
+    badges.push(
+      `<span class="inline-flex items-center gap-1.5 rounded-full bg-slate-950 px-2.5 py-1 text-[10px] font-bold tracking-wider text-white uppercase dark:bg-white dark:text-ink-950"><span class="size-1.5 rounded-full bg-emerald-400" aria-hidden="true"></span>${esc(labels.latestBadge)}</span>`,
+    );
+  }
+  if (current && !entry.unreleased) {
+    badges.push(
+      `<span class="inline-flex items-center rounded-full bg-cyan-500/15 px-2.5 py-1 text-[10px] font-bold tracking-wider text-cyan-800 uppercase dark:text-brand-300">${esc(labels.statuses.current)}</span>`,
+    );
+  }
+  if (entry.unreleased) {
+    badges.push(
+      `<span class="inline-flex items-center rounded-full bg-amber-500/15 px-2.5 py-1 text-[10px] font-bold tracking-wider text-amber-900 uppercase dark:text-amber-100">${esc(labels.statuses.unreleased)}</span>`,
+    );
+  } else {
+    badges.push(
+      `<span class="inline-flex items-center rounded-full bg-emerald-500/15 px-2.5 py-1 text-[10px] font-bold tracking-wider text-emerald-800 uppercase dark:text-emerald-200">${esc(labels.releasedBadge)}</span>`,
+    );
+  }
 
-        <span class="font-mono text-xl font-bold tracking-tight sm:text-2xl">${title}</span>
+  const githubHref = entry.unreleased
+    ? `${GITHUB}/blob/master/CHANGELOG.md`
+    : `${GITHUB}/releases/tag/v${encodeURIComponent(entry.version)}`;
 
-        <span class="${cn(
-          "inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-bold tracking-wide uppercase",
-          highlight
-            ? "border-cyan-300 bg-cyan-50 text-cyan-800 dark:border-cyan-400/30 dark:bg-cyan-400/10 dark:text-cyan-200"
-            : "border-slate-200 bg-slate-50 text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-slate-300",
-        )}">${esc(labels.statuses[status] ?? status)}</span>
+  const items = entry.groups
+    .flatMap((group) => {
+      const type = TYPES[group.type] ?? TYPES.changed;
+      const typeLabel = labels.types[group.type] ?? group.type;
+      return group.items.map(
+        (item) => `<li class="flex gap-3 text-sm/7 text-slate-700 dark:text-slate-300">
+          <span aria-hidden="true" class="${cn("mt-2.5 size-1.5 shrink-0 rounded-full", type.bullet)}"></span>
+          <span class="min-w-0">
+            <span class="${cn("mr-1.5 font-mono text-[11px] font-bold tracking-wide uppercase", type.labelClass)}">${esc(typeLabel)}</span>
+            ${render ? render(item) : esc(item)}
+          </span>
+        </li>`,
+      );
+    })
+    .join("");
 
-        ${
-          entry.date
-            ? `<time datetime="${esc(entry.date)}" class="font-mono text-xs text-slate-500 dark:text-slate-400" title="${esc(labels.dateLabel)}">${esc(entry.date)}</time>`
-            : ""
-        }
-
-        <span class="ml-auto flex items-center gap-3">
-          <span class="font-mono text-xs text-slate-500 dark:text-slate-400">${count}</span>
-          <span aria-hidden="true" class="inline-flex size-8 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition-transform group-open:rotate-180 dark:border-white/10 dark:text-slate-300">${icon({ name: "CaretDown", size: 14 })}</span>
-        </span>
-      </summary>
-
-      <div class="grid gap-5 border-t border-slate-200/80 p-5 sm:p-7 dark:border-white/10">
-        ${
-          entry.summary
-            ? `<p class="m-0 text-base/7 font-medium text-slate-800 dark:text-slate-200">${
-                render ? render(entry.summary) : esc(entry.summary)
-              }</p>`
-            : ""
-        }
-        <div class="grid gap-4">${groups}</div>
+  return `<article
+    id="v${esc(entry.version)}"
+    class="scroll-mt-24 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8 dark:border-white/10 dark:bg-white/[0.035]"
+    data-changelog-card
+    data-version="${esc(entry.version)}"
+    data-search="${esc(searchBlob)}"
+  >
+    <div class="flex flex-wrap items-start justify-between gap-3">
+      <div class="flex flex-wrap items-center gap-2">${badges.join("")}</div>
+      <div class="flex items-center gap-1.5">
+        <button
+          type="button"
+          data-changelog-copy="#v${esc(entry.version)}"
+          class="inline-flex size-9 items-center justify-center rounded-lg border border-slate-200 text-slate-500 transition-colors hover:border-brand-400 hover:text-cyan-700 dark:border-white/10 dark:text-slate-400 dark:hover:border-brand-400/40 dark:hover:text-brand-300"
+          title="${esc(labels.copyLink)}"
+          aria-label="${esc(labels.copyLink)}"
+        >${icon({ name: "Link", size: 16 })}</button>
+        ${link({
+          href: githubHref,
+          html: icon({ name: "ArrowSquareOut", size: 16 }),
+          rel: "noopener",
+          title: labels.openGithub,
+          class:
+            "inline-flex size-9 items-center justify-center rounded-lg border border-slate-200 text-slate-500 transition-colors hover:border-brand-400 hover:text-cyan-700 dark:border-white/10 dark:text-slate-400 dark:hover:border-brand-400/40 dark:hover:text-brand-300",
+        })}
       </div>
-    </details>
+    </div>
+
+    <h2 class="mt-4 mb-0 font-mono text-3xl font-bold tracking-tight sm:text-4xl">${title}</h2>
+
+    <p class="mt-3 mb-0 flex flex-wrap items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+      ${
+        entry.date
+          ? `<time datetime="${esc(entry.date)}">${esc(labels.releasedMeta.replace("%s", entry.date))}</time>`
+          : `<span>${esc(labels.statuses.unreleased)}</span>`
+      }
+    </p>
+
+    ${
+      entry.summary
+        ? `<p class="mt-5 mb-0 max-w-3xl text-base/7 text-slate-600 dark:text-slate-300">${
+            render ? render(entry.summary) : esc(entry.summary)
+          }</p>`
+        : ""
+    }
+
+    ${
+      items
+        ? `<ul class="mt-6 grid list-none gap-3 border-t border-slate-200/80 p-0 pt-6 dark:border-white/10">${items}</ul>`
+        : ""
+    }
   </article>`;
 }
 
 /**
- * Sürüm listesinin üstündeki hızlı geçiş şeridi. Kayıt sayısı arttıkça sayfa
- * uzuyor; kullanıcı aradığı sürüme tek tıkla insin diye.
- *
- * @param {{ entries: Array<{ version: string, unreleased?: boolean }>,
- *   labels: { statuses: Record<string, string> }, current: string }} props
  * @returns {string}
  */
-export function versionRail({ entries, labels, current }) {
-  if (entries.length < 2) return "";
-
-  const chips = entries
-    .map((entry) => {
-      const active = entry.version === current && !entry.unreleased;
-      const text = entry.unreleased
-        ? (labels.statuses.unreleased ?? "unreleased")
-        : `v${entry.version}`;
-
-      return `<a href="#v${esc(entry.version)}" class="${cn(
-        "inline-flex items-center rounded-full border px-3 py-1.5 font-mono text-xs font-bold no-underline transition-colors",
-        active
-          ? "border-cyan-300 bg-cyan-50 text-cyan-800 dark:border-cyan-400/30 dark:bg-cyan-400/10 dark:text-cyan-200"
-          : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:text-white",
-      )}">${esc(text)}</a>`;
-    })
-    .join("");
-
-  return `<nav class="flex flex-wrap gap-2">${chips}</nav>`;
+export function versionRail() {
+  return "";
 }
 
 /**
- * Kurulum adımı: numaralı etiket, kopyalanabilir komut ve tek satır gerekçe.
- *
  * @param {{ label: string, command: string, note: string,
  *   copy: { idle: string, done: string, failed: string } }} props
  * @returns {string}
@@ -203,9 +317,6 @@ export function commandStep({ label, command, note, copy }) {
 }
 
 /**
- * Tek satırlık komut kabuğu. `codeBlock` çok satırlı örnekler için; burada
- * satır başında bir prompt işareti ve kopyalama düğmesi yeterli.
- *
  * @param {string} command
  * @param {{ idle: string, done: string, failed: string }} copy
  * @returns {string}
@@ -225,8 +336,6 @@ function codeShell(command, copy) {
 }
 
 /**
- * Sürüm künyesi: sürüm, lisans ve Node gereksinimi yan yana.
- *
  * @param {{ items: Array<{ label: string, value: string, icon: string }> }} props
  * @returns {string}
  */
@@ -247,9 +356,6 @@ export function metaRow({ items }) {
 }
 
 /**
- * Bağımlılık listesi. Sürüm aralıkları kurulu paketten okunuyor, elle
- * yazılmıyor; liste bu yüzden her zaman gerçek.
- *
  * @param {{ title: string, items: Array<{ name: string, range: string }>,
  *   nameColumn: string, versionColumn: string }} props
  * @returns {string}
