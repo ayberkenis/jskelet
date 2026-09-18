@@ -11,7 +11,7 @@
     Mobilde bölüm listesi `<details>` içinde. Açılır kapanır bir menü için
     island yazmak, JS'siz de çalışan bir davranışı JS'e bağımlı kılmak olurdu.
   -%>
-  <details class="mt-6 rounded-2xl border border-slate-200 bg-white lg:hidden dark:border-white/10 dark:bg-white/[0.035]">
+  <details class="mt-6 rounded-2xl border border-slate-200 bg-white lg:hidden dark:border-white/10 dark:bg-white/[0.04]">
     <summary class="flex cursor-pointer items-center justify-between gap-3 px-4 py-3 text-sm font-semibold marker:content-['']">
       <span class="flex items-center gap-2">
         <%- icon({ name: "SidebarSimple", size: 16 }) %>
@@ -51,7 +51,7 @@
 
   <article class="min-w-0 py-10 lg:py-14">
     <nav class="flex flex-wrap items-center gap-2 text-xs font-medium text-slate-500 dark:text-slate-400" aria-label="<%= t.docs.shell.breadcrumb %>">
-      <%- link({ href: paths.docs, text: t.docs.shell.docsLabel, class: "hover:text-cyan-700 dark:hover:text-cyan-300" }) %>
+      <%- link({ href: paths.docs, text: t.docs.shell.docsLabel, class: "hover:text-cyan-700 dark:hover:text-brand-300" }) %>
       <span aria-hidden="true">/</span>
       <span><%= t.docs.groups[doc.group] %></span>
     </nav>
@@ -75,7 +75,7 @@
 
     <%# Sağdaki liste geniş ekranda görünüyor; altındaki kopya mobil karşılığı. %>
     <% if (doc.toc.length) { %>
-    <details class="mt-8 rounded-2xl border border-slate-200 bg-white xl:hidden dark:border-white/10 dark:bg-white/[0.035]">
+    <details class="mt-8 rounded-2xl border border-slate-200 bg-white xl:hidden dark:border-white/10 dark:bg-white/[0.04]">
       <summary class="cursor-pointer px-4 py-3 text-sm font-semibold marker:content-['']">
         <%= t.docs.shell.onThisPage %>
       </summary>
@@ -87,7 +87,7 @@
               href: `#${entry.id}`,
               text: entry.text,
               class: cn(
-                "block py-1 text-slate-600 hover:text-cyan-700 dark:text-slate-400 dark:hover:text-cyan-300",
+                "block py-1 text-slate-600 hover:text-cyan-700 dark:text-slate-400 dark:hover:text-brand-300",
                 entry.level === 3 ? "pl-6 text-[13px]" : "pl-3",
               ),
             }) %>

@@ -34,7 +34,7 @@ export function compareTable({ columns, rows }) {
       (row) => `<tr class="border-t border-slate-200 align-top dark:border-slate-800">
         <th
           scope="row"
-          class="compare-sticky bg-white px-4 py-3 text-left text-sm font-semibold whitespace-nowrap dark:bg-slate-950"
+          class="compare-sticky bg-white px-4 py-3 text-left text-sm font-semibold whitespace-nowrap dark:bg-ink-950"
         >${esc(row.label)}</th>
         ${row.values
           .map(
@@ -48,10 +48,10 @@ export function compareTable({ columns, rows }) {
     )
     .join("");
 
-  return `<div class="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-xl shadow-slate-950/5 dark:border-white/10 dark:bg-white/[0.025]">
+  return `<div class="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-xl shadow-slate-950/5 dark:border-white/10 dark:bg-white/[0.04]">
     <table class="w-full min-w-[52rem] border-collapse">
-      <thead class="bg-slate-50 dark:bg-slate-900/60">
-        <tr><th scope="col" class="compare-sticky bg-slate-50 px-4 py-3 text-left text-xs font-semibold tracking-wide uppercase dark:bg-slate-900/60">Ölçüt</th>${head}</tr>
+      <thead class="bg-slate-50 dark:bg-white/[0.04]">
+        <tr><th scope="col" class="compare-sticky bg-slate-50 px-4 py-3 text-left text-xs font-semibold tracking-wide uppercase dark:bg-ink-950">Ölçüt</th>${head}</tr>
       </thead>
       <tbody>${body}</tbody>
     </table>
@@ -69,7 +69,7 @@ export function fitList({ title, items, tone }) {
       ? "border-emerald-200 dark:border-emerald-500/30"
       : "border-rose-200 dark:border-rose-500/30";
 
-  return `<div class="${cn("rounded-2xl border bg-white p-7 shadow-sm dark:bg-white/[0.035]", color)}">
+  return `<div class="${cn("rounded-2xl border bg-white p-7 shadow-sm dark:bg-white/[0.04]", color)}">
     <h3 class="m-0 text-lg font-semibold tracking-tight">${esc(title)}</h3>
     <ul class="mt-3 grid list-none gap-2 p-0 text-sm text-slate-700 dark:text-slate-200">
       ${items

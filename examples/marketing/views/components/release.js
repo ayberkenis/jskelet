@@ -115,7 +115,7 @@ export function changelogEntry({ entry, labels, current = false, open = false, r
         <span class="${cn(
           "inline-flex size-9 shrink-0 items-center justify-center rounded-xl",
           highlight
-            ? "bg-gradient-to-br from-cyan-600 to-indigo-600 text-white shadow-lg shadow-cyan-950/20"
+            ? "bg-gradient-to-br from-brand-500 to-brand-400 text-ink-950 shadow-lg shadow-brand-400/25"
             : "bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-slate-300",
         )}">${icon({
           name: highlight ? "RocketLaunch" : entry.unreleased ? "GitBranch" : "Tag",
@@ -234,7 +234,7 @@ export function metaRow({ items }) {
   const cells = items
     .map(
       (item) => `<div class="flex items-center gap-3 px-5 py-4">
-        <span class="inline-flex size-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-700 dark:bg-white/10 dark:text-slate-200">${icon({ name: item.icon, size: 18 })}</span>
+        <span class="inline-flex size-10 shrink-0 items-center justify-center rounded-xl border border-cyan-400/30 bg-cyan-400/10 text-cyan-700 dark:border-brand-400/35 dark:bg-brand-400/10 dark:text-brand-300">${icon({ name: item.icon, size: 18 })}</span>
         <span class="grid">
           <span class="text-[11px] font-bold tracking-[0.16em] text-slate-600 uppercase dark:text-slate-400">${esc(item.label)}</span>
           <span class="font-mono text-base font-bold">${esc(item.value)}</span>
@@ -243,7 +243,7 @@ export function metaRow({ items }) {
     )
     .join("");
 
-  return `<div class="grid divide-y divide-slate-200 overflow-hidden rounded-2xl border border-slate-200 bg-white sm:grid-cols-3 sm:divide-x sm:divide-y-0 dark:divide-white/10 dark:border-white/10 dark:bg-white/[0.035]">${cells}</div>`;
+  return `<div class="grid divide-y divide-slate-200 overflow-hidden rounded-2xl border border-slate-200 bg-white sm:grid-cols-3 sm:divide-x sm:divide-y-0 dark:divide-white/10 dark:border-white/10 dark:bg-white/[0.04]">${cells}</div>`;
 }
 
 /**
@@ -266,7 +266,7 @@ export function dependencyTable({ title, items, nameColumn, versionColumn }) {
     )
     .join("");
 
-  return `<div class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-white/[0.025]">
+  return `<div class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
     <p class="m-0 border-b border-slate-200 px-4 py-3 text-sm font-semibold dark:border-white/10">${esc(title)}</p>
     <table class="w-full">
       <thead class="text-[11px] tracking-wide text-slate-500 uppercase dark:text-slate-400">

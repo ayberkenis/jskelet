@@ -40,7 +40,7 @@ function redisScene(story) {
       key: "edge",
       title: "Edge",
       subtitle: "Cloudflare",
-      tone: "from-sky-400/25 to-indigo-400/5 border-sky-400/35",
+      tone: "from-brand-400/25 to-brand-500/5 border-brand-400/35",
     },
   ];
 

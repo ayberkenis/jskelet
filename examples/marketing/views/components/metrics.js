@@ -22,8 +22,8 @@ export function statCard({ value, label, note, tone = "plain" }) {
   return `<div class="${cn(
     "rounded-2xl border p-6 shadow-sm",
     tone === "sky"
-      ? "border-cyan-200 bg-gradient-to-br from-cyan-50 to-white dark:border-cyan-500/30 dark:from-cyan-500/10 dark:to-white/[0.03]"
-      : "border-slate-200 bg-white dark:border-white/10 dark:bg-white/[0.035]",
+      ? "border-cyan-200 bg-gradient-to-br from-cyan-50 to-white dark:border-brand-400/30 dark:from-brand-400/10 dark:to-white/[0.03]"
+      : "border-slate-200 bg-white dark:border-white/10 dark:bg-white/[0.04]",
   )}">
     <p class="m-0 font-mono text-3xl font-bold tracking-tight tabular-nums">${esc(value)}</p>
     <p class="mt-1 m-0 text-sm font-medium">${esc(label)}</p>
@@ -68,7 +68,7 @@ export function payloadTable({ payload, labels }) {
       </tr>`
     : "";
 
-  return `<div class="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-white/[0.025]">
+  return `<div class="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
     <table class="w-full text-sm">
       <caption class="border-b border-slate-200 px-4 py-3 text-left text-xs/5 text-slate-600 dark:border-white/10 dark:text-slate-400">${esc(labels.caption)}</caption>
       <thead class="text-xs tracking-wide text-slate-500 uppercase dark:text-slate-400">
@@ -100,7 +100,7 @@ export function barGroup({ items, max }) {
       const fill =
         item.tone === "bad"
           ? "bg-rose-400/80 dark:bg-rose-500/70"
-          : "bg-sky-500 dark:bg-sky-400";
+          : "bg-brand-500 dark:bg-brand-400";
 
       return `<li class="grid gap-1.5">
         <div class="flex items-baseline justify-between gap-4 text-sm">
@@ -153,7 +153,7 @@ export function weightContrast({ ours, next }) {
 function weightPanel(panel, ceiling, tone) {
   const shell =
     tone === "good"
-      ? "border-cyan-200/80 dark:border-cyan-400/25"
+      ? "border-cyan-200/80 dark:border-brand-400/30"
       : "border-rose-200/80 dark:border-rose-400/25";
   const badge =
     tone === "good"
@@ -161,7 +161,7 @@ function weightPanel(panel, ceiling, tone) {
       : "bg-amber-500/15 text-amber-900 dark:text-amber-100";
   const fill =
     tone === "good"
-      ? "bg-sky-500 dark:bg-sky-400"
+      ? "bg-brand-500 dark:bg-brand-400"
       : "bg-rose-400/80 dark:bg-rose-500/70";
   const percent = Math.max(2, Math.round((panel.totalGzip / ceiling) * 100));
 
@@ -174,7 +174,7 @@ function weightPanel(panel, ceiling, tone) {
     )
     .join("");
 
-  return `<article class="${cn("rounded-2xl border bg-white p-6 shadow-sm dark:bg-white/[0.035]", shell)}">
+  return `<article class="${cn("rounded-2xl border bg-white p-6 shadow-sm dark:bg-white/[0.04]", shell)}">
     <div class="flex flex-wrap items-center justify-between gap-2">
       <h3 class="m-0 text-sm font-semibold tracking-tight">${esc(panel.label)}</h3>
       <span class="${cn("rounded-full px-2.5 py-0.5 text-[10px] font-bold tracking-wider uppercase", badge)}">${esc(panel.badge)}</span>

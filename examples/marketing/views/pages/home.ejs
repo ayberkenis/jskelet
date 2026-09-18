@@ -19,27 +19,25 @@
 
       <h1 class="mt-6 text-5xl font-bold tracking-[-0.055em] text-balance sm:text-6xl lg:text-7xl">
         <%= t.home.headline %><br>
-        <span class="bg-gradient-to-r from-cyan-700 via-sky-700 to-indigo-700 bg-clip-text text-transparent dark:from-cyan-300 dark:via-sky-300 dark:to-indigo-300"><%= t.home.headlineAccent %></span>
+        <span class="text-brand-500 dark:text-brand-400"><%= t.home.headlineAccent %></span>
       </h1>
 
       <p class="mt-6 max-w-xl text-lg/8 text-slate-600 sm:text-xl/8 dark:text-slate-300">
         <%= t.home.lead %>
       </p>
 
-      <div class="mt-9 flex flex-wrap gap-3">
+      <div class="mt-9 flex flex-wrap items-center gap-3">
         <%- buttonLink({ href: paths.howItWorks, text: t.home.ctaPrimary, icon: "ArrowRight" }) %>
-        <%- buttonLink({
-          href: paths.download,
-          text: format(t.home.ctaSecondary, release.version),
-          variant: "ghost",
-          icon: "DownloadSimple",
+        <%- commandChip({
+          command: commands.init,
+          copy: { idle: t.ui.copy, done: t.ui.copied, failed: t.ui.copyFailed },
         }) %>
       </div>
 
-      <div class="mt-9 flex flex-wrap gap-x-6 gap-y-3 text-xs font-semibold tracking-wide text-slate-600 uppercase dark:text-slate-400">
-        <% t.home.chips.forEach(function (chip, index) { %>
+      <div class="mt-9 flex flex-wrap gap-x-6 gap-y-3 text-sm font-medium text-slate-600 dark:text-slate-300">
+        <% t.home.chips.forEach(function (chip) { %>
         <span class="flex items-center gap-2">
-          <span class="size-1.5 rounded-full <%= ["bg-cyan-400", "bg-indigo-400", "bg-emerald-400"][index % 3] %>"></span>
+          <span class="inline-flex size-5 items-center justify-center rounded-full bg-brand-400/15 text-brand-500 dark:text-brand-300" aria-hidden="true"><%- icon({ name: "Check", size: 12 }) %></span>
           <%= chip %>
         </span>
         <% }); %>
@@ -48,8 +46,8 @@
 
     <%# Logo bir ürün görseli gibi merkezde; çevresindeki kartlar mimariyi tek bakışta anlatır. %>
     <div class="relative mx-auto min-h-[30rem] w-full max-w-xl" aria-label="<%= t.home.hero.diagramLabel %>">
-      <div class="absolute inset-8 rounded-[3rem] bg-gradient-to-br from-cyan-300/25 via-indigo-300/10 to-transparent blur-3xl" aria-hidden="true"></div>
-      <div class="absolute top-8 left-1/2 flex size-64 -translate-x-1/2 items-center justify-center rounded-[3rem] border border-white/70 bg-white/75 shadow-2xl shadow-cyan-950/10 backdrop-blur-xl dark:border-white/10 dark:bg-white/[0.06]">
+      <div class="absolute inset-8 rounded-[3rem] bg-gradient-to-br from-brand-400/30 via-brand-500/10 to-transparent blur-3xl" aria-hidden="true"></div>
+      <div class="absolute top-8 left-1/2 flex size-64 -translate-x-1/2 items-center justify-center rounded-[2rem] border border-cyan-400/20 bg-white/80 shadow-2xl shadow-brand-400/20 backdrop-blur-xl dark:border-brand-400/25 dark:bg-[#0a0f1c]/85">
         <img
           src="https://cdn.ayberkenis.com.tr/jskelet/jskelet.png"
           alt="<%= t.home.hero.logoAlt %>"
@@ -65,34 +63,66 @@
       </div>
 
       <div class="absolute top-40 right-0 rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-xl backdrop-blur dark:border-white/10 dark:bg-[#0c1124]/90">
-        <p class="m-0 text-[10px] font-bold tracking-[0.18em] text-slate-600 uppercase dark:text-slate-400"><%= t.home.hero.clientLabel %></p>
-        <p class="mt-1 mb-0 font-mono text-sm font-semibold text-cyan-700 dark:text-cyan-300"><%= t.home.hero.clientValue %></p>
+        <p class="m-0 text-[10px] font-bold tracking-[0.18em] text-slate-600 uppercase dark:text-slate-400"><%= t.home.hero.routesLabel %></p>
+        <p class="mt-1 mb-0 font-mono text-sm font-semibold text-cyan-700 dark:text-brand-300"><%= t.home.hero.routesValue %></p>
       </div>
 
-      <div class="absolute right-6 bottom-16 left-6 overflow-hidden rounded-3xl border border-slate-200 bg-[#090d1d] p-5 text-white shadow-2xl shadow-slate-950/25">
+      <%# Dekoratif el yazısı not — mockup'taki "It just works." %>
+      <div class="pointer-events-none absolute top-[13.5rem] left-2 z-10 hidden sm:block" aria-hidden="true">
+        <p class="hero-annotation m-0 dark:text-white text-slate-800"><%= t.home.hero.annotation %></p>
+        <svg class="hero-annotation-arrow mt-1 ml-10 dark:stroke-slate-200 stroke-slate-600" width="72" height="36" viewBox="0 0 72 36">
+          <path d="M4 4 C 28 6, 48 18, 62 30" />
+          <path d="M54 28 L62 30 L56 22" />
+        </svg>
+      </div>
+
+      <div class="absolute right-6 bottom-16 left-6 overflow-hidden rounded-3xl border border-slate-200 bg-[#090d1d] p-5 text-white shadow-2xl shadow-slate-950/25 dark:border-brand-400/15">
         <div class="mb-4 flex items-center gap-2 border-b border-white/10 pb-3">
           <span class="size-2 rounded-full bg-rose-400"></span>
           <span class="size-2 rounded-full bg-amber-300"></span>
           <span class="size-2 rounded-full bg-emerald-400"></span>
           <span class="ml-auto font-mono text-[10px] text-slate-500"><%= t.home.hero.terminalLabel %></span>
         </div>
-        <p class="m-0 font-mono text-xs/6 text-slate-300"><span class="text-cyan-300">$</span> <%= commands.init %></p>
+        <p class="m-0 font-mono text-xs/6 text-slate-300"><span class="text-brand-400">$</span> <%= commands.init %></p>
         <% t.home.hero.terminalLines.forEach(function (line) { %>
         <p class="m-0 font-mono text-xs/6 text-slate-300"><span class="text-emerald-300">✓</span> <%= line %></p>
         <% }); %>
-        <p class="m-0 font-mono text-xs/6 text-white"><span class="text-indigo-300">→</span> http://localhost:3000</p>
+        <p class="m-0 font-mono text-xs/6 text-white"><span class="text-brand-300">→</span> http://localhost:3000</p>
       </div>
     </div>
   </div>
 
-  <div class="overflow-hidden border-t border-slate-200/80 bg-white/40 py-3 dark:border-white/10 dark:bg-white/[0.02]">
-    <div class="marquee-track flex w-max items-center gap-10 pr-10 text-xs font-bold tracking-[0.18em] text-slate-600 uppercase dark:text-slate-400">
-      <%# İki tur basılıyor: kaydırma yarıya geldiğinde başa dönmesi için. %>
-      <% for (let repeat = 0; repeat < 2; repeat += 1) { %>
-      <% t.home.marquee.forEach(function (item) { %>
-      <span><%= item %></span><span aria-hidden="true">◆</span>
-      <% }); %>
-      <% } %>
+  <div class="border-t border-slate-200/80 bg-white/50 py-8 dark:border-white/10 dark:bg-white/[0.025]">
+    <div class="wrapper">
+      <%- trustBar({
+        items: [
+          {
+            icon: "Package",
+            value: payload.total ? bytes(payload.total.gzip) : "—",
+            label: t.home.trust.runtimeLabel,
+          },
+          {
+            icon: "TextT",
+            value: t.home.trust.fontsValue,
+            label: t.home.trust.fontsLabel,
+          },
+          {
+            icon: "HardDrives",
+            value: release.nodeLabel,
+            label: t.home.trust.nodeLabel,
+          },
+          {
+            icon: "ShieldCheck",
+            value: release.license,
+            label: t.home.trust.licenseLabel,
+          },
+          {
+            icon: "Lightning",
+            value: t.home.trust.stackValue,
+            label: t.home.trust.stackLabel,
+          },
+        ],
+      }) %>
     </div>
   </div>
 </section>
@@ -153,11 +183,19 @@
       <ul class="mt-6 grid list-none gap-3 p-0 text-sm/6 text-slate-600 dark:text-slate-300">
         <% t.home.cache.points.forEach(function (point) { %>
         <li class="flex gap-2.5">
-          <span aria-hidden="true" class="<%= point.tone === "bad" ? "text-rose-700 dark:text-rose-300" : "text-cyan-700 dark:text-cyan-300" %>">→</span>
+          <span aria-hidden="true" class="<%= point.tone === "bad" ? "text-rose-700 dark:text-rose-300" : "text-brand-500 dark:text-brand-300" %>">→</span>
           <span><%= point.text %></span>
         </li>
         <% }); %>
       </ul>
+
+      <p class="mt-6 mb-0">
+        <%- link({
+          href: paths.docs,
+          html: `${esc(t.home.cache.docsLink)}${icon({ name: "ArrowRight", size: 14 })}`,
+          class: "inline-flex items-center gap-2 text-sm font-semibold text-cyan-700 hover:underline dark:text-brand-300",
+        }) %>
+      </p>
     </div>
 
     <%- codeBlock({
@@ -181,7 +219,7 @@
   </div>
 </section>
 
-<section class="relative isolate overflow-hidden border-y border-slate-200 bg-slate-950 py-16 text-white sm:py-24 dark:border-white/10">
+<section class="relative isolate overflow-hidden border-y border-slate-200 bg-ink-950 py-16 text-white sm:py-24 dark:border-white/10">
   <div class="ops-aurora pointer-events-none absolute inset-0 -z-10" aria-hidden="true"></div>
   <div class="wrapper">
     <div class="ops-head max-w-3xl">
@@ -232,7 +270,7 @@
     <p class="mt-8 text-sm text-slate-600 dark:text-slate-300">
       <%- format(
         esc(t.home.faq.more),
-        link({ href: paths.migrate, text: t.home.faq.moreLink, class: "font-semibold text-cyan-700 underline dark:text-cyan-300" }),
+        link({ href: paths.migrate, text: t.home.faq.moreLink, class: "font-semibold text-cyan-700 underline dark:text-brand-300" }),
       ) %>
     </p>
   </div>

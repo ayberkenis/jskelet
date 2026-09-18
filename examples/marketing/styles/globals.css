@@ -27,6 +27,17 @@ html.dark {
   color-scheme: dark;
 }
 
+/** Ortak yüzey: açıkta soft slate, koyuda ink üzerinde hafif cam. */
+.surface-band {
+  border-color: var(--color-slate-200);
+  background: var(--color-slate-50);
+}
+
+.dark .surface-band {
+  border-color: color-mix(in oklab, white 10%, transparent);
+  background: color-mix(in oklab, white 2%, transparent);
+}
+
 @theme inline {
   /**
    * Web font yok. Sistem yığını hiç istek üretmez ve FOUT/CLS riski taşımaz;
@@ -37,10 +48,11 @@ html.dark {
     Arial, sans-serif;
   --font-mono:
     ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
-  --color-brand-300: #8bf3ff;
-  --color-brand-400: #59dce9;
-  --color-brand-500: #22b8c7;
-  --color-ink-950: #070a16;
+  /** Mockup cyan: canlı aqua, koyu tuvalde birincil vurgu. */
+  --color-brand-300: #67e8f9;
+  --color-brand-400: #22d3ee;
+  --color-brand-500: #06b6d4;
+  --color-ink-950: #05080f;
 }
 
 /**
@@ -296,35 +308,130 @@ html.dark {
 
 /**
  * Hero arkasındaki ışık. Ayrı bir görsel yerine gradient: indirilecek bir
- * dosya olmadığı için LCP'ye hiç yazılmıyor.
+ * dosya olmadığı için LCP'ye hiç yazılmıyor. Cyan ağırlıklı; indigo yok.
  */
 .glow {
   background-image:
     radial-gradient(
-      52rem 32rem at 8% 5%,
-      color-mix(in oklab, var(--color-cyan-400) 20%, transparent),
-      transparent 72%
+      48rem 30rem at 12% 0%,
+      color-mix(in oklab, var(--color-brand-400) 22%, transparent),
+      transparent 70%
     ),
     radial-gradient(
-      48rem 34rem at 92% 8%,
-      color-mix(in oklab, var(--color-indigo-500) 24%, transparent),
-      transparent 72%
+      40rem 28rem at 88% 10%,
+      color-mix(in oklab, var(--color-brand-500) 14%, transparent),
+      transparent 68%
     );
 }
 
 /** İnce çizgiler teknik hissi verir; raster arka plan olmadığı için ücretsizdir. */
 .grid-surface {
   background-image:
-    linear-gradient(to right, rgb(148 163 184 / 0.08) 1px, transparent 1px),
-    linear-gradient(to bottom, rgb(148 163 184 / 0.08) 1px, transparent 1px);
-  background-size: 36px 36px;
-  mask-image: linear-gradient(to bottom, black 30%, transparent 92%);
+    linear-gradient(to right, rgb(34 211 238 / 0.06) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(34 211 238 / 0.06) 1px, transparent 1px);
+  background-size: 40px 40px;
+  mask-image: linear-gradient(to bottom, black 25%, transparent 90%);
+}
+
+.dark .grid-surface {
+  background-image:
+    linear-gradient(to right, rgb(34 211 238 / 0.09) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(34 211 238 / 0.09) 1px, transparent 1px);
 }
 
 /** Hero görselindeki hareket dekoratiftir ve düşük hareket tercihinde kapanır. */
 .logo-orbit {
   animation: logo-float 6s ease-in-out infinite;
-  filter: drop-shadow(0 28px 50px rgb(34 211 238 / 0.18));
+  filter: drop-shadow(0 0 40px rgb(34 211 238 / 0.35))
+    drop-shadow(0 28px 50px rgb(34 211 238 / 0.2));
+}
+
+/**
+ * Hero'daki el yazısı not. Web font yok: sistem cursive yığını + hafif
+ * eğim; LCP'ye yazılmaz.
+ */
+.hero-annotation {
+  font-family: "Segoe Script", "Apple Chancery", "Comic Sans MS", cursive;
+  font-size: 1.05rem;
+  line-height: 1.2;
+  color: white;
+  letter-spacing: 0.01em;
+  transform: rotate(-6deg);
+  text-shadow: 0 0 18px rgb(34 211 238 / 0.35);
+}
+
+.hero-annotation-arrow {
+  stroke: rgb(226 232 240);
+  fill: none;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 6px rgb(34 211 238 / 0.25));
+}
+
+/** Ölçümlü trust/stats şeridi — marquee yerine sabit, okunabilir satır. */
+.trust-bar {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (min-width: 640px) {
+  .trust-bar {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .trust-bar {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+
+.trust-bar-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.trust-bar-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 0.75rem;
+  border: 1px solid color-mix(in oklab, var(--color-brand-400) 35%, transparent);
+  background: color-mix(in oklab, var(--color-brand-400) 12%, transparent);
+  color: var(--color-brand-400);
+}
+
+.dark .trust-bar-icon {
+  border-color: color-mix(in oklab, var(--color-brand-400) 40%, transparent);
+  background: color-mix(in oklab, var(--color-brand-400) 14%, transparent);
+  color: var(--color-brand-300);
+}
+
+.trust-bar-value {
+  font-family: var(--font-mono);
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.trust-bar-label {
+  margin-top: 0.15rem;
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-slate-500);
+}
+
+.dark .trust-bar-label {
+  color: var(--color-slate-400);
 }
 
 .status-pulse {
@@ -381,6 +488,10 @@ html.dark {
   .marquee-track {
     animation: none;
     transition: none;
+  }
+
+  .hero-annotation {
+    transform: none;
   }
 }
 

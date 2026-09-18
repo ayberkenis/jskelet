@@ -11,6 +11,7 @@ const CASES = [
   // Varsayılan dil kökte.
   ["/", 200, /The skeleton of the web/],
   ["/", 200, /data-island="theme-toggle"/],
+  ["/", 200, /data-island="copy-command"/],
   ["/", 200, /hreflang="tr"/],
   ["/", 200, /lang="en"/],
   ["/how-it-works", 200, /five clear stops/],
@@ -24,6 +25,7 @@ const CASES = [
   // Kesme işareti şablonda `&#39;` olarak basılıyor; desen çıktıyı arıyor.
   ["/tr", 200, /Web&#39;in iskeleti/],
   ["/tr", 200, /lang="tr"/],
+  ["/tr", 200, /data-island="copy-command"/],
   ["/tr/how-it-works", 200, /beş net durak/],
   ["/tr/compare", 200, /data-island="latency"/],
   ["/tr/migrate", 200, /Next\.js bilginizi/],

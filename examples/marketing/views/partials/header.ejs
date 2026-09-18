@@ -1,5 +1,5 @@
 <header
-  class="sticky top-0 z-40 border-b border-slate-200/70 bg-white/80 backdrop-blur-xl dark:border-white/10 dark:bg-ink-950/80"
+  class="sticky top-0 z-40 border-b border-slate-200/70 bg-white/80 backdrop-blur-xl dark:border-white/10 dark:bg-ink-950/85"
 >
   <div class="wrapper flex items-center justify-between gap-3 py-3.5">
     <div class="flex items-center gap-3">
@@ -25,7 +25,7 @@
         href: paths.changelog,
         text: `v${release.version}`,
         title: t.ui.releaseLabel,
-        class: "hidden rounded-full border border-cyan-200 bg-cyan-50 px-2.5 py-1 font-mono text-xs font-bold text-cyan-800 transition-colors hover:border-cyan-400 sm:block dark:border-cyan-400/25 dark:bg-cyan-400/10 dark:text-cyan-200",
+        class: "hidden rounded-full border border-cyan-200 bg-cyan-50 px-2.5 py-1 font-mono text-xs font-bold text-cyan-800 transition-colors hover:border-brand-400 sm:block dark:border-brand-400/30 dark:bg-brand-400/10 dark:text-brand-300",
       }) %>
     </div>
 
@@ -38,7 +38,7 @@
           class: cn(
             "rounded-xl px-3 py-2 text-sm transition-colors",
             item.active
-              ? "bg-cyan-50 font-semibold text-cyan-800 dark:bg-cyan-400/10 dark:text-cyan-200"
+              ? "bg-cyan-50 font-semibold text-cyan-800 dark:bg-brand-400/10 dark:text-brand-300"
               : "text-slate-600 hover:bg-slate-100 hover:text-slate-950 dark:text-slate-300 dark:hover:bg-white/5 dark:hover:text-white",
           ),
         }) %>
@@ -55,16 +55,16 @@
         html: `${icon({ name: "Translate", size: 16 })}<span>${esc(language.short)}</span>`,
         attrs: { hreflang: language.locale, lang: language.locale },
         title: `${t.ui.languageSwitch}: ${language.label}`,
-        class: "inline-flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white/60 px-2.5 py-2 text-xs font-bold text-slate-700 transition-colors hover:border-cyan-400 hover:text-cyan-700 dark:border-white/15 dark:bg-white/5 dark:text-slate-200 dark:hover:border-cyan-300/50 dark:hover:text-cyan-200",
+        class: "inline-flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white/60 px-2.5 py-2 text-xs font-bold text-slate-700 transition-colors hover:border-brand-400 hover:text-cyan-700 dark:border-white/15 dark:bg-white/5 dark:text-slate-200 dark:hover:border-brand-400/50 dark:hover:text-brand-300",
       }) %>
       <% }); %>
 
       <%- link({
         href: "https://github.com/ayberkenis/jskelet",
-        html: `${icon({ name: "GithubLogo", size: 18 })}<span class="sr-only">${esc(t.ui.github)}</span>`,
+        html: `${icon({ name: "GithubLogo", size: 16 })}<span class="hidden sm:inline">${esc(t.ui.githubShort)}</span>`,
         rel: "noopener",
         title: t.ui.github,
-        class: "inline-flex items-center rounded-xl border border-slate-300 bg-white/60 p-2.5 text-slate-700 transition-colors hover:border-cyan-400 hover:text-cyan-700 dark:border-white/15 dark:bg-white/5 dark:text-slate-200 dark:hover:border-cyan-300/50 dark:hover:text-cyan-200",
+        class: "inline-flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white/60 px-2.5 py-2 text-sm font-medium text-slate-700 transition-colors hover:border-brand-400 hover:text-cyan-700 dark:border-white/15 dark:bg-white/5 dark:text-slate-200 dark:hover:border-brand-400/50 dark:hover:text-brand-300",
       }) %>
 
       <%#
@@ -86,7 +86,7 @@
       <%- link({
         href: paths.download,
         html: `${icon({ name: "DownloadSimple", size: 16 })}<span>${esc(t.ui.download)}</span>`,
-        class: "hidden items-center gap-2 rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-cyan-700 sm:inline-flex dark:bg-cyan-300 dark:text-slate-950 dark:hover:bg-white",
+        class: "hidden items-center gap-2 rounded-xl bg-brand-400 px-4 py-2.5 text-sm font-semibold text-ink-950 shadow-lg shadow-brand-400/20 transition-colors hover:bg-brand-300 sm:inline-flex",
       }) %>
 
       <button
@@ -113,7 +113,7 @@
       class: cn(
         "rounded-xl px-3 py-2.5 text-sm",
         item.active
-          ? "bg-cyan-50 font-semibold text-cyan-800 dark:bg-cyan-400/10 dark:text-cyan-200"
+          ? "bg-cyan-50 font-semibold text-cyan-800 dark:bg-brand-400/10 dark:text-brand-300"
           : "text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-white/5",
       ),
     }) %>
@@ -122,7 +122,7 @@
     <%- link({
       href: paths.download,
       text: t.ui.download,
-      class: "mt-1 rounded-xl bg-slate-950 px-3 py-2.5 text-center text-sm font-semibold text-white dark:bg-cyan-300 dark:text-slate-950",
+      class: "mt-1 rounded-xl bg-brand-400 px-3 py-2.5 text-center text-sm font-semibold text-ink-950",
     }) %>
   </nav>
 </header>

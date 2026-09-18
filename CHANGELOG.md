@@ -8,6 +8,13 @@ one is listed under a **Breaking** heading.
 
 ## [Unreleased]
 
+### Changed
+
+- Marketing example visual language: darker ink canvas, solid cyan primary
+  CTAs, cyan-only glow/grid (indigo accents removed), and a measured trust
+  bar on the homepage (payload gzip, Node, license, zero web fonts) instead
+  of the marquee.
+
 ### Added
 
 - Dynamic Open Graph images (Next.js `ImageResponse` / `opengraph-image`):

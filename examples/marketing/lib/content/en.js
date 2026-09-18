@@ -98,35 +98,36 @@ export default {
   },
 
   home: {
-    badge: "Open source · Node.js %s · %s",
+    badge: "Open source · Built for the modern web · Node.js %s · %s",
     headline: "The skeleton of the web.",
     headlineAccent: "Nothing more.",
-    lead: "Complete HTML arrives from the server. JavaScript wakes up only where you touch it. The cache has the page ready before your visitor asks for it.",
-    ctaPrimary: "Explore the flow",
+    lead: "A minimal, high-performance foundation for content sites. Complete HTML from the server, islands only where you touch, cache ready before the visitor asks.",
+    ctaPrimary: "Get started",
     ctaSecondary: "Download v%s",
-    chips: ["Express 5", ".jsk + Islands", "HTML TTL + Redis"],
-    marquee: [
-      "Complete HTML",
-      "Just enough JavaScript",
-      "Stale-while-revalidate",
-      "Redis L2 + pub/sub",
-      "Admin at /_jskelet/admin",
-      "Cloudflare purge",
-      "Zero React runtime",
-    ],
+    chips: ["Minimal footprint", "Lightning fast", "Built for developers"],
     hero: {
       diagramLabel: "The JSkelet request flow",
       logoAlt: "JSkelet logo",
       responseLabel: "Response",
       responseValue: "200 · HTML ready",
-      clientLabel: "Client",
-      clientValue: "island.mount()",
+      routesLabel: "Routes",
+      routesValue: "route() · TTL",
       terminalLabel: "terminal",
       terminalLines: ["route ready", "island ready"],
+      annotation: "It just works.",
+    },
+    trust: {
+      runtimeLabel: "Core payload (gzip)",
+      fontsLabel: "Web fonts",
+      fontsValue: "0",
+      nodeLabel: "Node.js",
+      licenseLabel: "Open source",
+      stackLabel: "Runtime",
+      stackValue: "Express 5",
     },
     pillars: {
-      eyebrow: "Lean architecture",
-      title: "Three layers. One fast experience.",
+      eyebrow: "Why JSkelet",
+      title: "A framework that gets out of your way.",
       lead: "The server prepares the content, the cache removes the waiting, and islands add only the behaviour a page actually needs.",
     },
     payload: {
@@ -151,8 +152,8 @@ export default {
         "If you want a comparable number, measure your own project the same way: a claim of being lightweight only means something once it is measured on your page.",
     },
     cache: {
-      eyebrow: "Uninterrupted flow",
-      title: "The old page ships instantly. The new one is built behind it.",
+      eyebrow: "Simple by design",
+      title: "Write less. Build more.",
       lead: "Stale-while-revalidate keeps visitors out of the render queue. One route, one TTL, predictable behaviour.",
       points: [
         {
@@ -173,6 +174,7 @@ export default {
         },
       ],
       codeLabel: "routes/10-pages.mjs",
+      docsLink: "View documentation",
     },
     ops: {
       eyebrow: "Ops you can see",
@@ -275,19 +277,19 @@ export default {
 
   pillars: [
     {
-      icon: "FileHtml",
-      title: "Content arrives ready",
-      body: "The browser never receives an empty shell. People and crawlers see the same complete HTML without waiting for JavaScript.",
-    },
-    {
-      icon: "Island",
-      title: "Behaviour wakes in place",
-      body: "A menu, a counter or a chart lives in its own island. Its module downloads only when it becomes visible; the rest of the page stays quiet.",
-    },
-    {
       icon: "Lightning",
-      title: "Waiting leaves the path",
-      body: "HTML is kept warm in memory. An expired page is served immediately while the fresh one is built behind it, so nobody queues for a render.",
+      title: "Minimal & Fast",
+      body: "Complete HTML from the server. No React runtime, no hydration waterfall — only the bytes a content page needs.",
+    },
+    {
+      icon: "Cube",
+      title: "Modular",
+      body: "A menu, a counter or a chart lives in its own island. Its module downloads only when it becomes visible.",
+    },
+    {
+      icon: "Code",
+      title: "Developer First",
+      body: "Plain async controllers, EJS templates and a small API. Readable without ceremony, replaceable without drama.",
     },
   ],
 

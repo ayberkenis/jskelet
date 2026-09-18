@@ -92,35 +92,36 @@ export default {
   },
 
   home: {
-    badge: "Açık kaynak · Node.js %s · %s",
+    badge: "Açık kaynak · Modern web için · Node.js %s · %s",
     headline: "Web'in iskeleti.",
     headlineAccent: "Fazlası değil.",
-    lead: "Tam HTML sunucudan gelir. JavaScript yalnızca dokunduğunuz yerde uyanır. Cache, ziyaretçiniz daha istemeden sayfayı hazırlar.",
-    ctaPrimary: "Akışı keşfet",
+    lead: "İçerik siteleri için yalın, yüksek performanslı bir temel. Tam HTML sunucudan gelir, island yalnızca dokunduğunuz yerde uyanır, cache ziyaretçi istemeden hazırdır.",
+    ctaPrimary: "Başla",
     ctaSecondary: "v%s sürümünü indir",
-    chips: ["Express 5", ".jsk + Island", "HTML TTL + Redis"],
-    marquee: [
-      "Sunucuda tam HTML",
-      "Gerektiği kadar JavaScript",
-      "Stale-while-revalidate",
-      "Redis L2 + pub/sub",
-      "Admin · /_jskelet/admin",
-      "Cloudflare purge",
-      "Sıfır React runtime",
-    ],
+    chips: ["Minimal ayak izi", "Şimşek hızında", "Geliştirici için"],
     hero: {
       diagramLabel: "JSkelet istek akışı",
       logoAlt: "JSkelet logosu",
       responseLabel: "Yanıt",
       responseValue: "200 · HTML hazır",
-      clientLabel: "Client",
-      clientValue: "island.mount()",
+      routesLabel: "Route'lar",
+      routesValue: "route() · TTL",
       terminalLabel: "terminal",
       terminalLines: ["route hazır", "island hazır"],
+      annotation: "Sadece çalışır.",
+    },
+    trust: {
+      runtimeLabel: "Çekirdek payload (gzip)",
+      fontsLabel: "Web font",
+      fontsValue: "0",
+      nodeLabel: "Node.js",
+      licenseLabel: "Açık kaynak",
+      stackLabel: "Çalışma zamanı",
+      stackValue: "Express 5",
     },
     pillars: {
-      eyebrow: "Yalın mimari",
-      title: "Üç katman. Tek bir hızlı deneyim.",
+      eyebrow: "Neden JSkelet",
+      title: "Yolunuzdan çekilen bir framework.",
       lead: "Sunucu içeriği hazırlar, cache beklemeyi kaldırır, island'lar yalnızca sayfanın gerçekten ihtiyaç duyduğu davranışı ekler.",
     },
     payload: {
@@ -144,8 +145,8 @@ export default {
         "Karşılaştırılabilir bir sayı istiyorsanız kendi projenizi aynı şekilde ölçün: bir aracın hafif olduğu iddiası, ancak sizin sayfanızda ölçüldüğünde bir şey ifade eder.",
     },
     cache: {
-      eyebrow: "Kesintisiz akış",
-      title: "Eski sayfa hemen gider. Yenisi arkada hazırlanır.",
+      eyebrow: "Tasarım gereği basit",
+      title: "Daha az yaz. Daha çok kur.",
       lead: "Stale-while-revalidate ziyaretçiyi render kuyruğundan çıkarır. Bir route, bir TTL, tahmin edilebilir davranış.",
       points: [
         {
@@ -166,6 +167,7 @@ export default {
         },
       ],
       codeLabel: "routes/10-pages.mjs",
+      docsLink: "Belgeleri gör",
     },
     ops: {
       eyebrow: "Görünen ops",
@@ -264,19 +266,19 @@ export default {
 
   pillars: [
     {
-      icon: "FileHtml",
-      title: "İçerik hazır gelir",
-      body: "Tarayıcı boş bir kabuk almaz. İnsanlar ve arama motorları, JavaScript beklemeden aynı eksiksiz HTML'i görür.",
-    },
-    {
-      icon: "Island",
-      title: "Hareket yerinde uyanır",
-      body: "Menü, sayaç veya grafik kendi island'ında yaşar. Modülü yalnızca görünür olduğunda iner; sayfanın geri kalanı sessiz kalır.",
-    },
-    {
       icon: "Lightning",
-      title: "Bekleme aradan çıkar",
-      body: "HTML bellekte sıcak tutulur. Süresi dolan sayfa hemen sunulur, yenisi arkada hazırlanır; kimse render kuyruğuna girmez.",
+      title: "Minimal ve hızlı",
+      body: "Tam HTML sunucudan. React runtime yok, hydration şelalesi yok — yalnızca bir içerik sayfasının ihtiyaç duyduğu baytlar.",
+    },
+    {
+      icon: "Cube",
+      title: "Modüler",
+      body: "Menü, sayaç veya grafik kendi island'ında yaşar. Modülü yalnızca görünür olunca iner.",
+    },
+    {
+      icon: "Code",
+      title: "Geliştirici odaklı",
+      body: "Düz async controller, EJS şablon ve küçük bir API. Tören olmadan okunur, drama olmadan değiştirilir.",
     },
   ],
 
