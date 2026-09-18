@@ -48,7 +48,7 @@ export function compareTable({ columns, rows }) {
     )
     .join("");
 
-  return `<div class="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-xl shadow-slate-950/5 dark:border-white/10 dark:bg-white/[0.04]">
+  return `<div class="glass-panel overflow-x-auto shadow-xl shadow-slate-950/5">
     <table class="w-full min-w-[52rem] border-collapse">
       <thead class="bg-slate-50 dark:bg-white/[0.04]">
         <tr><th scope="col" class="compare-sticky bg-slate-50 px-4 py-3 text-left text-xs font-semibold tracking-wide uppercase dark:bg-ink-950">Ölçüt</th>${head}</tr>
@@ -66,10 +66,10 @@ export function fitList({ title, items, tone }) {
   const mark = tone === "good" ? "+" : "−";
   const color =
     tone === "good"
-      ? "border-emerald-200 dark:border-emerald-500/30"
-      : "border-rose-200 dark:border-rose-500/30";
+      ? "border-emerald-300! dark:border-emerald-500/40!"
+      : "border-rose-300! dark:border-rose-500/40!";
 
-  return `<div class="${cn("rounded-2xl border bg-white p-7 shadow-sm dark:bg-white/[0.04]", color)}">
+  return `<div class="${cn("glass-panel p-7", color)}">
     <h3 class="m-0 text-lg font-semibold tracking-tight">${esc(title)}</h3>
     <ul class="mt-3 grid list-none gap-2 p-0 text-sm text-slate-700 dark:text-slate-200">
       ${items

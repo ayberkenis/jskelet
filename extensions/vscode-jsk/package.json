@@ -1,16 +1,20 @@
 {
   "name": "jsk",
   "displayName": "JSK",
-  "description": "Syntax highlighting and snippets for JSkelet .jsk templates.",
-  "version": "0.1.1",
+  "description": "Syntax highlighting, diagnostics, and snippets for JSkelet .jsk templates.",
+  "version": "0.2.0",
   "publisher": "ayberkenis",
   "license": "MIT",
+  "type": "module",
+  "main": "./extension.mjs",
+  "icon": "icons/jsk.png",
   "engines": {
     "vscode": "^1.85.0"
   },
   "categories": [
     "Programming Languages",
-    "Snippets"
+    "Snippets",
+    "Linters"
   ],
   "keywords": [
     "jsk",
@@ -27,6 +31,13 @@
   "bugs": {
     "url": "https://github.com/ayberkenis/jskelet/issues"
   },
+  "scripts": {
+    "vscode:prepublish": "node ./scripts/sync-compile.mjs",
+    "sync-compile": "node ./scripts/sync-compile.mjs"
+  },
+  "activationEvents": [
+    "onLanguage:jsk"
+  ],
   "contributes": {
     "languages": [
       {
@@ -40,8 +51,8 @@
         ],
         "configuration": "./language-configuration.json",
         "icon": {
-          "light": "./icons/jsk-light.svg",
-          "dark": "./icons/jsk-dark.svg"
+          "light": "./icons/jsk-file.png",
+          "dark": "./icons/jsk-file.png"
         }
       }
     ],

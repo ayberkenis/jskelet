@@ -6,7 +6,9 @@ export default {
     sharedCookieRoots: [".investvio.com", ".localhost"],
   },
   auth: {
-    crossSubdomainHandoff: true,
+    crossSubdomainHandoff: {
+      allowedCookieNames: ["sid"],
+    },
   },
   cache: () => ({
     prewarm: { enabled: false },

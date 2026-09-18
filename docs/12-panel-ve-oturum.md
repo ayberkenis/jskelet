@@ -143,7 +143,9 @@ export default {
     sharedCookieRoots: [".investvio.com", ".localhost"],
   },
   auth: {
-    crossSubdomainHandoff: true, // POST /_jskelet/auth/handoff
+    crossSubdomainHandoff: {
+      allowedCookieNames: ["sid"], // zorunlu allowlist
+    },
   },
 };
 ```
@@ -207,15 +209,19 @@ okunur. Yazımdan sonra **read-back** yapılır; tarayıcı Domain'i reddettiyse
 
 `auth.crossSubdomainHandoff` açıkken:
 
-1. `POST /_jskelet/auth/handoff` `{ name, value, next }` → `{ url }` (`?handoff=` ekli)
+1. `POST /_jskelet/auth/handoff` `{ name, value, next }` → `{ url }` (`?handoff=` ekli).
+   Mint, CSRF middleware'inden **sonra** mount edilir; `name`
+   `allowedCookieNames` içinde ve RFC 6265 token olmalı.
 2. Hedef host'ta GET middleware bileti tek kullanımlık tüketir, cookie yazar
    (önce shared Domain, olmazsa host-only), `handoff` query'siz 303
 
 `next` yalnızca aynı `sharedCookieRoots` altındaki host'lara izinli. Bilet
-~60 sn, süreç belleğinde. JWT URL'ye konmaz.
+~60 sn, süreç belleğinde; bekleyen bilet ve IP başına mint sınırı vardır.
+JWT URL'ye konmaz.
 
 `window.name` köprüsü cookie'siz yedek: kaynakta `handoffViaWindowName`,
-hedeefte `consumeWindowNameHandoff`.
+hedeefte `consumeWindowNameHandoff`. Cross-origin tab'da `window.name`
+okunabilir kalır — mümkünse sunucu handoff tercih edin.
 
 ## CSRF
 

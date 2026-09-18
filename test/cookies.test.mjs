@@ -10,8 +10,17 @@ import { test } from "node:test";
 
 process.env.JSKELET_SECRET = "test-sirri";
 
-const { clearCookie, getSignedCookie, parseCookies, randomToken, safeEqual, serializeCookie, setCookie, setSignedCookie } =
-  await import("../src/http/cookies.js");
+const {
+  clearCookie,
+  getSignedCookie,
+  isValidCookieName,
+  parseCookies,
+  randomToken,
+  safeEqual,
+  serializeCookie,
+  setCookie,
+  setSignedCookie,
+} = await import("../src/http/cookies.js");
 
 /** @param {string} [cookieHeader] */
 function createRequest(cookieHeader) {
@@ -118,4 +127,12 @@ test("randomToken url-güvenli ve benzersiz", () => {
 
   assert.notEqual(a, b);
   assert.match(a, /^[A-Za-z0-9_-]+$/);
+});
+
+test("geçersiz cookie adı reddedilir", () => {
+  assert.equal(isValidCookieName("sid"), true);
+  assert.equal(isValidCookieName("a;b"), false);
+  assert.equal(isValidCookieName("a b"), false);
+  assert.equal(isValidCookieName("a\nb"), false);
+  assert.throws(() => serializeCookie("a;b", "x"), /invalid cookie name/);
 });

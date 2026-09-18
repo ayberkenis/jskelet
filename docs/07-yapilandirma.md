@@ -51,7 +51,7 @@ export default {
     lang: "tr",
   },
 
-  layout: "views/layout.ejs",
+  layout: "views/layout.jsk",
   routes: ["./routes/10-pages.mjs", "./routes/99-catch-all.mjs"],
   trailingSlash: false,
 
@@ -208,26 +208,32 @@ session id taşımak için handoff köprüsünü açar.
 
 | Alan | Tip | Varsayılan | Anlamı |
 | --- | --- | --- | --- |
-| `crossSubdomainHandoff` | `boolean \| object` | `false` | `true` veya `{ ttlSeconds?, path?, maxValueBytes? }` → `POST /_jskelet/auth/handoff` + `?handoff=` redeem |
+| `crossSubdomainHandoff` | `boolean \| object` | `false` | Açıkken `POST /_jskelet/auth/handoff` + `?handoff=` redeem. Object: `allowedCookieNames` (zorunlu), `ttlSeconds?`, `path?`, `maxValueBytes?`, `maxPendingTickets?`, `maxMintsPerIpPerMinute?` |
 
 ```js
 auth: {
-  crossSubdomainHandoff: { ttlSeconds: 60 },
+  crossSubdomainHandoff: {
+    allowedCookieNames: ["sid"],
+    ttlSeconds: 60,
+  },
 },
 ```
 
-Ayrıntı ve `window.name` yedeği: [12-panel-ve-oturum.md](./12-panel-ve-oturum.md).
+Mint uç noktası CSRF middleware'inden **sonra** mount edilir (origin kontrolü).
+Cookie adı allowlist dışındaysa veya RFC 6265 token değilse 400. Ayrıntı:
+[12-panel-ve-oturum.md](./12-panel-ve-oturum.md).
 
 ## `layout`
 
 **Tip:** `string` — **Varsayılan:** yok (otomatik çözüm)
 
-Layout `.ejs` dosyasının yolu. Verilen değer **views dizininin üst dizinine**
-göre çözülür, yani varsayılan `views` ile `"views/ozel.ejs"` →
-`<root>/views/ozel.ejs`.
+Layout dosyasının yolu (`.jsk` veya legacy `.ejs`). Verilen değer **views
+dizininin üst dizinine** göre çözülür, yani varsayılan `views` ile
+`"views/ozel.jsk"` → `<root>/views/ozel.jsk`.
 
-Verilmezse sırayla: `views/layout.jsk`, `views/layout.ejs`, yoksa framework'ün
-minimal layout'u. Ayrıntı: [04-render-ve-sablonlar.md](./04-render-ve-sablonlar.md).
+Verilmezse sırayla: `views/layout.jsk`, `views/layout.ejs` (legacy), yoksa
+framework'ün `src/templates/layout.jsk` varsayılanı. Ayrıntı:
+[04-render-ve-sablonlar.md](./04-render-ve-sablonlar.md).
 
 ## `routes`
 
@@ -328,7 +334,7 @@ var.
 | `trustProxy` | `boolean` | `true` | Express'in `trust proxy` ayarı. Ters proxy arkasında doğru protokol ve istemci IP'si için gerekli. |
 | `cookieSecret` | `string \| null` | `null` | İmzalı cookie sırrı. Verilmezse `JSKELET_SECRET` okunur. |
 | `csrf.enabled` | `boolean` | `true` | Origin/`Sec-Fetch-Site` kontrolü. |
-| `csrf.token` | `boolean` | `false` | Çift gönderim token'ı katmanı. |
+| `csrf.token` | `boolean` | `false` | Çift gönderim token'ı katmanı. Cookie oturumlu formlarda **açın**. |
 | `csrf.allowedOrigins` | `string[]` | `[]` | Kendi host'umuzun yanında kabul edilen origin'ler. |
 | `csrf.exclude` | `string[]` | `[]` | Kontrolden muaf yollar; `source` desen sözdizimi. |
 | `csrf.cookieName` | `string` | `"csrf_token"` | Token cookie'sinin adı. |
@@ -336,14 +342,17 @@ var.
 | `csrf.headerName` | `string` | `"x-csrf-token"` | Token'ın kabul edildiği başlık. |
 
 `trustProxy` doğrudan internete açık bir sunucuda **kapatılmalı**: açıkken
-istemci kendi `X-Forwarded-For` başlığını uydurabilir ve rate limit ile audit
-log yanlış adresi görür.
+istemci kendi `X-Forwarded-For` / `X-Forwarded-Proto` / Host başlığını
+uydurabilir; rate limit, admin IP allowlist, Secure cookie ve cache `vary.host`
+yanlış adresi görür. Ters proxy (nginx, Caddy, Cloudflare) arkasındaysa `true`
+doğru varsayılandır.
 
 CSRF kontrolü yalnızca çapraz site olduğu **belli** olan istekleri reddeder —
 `Origin` uyuşmuyorsa ya da `Sec-Fetch-Site: cross-site` geldiyse. İkisi de yoksa
 istek geçer, çünkü tarayıcılar çapraz origin bir POST'ta `Origin`'i her zaman
-gönderirken webhook'lar hiç göndermez. Yine de tarayıcıdan gelmeyen uçları
-`csrf.exclude` listesine yazmak niyeti okunur kılıyor.
+gönderirken webhook'lar hiç göndermez. Cookie ile oturum açan panel/form
+uygulamalarında `csrf.token: true` + `csrfField()` ikinci katmandır; webhook
+uçlarını `csrf.exclude` listesine yazın.
 
 ## `navigation`
 
@@ -540,7 +549,9 @@ icons: {
 
 `false` verilirse görsel adımı hiç çalışmaz. Build adımı `sharp` gerektirir ve
 watch turunda hiç çalışmaz. Remote açıksa `sharp` **runtime**'da da gerekir;
-yoksa optimizer kaynak URL'ye 302 yönlendirir. Ayrıntı: [08-build.md](./08-build.md).
+yoksa optimizer kaynak URL'ye 302 yönlendirir. Fetch, redirect'leri otomatik
+takip etmez: her hop `allowHosts` ve private adres kontrolünden geçer.
+Ayrıntı: [08-build.md](./08-build.md).
 
 ```js
 images: {
@@ -573,6 +584,9 @@ clientEnv: ["PUBLIC_WS_URL", "PUBLIC_CDN_ORIGIN"]
 ```
 
 **Buraya gizli anahtar koymayın** — değerler bundle'da düz metin olarak durur.
+İsimlerinde `SECRET`, `PASSWORD`, `TOKEN`, `API_KEY`, `PRIVATE` vb. geçen
+anahtarlar build sırasında **reddeder** (`PUBLIC` / `PUBLISHABLE` içerenler
+muaf).
 
 ## `headers()`
 
@@ -581,7 +595,8 @@ clientEnv: ["PUBLIC_WS_URL", "PUBLIC_CDN_ORIGIN"]
 
 Yol desenine göre yanıt başlıkları. Framework yalnızca statik dosyalara uzun
 ömürlü cache yazar; bunun dışındaki her başlık (CSP, COOP, HSTS,
-X-Frame-Options…) buradan gelir ve varsayılanların üstüne biner.
+X-Frame-Options…) buradan gelir ve varsayılanların üstüne biner. Üretim
+sitelerinde en azından aşağıdaki güvenlik başlıklarını tanımlayın.
 
 Eşleşen **tüm** kurallar uygulanır (redirect'lerin aksine ilk eşleşmede
 durulmaz), sırayla; aynı başlığı iki kural yazarsa sonraki kazanır.
@@ -596,11 +611,18 @@ async headers() {
       source: "/:path*",
       headers: [
         { key: "X-Frame-Options", value: "SAMEORIGIN" },
+        { key: "X-Content-Type-Options", value: "nosniff" },
         { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
         {
-          key: "Content-Security-Policy",
-          value: "default-src 'self'; img-src 'self' https://cdn.ornek.com data:",
+          key: "Permissions-Policy",
+          value: "camera=(), microphone=(), geolocation=()",
         },
+        {
+          key: "Content-Security-Policy",
+          value: "default-src 'self'; img-src 'self' https://cdn.ornek.com data:; script-src 'self'",
+        },
+        // Yalnızca HTTPS terminasyonu sizin kontrolünüzdeyse:
+        // { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains" },
       ],
     },
     {
@@ -1081,7 +1103,7 @@ basılmaz.
 | Değişken | Kim okur | Varsayılan | Anlamı |
 | --- | --- | --- | --- |
 | `NODE_ENV` | her yer | `production` (start/build), `development` (dev) | Dev overlay, EJS cache, manifest yeniden okuma, route hata davranışı ve prewarm varsayılanlarını belirler. `jskelet dev` bunu kendisi ayarlar — `cross-env` gerekmez. |
-| `PORT` | `startServer` | `3000` | Dinlenecek port |
+| `PORT` | `startServer` | `3000` | Dinlenecek port. Doluysa süreç başlamaz; `jskelet start|dev --murder` dinleyiciyi öldürür |
 | `HOST` | `startServer` | `::` | Bağlanılacak arayüz. Varsayılan çift yığın dinler (IPv6 + IPv4); IPv6 yoksa `0.0.0.0`'a düşer |
 | `JSKELET_SECRET` | `jskelet/cookies` | — | İmzalı cookie sırrı. `security.cookieSecret` verilmediğinde buradan okunur; ikisi de yoksa imzalı cookie API'si hata verir. [12](./12-panel-ve-oturum.md) |
 | `DEV_TOKEN` | `devGate`, `prewarm` | — | Ayarlıysa token taşımayan her isteğe 404 döner. Isıtma token'ı çerez olarak taşır. [09](./09-dev-araclari.md) |

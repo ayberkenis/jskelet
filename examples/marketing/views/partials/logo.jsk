@@ -1,0 +1,9 @@
+{# Sabit ölçüler ilk boyamada alanı korur ve header'da CLS'i önler. #}
+<img
+  src="/logo.png"
+  alt=""
+  width="36"
+  height="36"
+  class="size-9 object-contain drop-shadow-sm"
+>
+<span class="tracking-[-0.03em]">JSkelet</span>

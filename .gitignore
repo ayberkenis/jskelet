@@ -5,3 +5,4 @@ examples/*/public/assets/
 examples/*/.jskelet/
 .env
 *.log
+.cursor/

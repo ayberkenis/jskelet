@@ -3,11 +3,10 @@ import { link } from "jskelet/tags";
 
 /**
  * `views/components/**` altındaki her named export otomatik olarak şablon
- * local'i olur; `<%- postCard({ post }) %>` doğrudan çalışır.
+ * local'i olur; `.jsk` içinde `<PostCard :post="post" />` olarak çağrılır.
  *
- * Bileşenler EJS şablonu değil, HTML string döndüren fonksiyonlardır. Bunun
- * pratik faydası: aynı bileşen bir sayfada, bir partial'da ve bir fragment
- * ucunda kullanılabilir; üçü de aynı çıktıyı üretir.
+ * Bileşenler EJS/JSK şablonu değil, HTML string döndüren fonksiyonlardır.
+ * Aynı bileşen sayfada, partial'da ve fragment ucunda kullanılabilir.
  *
  * @param {{ post: import('../../lib/posts.js').Post, class?: string }} props
  * @returns {string}
@@ -32,15 +31,15 @@ export function postCard({ post, class: className }) {
       class: "hover:underline",
     })}</h3>
     <p class="clamp-2 m-0 text-sm text-slate-600">${esc(post.excerpt)}</p>
-    ${tagList(post.tags)}
+    ${tagList({ tags: post.tags })}
   </article>`;
 }
 
 /**
- * @param {string[]} tags
+ * @param {{ tags: string[] }} props
  * @returns {string}
  */
-export function tagList(tags) {
+export function tagList({ tags }) {
   if (!tags?.length) return "";
 
   const items = tags
@@ -54,6 +53,37 @@ export function tagList(tags) {
     .join("");
 
   return `<div class="flex flex-wrap gap-3">${items}</div>`;
+}
+
+/**
+ * Fragment ve ana sayfa sekmeleri için yazı satırları. `.jsk` ifadesinde
+ * şablon literal / filter olmadığı için href burada kurulur.
+ *
+ * @param {{ posts: import('../../lib/posts.js').Post[] }} props
+ * @returns {string}
+ */
+export function postRows({ posts }) {
+  const list = posts ?? [];
+  if (!list.length) {
+    return `<ul class="m-0 divide-y divide-slate-200 p-0">
+  <li class="list-none py-3 text-sm text-slate-500">Bu etikette yazı yok.</li>
+</ul>`;
+  }
+
+  const items = list
+    .map(
+      (post) => `<li class="list-none py-3">
+    ${link({
+      href: `/blog/${post.slug}`,
+      text: post.title,
+      class: "font-medium hover:underline",
+    })}
+    <p class="clamp-2 m-0 mt-1 text-sm text-slate-500">${esc(post.excerpt)}</p>
+  </li>`,
+    )
+    .join("");
+
+  return `<ul class="m-0 divide-y divide-slate-200 p-0">${items}</ul>`;
 }
 
 /**

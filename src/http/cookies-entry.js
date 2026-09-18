@@ -4,6 +4,7 @@
 export {
   clearCookie,
   getSignedCookie,
+  isValidCookieName,
   parseCookies,
   randomToken,
   safeEqual,

@@ -11,13 +11,28 @@ export default function register(app, { route, redirect }) {
     "/",
     route(async () => {
       const posts = getPosts();
+      const tags = getTags();
+
+      // `.jsk` ifadelerinde slice/filter/include-locals yok; hazır veri gider.
+      const featuredPosts = posts.slice(0, 2);
+      const tagPanels = tags.map((tag, index) => ({
+        tag,
+        active: index === 0,
+        hidden: index !== 0,
+        tabSrc:
+          index === 0 ? null : `/_fragment/posts-by-tag?tag=${encodeURIComponent(tag)}`,
+        posts:
+          index === 0
+            ? posts.filter((post) => post.tags.includes(tag))
+            : [],
+      }));
 
       return {
         view: "pages/home",
         metadata: { title: "Ana sayfa", canonical: "/" },
         // `head` sayfaya özel `<head>` içeriği: LCP görselinin preload'ı
         // buraya konur, çünkü preconnect'ten sonra en erken yer burası.
-        data: { posts, tags: getTags() },
+        data: { featuredPosts, tags, tagPanels },
       };
     }),
   );

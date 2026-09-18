@@ -1138,7 +1138,7 @@ function resolveLayout(dirs, override) {
   const appLayout = path.join(dirs.views, "layout.ejs");
   if (fs.existsSync(appLayout)) return appLayout;
 
-  return path.join(FRAMEWORK_ROOT, "src", "templates", "layout.ejs");
+  return path.join(FRAMEWORK_ROOT, "src", "templates", "layout.jsk");
 }
 
 /**

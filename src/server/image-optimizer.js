@@ -8,8 +8,13 @@
  *
  * sharp yoksa 302 ile orijinale yönlendirilir — sayfa bozulmaz, tasarruf
  * olmaz. Deployment notu: remote açıksa sharp runtime bağımlılığıdır.
+ *
+ * Fetch redirect'leri elle takip edilir: her hop allowlist + blocked-address
+ * (ve mümkünse DNS çözümü) ile yeniden doğrulanır — açık redirect SSRF'sini
+ * kapatmak için `redirect: "follow"` kullanılmaz.
  */
 import crypto from "node:crypto";
+import dns from "node:dns/promises";
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
@@ -21,6 +26,8 @@ let sharpModule;
 
 /** @type {string | null} */
 let cacheDir = null;
+
+const MAX_REDIRECTS = 5;
 
 /**
  * @returns {import('../config/index.js').ImagesRemoteConfig | null}
@@ -49,11 +56,43 @@ export function parseAllowedRemoteUrl(src) {
     return null;
   }
 
-  if (url.protocol !== "http:" && url.protocol !== "https:") return null;
-  if (!isHostAllowed(url.hostname, remote.allowHosts)) return null;
-  if (isBlockedAddress(url.hostname)) return null;
-
+  if (!isRemoteUrlShapeAllowed(url, remote.allowHosts)) return null;
   return url;
+}
+
+/**
+ * Host allowlist + literal private IP; redirect hop'larında da kullanılır.
+ *
+ * @param {URL} url
+ * @param {string[]} allowHosts
+ * @returns {boolean}
+ */
+export function isRemoteUrlShapeAllowed(url, allowHosts) {
+  if (url.protocol !== "http:" && url.protocol !== "https:") return false;
+  if (!isHostAllowed(url.hostname, allowHosts)) return false;
+  if (isBlockedAddress(url.hostname)) return false;
+  return true;
+}
+
+/**
+ * Hostname'i çözümleyip private IP'ye düşüyorsa reddet (DNS rebinding
+ * savunması; TOCTOU kalır ama check-time private resolve yakalanır).
+ *
+ * @param {string} hostname
+ * @returns {Promise<boolean>} true = güvenli
+ */
+export async function assertResolvedHostSafe(hostname) {
+  if (isBlockedAddress(hostname)) return false;
+  try {
+    const results = await dns.lookup(hostname, { all: true, verbatim: true });
+    if (!results.length) return false;
+    for (const { address } of results) {
+      if (isBlockedAddress(address)) return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -257,6 +296,8 @@ async function handleOptimize(req, res, remote) {
 }
 
 /**
+ * Redirect'leri elle takip eder; her hop allowlist + DNS private kontrolünden geçer.
+ *
  * @param {string} href
  * @param {import('../config/index.js').ImagesRemoteConfig} remote
  * @returns {Promise<{ ok: true, buffer: Buffer } | { ok: false }>}
@@ -266,30 +307,57 @@ async function fetchUpstream(href, remote) {
   const timer = setTimeout(() => controller.abort(), remote.fetchTimeoutMs);
 
   try {
-    const response = await fetch(href, {
-      signal: controller.signal,
-      redirect: "follow",
-      headers: {
-        // Bazı CDN'ler bot UA reddeder; tarayıcıya yakın tut.
-        Accept: "image/avif,image/webp,image/*,*/*;q=0.8",
-        "User-Agent": "jskelet-image-optimizer/1",
-      },
-    });
+    let current = href;
 
-    if (!response.ok) return { ok: false };
+    for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+      let url;
+      try {
+        url = new URL(current);
+      } catch {
+        return { ok: false };
+      }
 
-    const type = response.headers.get("content-type") ?? "";
-    if (type && !type.startsWith("image/") && !type.includes("octet-stream")) {
-      return { ok: false };
+      if (!isRemoteUrlShapeAllowed(url, remote.allowHosts)) return { ok: false };
+      if (!(await assertResolvedHostSafe(url.hostname))) return { ok: false };
+
+      const response = await fetch(url.href, {
+        signal: controller.signal,
+        redirect: "manual",
+        headers: {
+          // Bazı CDN'ler bot UA reddeder; tarayıcıya yakın tut.
+          Accept: "image/avif,image/webp,image/*,*/*;q=0.8",
+          "User-Agent": "jskelet-image-optimizer/1",
+        },
+      });
+
+      if (response.status >= 300 && response.status < 400) {
+        const location = response.headers.get("location");
+        if (!location) return { ok: false };
+        try {
+          current = new URL(location, url).href;
+        } catch {
+          return { ok: false };
+        }
+        continue;
+      }
+
+      if (!response.ok) return { ok: false };
+
+      const type = response.headers.get("content-type") ?? "";
+      if (type && !type.startsWith("image/") && !type.includes("octet-stream")) {
+        return { ok: false };
+      }
+
+      const length = Number(response.headers.get("content-length") ?? 0);
+      if (length > remote.maxBytes) return { ok: false };
+
+      const buffer = Buffer.from(await response.arrayBuffer());
+      if (buffer.byteLength > remote.maxBytes) return { ok: false };
+
+      return { ok: true, buffer };
     }
 
-    const length = Number(response.headers.get("content-length") ?? 0);
-    if (length > remote.maxBytes) return { ok: false };
-
-    const buffer = Buffer.from(await response.arrayBuffer());
-    if (buffer.byteLength > remote.maxBytes) return { ok: false };
-
-    return { ok: true, buffer };
+    return { ok: false };
   } catch {
     return { ok: false };
   } finally {

@@ -23,6 +23,11 @@ jskelet dev
 (suppresses the build banner) and, if a TTY is present, `JSKELET_COLOR=1`
 (forces color on piped output).
 
+If the listen port (`PORT`, default `3000`) is already taken, the server
+**does not start**; the error line includes the PID and a `--murder` hint.
+`jskelet dev --murder` kills the listener and binds the same port (for a
+process left running in another terminal).
+
 Startup order: banner → build steps → server ready → `Ready` summary. The
 summary is printed once both the build and the server are ready; otherwise it
 got buried among the build lines arriving afterwards.
@@ -75,7 +80,7 @@ WATCH_DIRS = [
 The `jskelet.config.mjs` file itself is watched as well: when the config
 changes, both the server and the build must come up with the new settings.
 
-Watched extensions: `.js`, `.mjs`, `.json`, `.ejs`.
+Watched extensions: `.js`, `.mjs`, `.json`, `.jsk`, `.ejs`.
 
 `views` is watched too, because most components live in
 `views/components/**.js` and, since those modules are imported into the server

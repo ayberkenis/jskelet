@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  assertResolvedHostSafe,
   clampWidth,
   isBlockedAddress,
   isHostAllowed,
+  isRemoteUrlShapeAllowed,
   srcsetWidths,
 } from "../src/server/image-optimizer.js";
 
@@ -26,6 +28,32 @@ test("isBlockedAddress rejects loopback and private IPv4", () => {
   assert.equal(isBlockedAddress("::1"), true);
   assert.equal(isBlockedAddress("static.investvio.dev"), false);
   assert.equal(isBlockedAddress("8.8.8.8"), false);
+});
+
+test("isRemoteUrlShapeAllowed rejects private redirect targets", () => {
+  const allow = ["cdn.example.com"];
+  assert.equal(
+    isRemoteUrlShapeAllowed(new URL("https://cdn.example.com/a.jpg"), allow),
+    true,
+  );
+  assert.equal(
+    isRemoteUrlShapeAllowed(new URL("http://169.254.169.254/latest"), allow),
+    false,
+  );
+  assert.equal(
+    isRemoteUrlShapeAllowed(new URL("http://127.0.0.1/x"), allow),
+    false,
+  );
+  assert.equal(
+    isRemoteUrlShapeAllowed(new URL("https://evil.com/x"), allow),
+    false,
+  );
+});
+
+test("assertResolvedHostSafe rejects literal private hosts", async () => {
+  assert.equal(await assertResolvedHostSafe("127.0.0.1"), false);
+  assert.equal(await assertResolvedHostSafe("169.254.169.254"), false);
+  assert.equal(await assertResolvedHostSafe("8.8.8.8"), true);
 });
 
 test("clampWidth respects max and falls back for bad input", () => {

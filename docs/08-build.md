@@ -167,8 +167,9 @@ etmezdi. Değişiklikler 120 ms birleştirilir.
 
 ## Client JS — esbuild
 
-`client/entries/*.js` içindeki her `.js` dosyası bir entry'dir. Dizin yoksa ya da
-boşsa adım atlanır.
+`client/entries/*.{js,ts,mts}` içindeki her kaynak dosya bir entry'dir (`.tsx`
+yok). Manifest anahtarı her zaman `*.js` olur (`main.ts` → `main.js`). Aynı stem
+için birden fazla uzantı build hatasıdır. Dizin yoksa ya da boşsa adım atlanır.
 
 esbuild ayarları:
 
@@ -178,7 +179,7 @@ esbuild ayarları:
 | `format` | `esm` | `type="module"` script'ler |
 | `target` | `chrome111`, `edge111`, `firefox111`, `safari16.4` | ESM + dinamik import + `IntersectionObserver` island modelinin alt sınırı; daha eskisine transpile etmek çıktıyı büyütüp hiçbir ziyaretçi kazandırmıyor |
 | `minify` | `true` | — |
-| `sourcemap` | `true` | Tarayıcıda teşhis |
+| `sourcemap` | yalnızca `NODE_ENV=development` | Prod'da `.map` dosyaları `public/assets` altında yayınlanmaz |
 | `entryNames` | `[name].[hash]` | `immutable` cache |
 | `chunkNames` | `chunks/[name].[hash]` | — |
 | `legalComments` | `none` | — |
@@ -189,16 +190,19 @@ esbuild ayarları:
 ### `@/` alias'ı
 
 esbuild tarafında `@/` proje köküne çözülür ve uzantı tamamlama yapılır
-(`.js`, `.mjs`, `.json`, `/index.js`). Node tarafındaki `alias-hooks.mjs` ile
-aynı davranış, böylece `lib/` altındaki modüller hem sunucuda hem tarayıcıda
-aynı import stilini kullanabilir.
+(`.js`, `.mjs`, `.ts`, `.mts`, `.json`, `/index.js`, `/index.ts`). Node
+`alias-hooks.mjs` sunucuda yalnızca `.js` / `.mjs` / `.json` çözer; paylaşılan
+`@/lib` dosyaları bu yüzden `.js` kalmalıdır. Client-only `.ts` import'ları
+esbuild hattında çalışır.
 
 ### `clientEnv` gömülmesi
 
 Tarayıcıda `process` yoktur; sunucuyla paylaşılan modüller yine de `process.env`
 okur. `config.clientEnv` ile bildirilen anahtarlar ve `NODE_ENV` build zamanında
 tek nesne olarak define edilir, yani listede olmayan bir anahtar okunduğunda
-çökme yerine `undefined` döner. Ayrıntı: [07-yapilandirma.md](./07-yapilandirma.md).
+çökme yerine `undefined` döner. İsimleri secret benzeri olan anahtarlar
+(`SECRET`, `API_KEY`, …) build'i düşürür; `PUBLIC` / `PUBLISHABLE` içerenler
+muaf. Ayrıntı: [07-yapilandirma.md](./07-yapilandirma.md).
 
 ### Manifest anahtarları
 
@@ -274,7 +278,7 @@ Yerel dosya adları:
   (Phosphor ve `icon()` ile uyum için önerilen kutu).
 - Taranan dizinler varsayılan olarak `views`, `client`, `routes`, `lib`,
   `features`, `shared`; `icons.scan` ile değiştirilebilir. Taranan uzantılar:
-  `.ejs`, `.jsk`, `.js`, `.mjs`.
+  `.ejs`, `.jsk`, `.js`, `.mjs`, `.ts`, `.mts`.
 - Ağırlıklar: `thin`, `light`, `regular`, `bold`, `fill`, `duotone`. Tanınmayan
   bir ağırlık `regular` sayılır.
 
@@ -339,7 +343,9 @@ orijinal dosyaya döner. Watch turunda hiç çalışmaz.
 `images.remote.allowHosts` verilirse `createApp` `/_jskelet/image` ucunu
 mount eder. CMS / CDN kapakları build'e girmediği için `image()` bu host'lardaki
 URL'leri `?url=&w=` biçiminde yeniden yazar; uç sharp ile webp üretir ve
-`.jskelet/image-cache/` altına yazar. Ayrıntı: [07-yapilandirma.md](./07-yapilandirma.md).
+`.jskelet/image-cache/` altına yazar. Upstream fetch redirect'leri elle takip
+edilir: her hop allowlist + private IP / DNS kontrolünden geçer (açık redirect
+SSRF kapalı). Ayrıntı: [07-yapilandirma.md](./07-yapilandirma.md).
 
 ## Precompress
 

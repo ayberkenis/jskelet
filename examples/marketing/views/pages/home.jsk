@@ -1,0 +1,208 @@
+{#
+  Ana sayfa. Sayfadaki her sayı ya sitenin kendi build çıktısından ölçülüyor
+  (`lib/payload.js`), ya kurulu paketin künyesinden okunuyor
+  (`lib/release.js`), ya da ziyaretçinin tarayıcısında ölçülüyor (`latency`
+  island'ı, kıyaslama sayfasında). Uydurma benchmark yok — bir framework'ün
+  pazarlama sayfasında en kolay kaybedilen şey güven.
+
+  Şablon dil bilmiyor: her metin `t` sözlüğünden, her bağlantı `paths`
+  haritasından geliyor.
+#}
+<section class="page-hero glow">
+  <div class="grid-surface pointer-events-none absolute inset-0 -z-10" aria-hidden="true"></div>
+  <div class="wrapper grid gap-14 py-20 sm:py-28 lg:grid-cols-[1.05fr_.95fr] lg:items-center lg:py-32">
+    <div>
+      <Pill :text="homeBadge" tone="sky" />
+
+      <h1 class="mt-6 text-5xl font-bold tracking-[-0.055em] text-balance sm:text-6xl lg:text-7xl">
+        {{ t.home.headline }}<br>
+        <span class="text-brand-500 dark:text-brand-400">{{ t.home.headlineAccent }}</span>
+      </h1>
+
+      <p class="mt-6 max-w-xl text-lg/8 text-slate-600 sm:text-xl/8 dark:text-slate-300">
+        {{ t.home.lead }}
+      </p>
+
+      <div class="mt-9 flex flex-wrap items-center gap-3">
+        <ButtonLink :href="paths.howItWorks" :text="t.home.ctaPrimary" icon="ArrowRight" />
+        <CommandChip :command="commands.init" :copy="copyLabels" />
+      </div>
+
+      <div class="mt-9 flex flex-wrap gap-x-6 gap-y-3 text-sm font-medium text-slate-600 dark:text-slate-300">
+        {#each t.home.chips as chip}
+        <span class="flex items-center gap-2">
+          <span class="inline-flex size-5 items-center justify-center rounded-full bg-brand-400/15 text-brand-500 dark:text-brand-300" aria-hidden="true"><Icon name="Check" :size="12" /></span>
+          {{ chip }}
+        </span>
+        {/each}
+      </div>
+    </div>
+
+    <HeroStack :diagramLabel="t.home.hero.diagramLabel" :logoAlt="t.home.hero.logoAlt" />
+  </div>
+
+  <div class="border-t border-slate-200/80 bg-white/50 py-8 dark:border-white/10 dark:bg-white/[0.03]">
+    <div class="wrapper">
+      <TrustBar :items="trustItems" />
+    </div>
+  </div>
+</section>
+
+<section class="wrapper py-16 sm:py-20">
+  <SectionHead :section="t.home.pillars" />
+
+  <div class="mt-10 grid gap-5 md:grid-cols-3">
+    {#each pillars as item, i}
+    <FeatureCard :item="item" :index="i + 1" />
+    {/each}
+  </div>
+</section>
+
+<section class="border-y border-slate-200 bg-slate-50 py-16 sm:py-20 dark:border-white/10 dark:bg-white/[0.02]">
+  <div class="wrapper">
+    <SectionHead :section="t.home.payload" />
+
+    <div class="mt-10 grid gap-8 lg:grid-cols-[1.15fr_1fr] lg:items-start">
+      <PayloadTable :payload="payload" :labels="t.payloadLabels" />
+
+      <div class="grid gap-4 sm:grid-cols-2">
+        <StatCard
+          :value="totalGzipLabel"
+          :label="t.home.payload.totalLabel"
+          :note="t.home.payload.totalNote"
+          tone="sky"
+        />
+        <StatCard
+          :value="t.home.payload.fontsValue"
+          :label="t.home.payload.fontsLabel"
+          :note="t.home.payload.fontsNote"
+        />
+        <StatCard
+          :value="t.home.payload.blockingValue"
+          :label="t.home.payload.blockingLabel"
+          :note="t.home.payload.blockingNote"
+        />
+        <StatCard
+          :value="t.home.payload.eagerValue"
+          :label="t.home.payload.eagerLabel"
+          :note="t.home.payload.eagerNote"
+        />
+      </div>
+    </div>
+
+    <p class="mt-6 max-w-2xl text-xs/5 text-slate-600 dark:text-slate-400">
+      {{ t.home.payload.footnote }}
+    </p>
+  </div>
+</section>
+
+<section class="wrapper py-16 sm:py-20">
+  <div class="grid gap-10 lg:grid-cols-2 lg:items-center">
+    <div>
+      <SectionHead :section="t.home.cache" />
+
+      <ul class="mt-6 grid list-none gap-3 p-0 text-sm/6 text-slate-600 dark:text-slate-300">
+        {#each t.home.cache.points as point}
+        <li class="flex gap-2.5">
+          <span aria-hidden="true" :class="point.tone === 'bad' ? 'text-rose-700 dark:text-rose-300' : 'text-brand-500 dark:text-brand-300'">→</span>
+          <span>{{ point.text }}</span>
+        </li>
+        {/each}
+      </ul>
+
+      <p class="mt-6 mb-0">
+        <a
+          :href="paths.docs"
+          class="inline-flex items-center gap-2 text-sm font-semibold text-cyan-700 hover:underline dark:text-brand-300"
+        >
+          {{ t.home.cache.docsLink }}
+          <Icon name="ArrowRight" :size="14" />
+        </a>
+      </p>
+    </div>
+
+    <CodeBlock :label="t.home.cache.codeLabel" :code="cacheCode" />
+  </div>
+</section>
+
+<section class="relative isolate overflow-hidden border-y border-slate-200 bg-ink-950 py-16 text-white sm:py-24 dark:border-white/10">
+  <div class="ops-aurora pointer-events-none absolute inset-0 -z-10" aria-hidden="true"></div>
+  <div class="wrapper">
+    <div class="ops-head max-w-3xl">
+      <SectionHead
+        :eyebrow="t.home.ops.eyebrow"
+        :title="t.home.ops.title"
+        :lead="t.home.ops.lead"
+      />
+    </div>
+
+    <div class="mt-10">
+      <OpsStory
+        :eyebrow="t.home.ops.eyebrow"
+        :title="t.home.ops.title"
+        :lead="t.home.ops.lead"
+        :tabsLabel="t.home.ops.tabsLabel"
+        :stories="t.home.ops.stories"
+      />
+    </div>
+  </div>
+</section>
+
+<section class="border-t border-slate-200 py-16 sm:py-20 dark:border-white/10">
+  <div class="wrapper">
+    <SectionHead :section="t.home.fit" />
+
+    <div class="mt-10 grid gap-5 md:grid-cols-2">
+      <FitList :title="t.fit.title.good" :items="fit.good" tone="good" />
+      <FitList :title="t.fit.title.bad" :items="fit.bad" tone="bad" />
+    </div>
+  </div>
+</section>
+
+<section class="border-t border-slate-200 py-16 sm:py-20 dark:border-white/10">
+  <div class="wrapper max-w-3xl">
+    <SectionHead :eyebrow="t.home.faq.eyebrow" :title="t.home.faq.title" />
+
+    <div class="mt-8 divide-y divide-slate-200 dark:divide-white/10">
+      {#
+        Native `<details>`: açılır kapanır liste için island yazmak, JS'siz de
+        çalışan bir davranışı JS'e bağımlı hâle getirmek olurdu.
+      #}
+      {#each faq as item}
+      <details class="group py-4">
+        <summary class="flex cursor-pointer items-center justify-between gap-4 text-sm font-semibold marker:content-['']">
+          {{ item.q }}
+          <span class="text-slate-500 transition-transform group-open:rotate-45 dark:text-slate-400" aria-hidden="true">+</span>
+        </summary>
+        <p class="mt-3 mb-0 text-sm/6 text-slate-600 dark:text-slate-300">{{ item.a }}</p>
+      </details>
+      {/each}
+    </div>
+
+    <p class="mt-8 text-sm text-slate-600 dark:text-slate-300">
+      <LinkedFormat
+        :template="t.home.faq.more"
+        :href="paths.migrate"
+        :text="t.home.faq.moreLink"
+        class="font-semibold text-cyan-700 underline dark:text-brand-300"
+      />
+    </p>
+  </div>
+</section>
+
+<section class="border-t border-slate-200 bg-slate-50 py-16 dark:border-white/10 dark:bg-white/[0.02]">
+  <div class="wrapper">
+    <div class="glass-panel glass-panel--lit flex flex-col items-start gap-6 p-8 sm:flex-row sm:items-center sm:justify-between">
+      <div>
+        <h2 class="m-0 text-2xl font-bold tracking-tight">{{ t.home.finalCta.title }}</h2>
+        <p class="mt-2 mb-0 text-sm/6 text-slate-600 dark:text-slate-300">
+          {{ t.home.finalCta.body }}
+        </p>
+      </div>
+      <div class="flex flex-wrap gap-3">
+        <ButtonLink :href="paths.download" :text="t.home.finalCta.primary" icon="DownloadSimple" />
+        <ButtonLink :href="paths.docs" :text="t.home.finalCta.secondary" variant="ghost" />
+      </div>
+    </div>
+  </div>
+</section>

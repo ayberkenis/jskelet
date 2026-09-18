@@ -118,25 +118,29 @@ Pratik sonucu: bir modal'ı `hidden` başlatabilirsiniz, island'ı yine bağlan�
 ```
 client/
 ├── entries/
-│   ├── main.js       her sayfada yüklenen ortak bootstrap
+│   ├── main.js       her sayfada yüklenen ortak bootstrap (veya main.ts)
 │   └── chart.js      yalnızca isteyen sayfalarda
 └── islands/
-    ├── counter.js
+    ├── counter.ts    .js veya .ts
     └── chart.js
 ```
 
-`client/entries/*.js` içindeki **her dosya bir esbuild entry'sidir**. `main.js`
-layout tarafından her sayfada yüklenir (manifest'te varsa). Ek entry'ler
-yalnızca onları isteyen sayfalarda yüklenir:
+`client/entries/*.{js,ts,mts}` içindeki **her dosya bir esbuild entry'sidir**.
+`main.js` (veya `main.ts`) layout tarafından her sayfada yüklenir (manifest'te
+varsa). Ek entry'ler yalnızca onları isteyen sayfalarda yüklenir. Aynı stem için
+iki uzantı (`main.js` + `main.ts`) build hatasıdır.
 
 ```js
-// controller
+// controller — manifest anahtarı her zaman *.js kalır
 return { view: "pages/markets", entries: ["chart.js"] };
 ```
 
 Layout `entries` dizisindeki her adı `asset(entry)` ile çözüp bir
-`<script type="module">` basar. Ad manifest anahtarıdır, yani dosya adının
-kendisi (`chart.js`), hash'li hâli değil.
+`<script type="module">` basar. Ad manifest anahtarıdır (`chart.js`), kaynak
+dosya `chart.ts` olsa bile hash'siz anahtar `.js` kalır.
+
+Paylaşılan `@/lib` modülleri sunucuda da import ediliyorsa **`.js` kalsın** —
+Node runtime `.ts` çözmez; `.ts` yalnızca esbuild client hattında derlenir.
 
 Kod bölme (`splitting: true`) açık: iki entry'nin paylaştığı modüller ortak bir
 chunk'a çıkar ve iki kez indirilmez.

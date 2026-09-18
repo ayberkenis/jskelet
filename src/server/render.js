@@ -1,5 +1,6 @@
 /**
- * EJS render katmanı + HTML TTL cache (ISR ikamesi).
+ * Render katmanı + HTML TTL cache (ISR ikamesi).
+ * Varsayılan şablon yolu derlenmiş `.jsk`; EJS opsiyonel legacy peer.
  *
  * Controller sözleşmesi:
  *   async (ctx) => { view, data?, metadata?, status?, revalidate?, head?,
@@ -16,10 +17,9 @@ import path from "node:path";
 import process from "node:process";
 import fs from "node:fs";
 import { pathToFileURL } from "node:url";
-import ejs from "ejs";
 import { withHtmlCache } from "./html-cache.js";
 import { buildVaryPrefix } from "./cache-vary.js";
-import { getConfig, hook } from "../config/index.js";
+import { getConfig, hook, FRAMEWORK_ROOT } from "../config/index.js";
 import { matchPattern } from "../config/pattern.js";
 import { encodeText, negotiateEncoding } from "./middleware/compression.js";
 import { navigationHints, preconnectHints } from "./head-hints.js";
@@ -48,15 +48,16 @@ import {
   getComponentDirs,
   getViewRoots,
 } from "../compile/index.js";
+import { renderEjsFile } from "./ejs-adapter.js";
 
 const isDev = process.env.NODE_ENV === "development";
 
 /**
- * Şablonlara otomatik geçen yardımcılar ve EJS ayarları. Bileşen taraması
- * dosya sistemine dokunduğu için bir kez yapılır; config yüklenmeden
+ * Şablonlara otomatik geçen yardımcılar ve (legacy) EJS ayarları. Bileşen
+ * taraması dosya sistemine dokunduğu için bir kez yapılır; config yüklenmeden
  * hesaplanamaz, bu yüzden ilk render'da kurulur.
  *
- * @type {{ helpers: Record<string, unknown>, options: ejs.Options,
+ * @type {{ helpers: Record<string, unknown>, options: Record<string, unknown>,
  *   viewsDir: string, viewRoots: string[], layout: string,
  *   compiled: Map<string, (data: object, helpers: object) => string>,
  *   layoutRender: ((data: object, helpers: object) => string) | null
@@ -89,6 +90,9 @@ async function getEngine() {
     Icon: (props) => tags.icon(props),
     CsrfField: () => tags.csrfField(),
     PreloadImage: (props) => tags.preloadImage(props),
+    Stylesheets: (props) => tags.stylesheets(props),
+    BodyScripts: (props) => tags.bodyScripts(props),
+    JsonLd: (props) => tags.jsonLd(props),
   };
 
   // camelCase JS bileşenlerini PascalCase etiket adıyla da erişilebilir yap.
@@ -99,7 +103,21 @@ async function getEngine() {
     if (!(pascal in helpers)) helpers[pascal] = value;
   }
 
-  const { compiled, layoutRender } = await loadCompiledTemplates(config, helpers);
+  const { compiled, layoutRender: appLayoutRender } = await loadCompiledTemplates(
+    config,
+    helpers,
+  );
+
+  // Yalnızca framework varsayılan layout'una düşüldüğünde hazır modülü kullan;
+  // uygulamanın kendi layout.jsk'si derlenmemişse sessizce framework'e kayma.
+  let layoutRender = appLayoutRender;
+  if (!layoutRender) {
+    const fwLayout = path.join(FRAMEWORK_ROOT, "src", "templates", "layout.jsk");
+    if (path.resolve(config.layout) === path.resolve(fwLayout)) {
+      const fw = await import("../templates/layout.render.js");
+      if (typeof fw.render === "function") layoutRender = fw.render;
+    }
+  }
 
   engine = {
     viewsDir,
@@ -212,7 +230,7 @@ export async function renderView(view, data = {}) {
   const file =
     findEjsView(viewRoots.length ? viewRoots : [viewsDir], view) ??
     path.join(viewsDir, `${view}.ejs`);
-  return ejs.renderFile(file, { ...helpers, ...data }, options);
+  return renderEjsFile(file, { ...helpers, ...data }, options);
 }
 
 /**
@@ -277,7 +295,7 @@ export async function renderPage(page) {
     );
   }
 
-  return ejs.renderFile(layout, locals, options);
+  return renderEjsFile(layout, locals, options);
 }
 
 /**

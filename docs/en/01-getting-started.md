@@ -255,11 +255,12 @@ ESM resolve hooks (`--import`) at process start.
 
 | Command | What it does |
 | --- | --- |
-| `jskelet dev` | Build watch + server, in a single terminal. Live reload, CSS hot-swap, dev overlay. `NODE_ENV=development`. |
+| `jskelet dev` | Build watch + server, in a single terminal. Live reload, CSS hot-swap, dev overlay. `NODE_ENV=development`. Refuses to start if the port is busy; `--murder` kills the listener and binds. |
 | `jskelet build` | One-shot prod build: fonts → icon sprite → CSS → client JS → images → manifest → precompress. `production` if `NODE_ENV` is not given. |
-| `jskelet start` | Prod server. If there is no build output it produces it first. `production` if `NODE_ENV` is not given. |
+| `jskelet start` | Prod server. If there is no build output it produces it first. `production` if `NODE_ENV` is not given. Same port behaviour as `dev` (`--murder`). |
 | `jskelet init` | Installs a feature-first `.jsk` skeleton into the current directory; leaves existing files alone. |
 | `jskelet generate` | Scaffolds a `feature` / `page` / `island`. |
+| `jskelet migrate` | Next.js App Router → JSkelet codemod (`scan` / `apply` / `config`). See [11-migration.md](./11-migration.md). |
 
 An unknown command, or a call with no arguments, prints the usage text.
 
@@ -287,7 +288,7 @@ only these specifiers:
 | `jskelet/tags` | `link`, `image`, `icon`, `preloadImage`, `toKebab` |
 | `jskelet/log` | Console output helpers (`banner`, `event`, `task`, `size`, `ms`, …) |
 | `jskelet/register` | Alias + extension hooks via `node --import jskelet/register` |
-| `jskelet/layout` | The path to the framework's default `layout.ejs` file |
+| `jskelet/layout` | The path to the framework's default `layout.jsk` file |
 
 ## What's next
 

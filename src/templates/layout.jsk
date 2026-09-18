@@ -1,0 +1,30 @@
+{#
+  JSkelet varsayılan layout'u.
+
+  Uygulama `views/layout.jsk` (veya legacy `views/layout.ejs`) oluşturduğu
+  anda bu dosya devre dışı kalır; amacı yeni bir projenin tek route ile
+  çalışabilmesi. Kopyalayıp başlangıç noktası olarak kullanın.
+
+  Kullanılabilir local'ler: metadata, headMeta, extraHead, structuredData,
+  body, bodyClass, entries, styles, pathname, lang, devtools, devBasePath,
+  asset, hasAsset + tüm html/tag helper'ları ve views/components/** export'ları.
+  `hooks.layoutContext()` döndürdüğü her alan da buraya eklenir.
+
+  Stylesheets / JsonLd / BodyScripts: `.jsk` ifade dilinde fonksiyon çağrısı
+  olmadığı için asset döngüleri bu yerleşik etiketlere taşındı.
+#}
+<!DOCTYPE html>
+<html :lang="lang">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    {{{ extraHead }}}
+    <Stylesheets :styles="styles" />
+    {{{ headMeta }}}
+    <JsonLd :items="structuredData" />
+  </head>
+  <body :class="bodyClass">
+    {{{ body }}}
+    <BodyScripts :entries="entries" :devtools="devtools" :devBasePath="devBasePath" />
+  </body>
+</html>

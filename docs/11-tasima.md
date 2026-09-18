@@ -7,6 +7,29 @@ alt kümesine benzetildi — `next.config` sözdizimi, Metadata API, `notFound()
 `revalidate`, `cache()` gibi kavramlar tanıdık gelecek. Farkların *nedenleri*
 [02-mimari.md](./02-mimari.md)'de.
 
+## `jskelet migrate` (codemod)
+
+App Router ağacına karşı codemod'u çalıştırın. Babel (`@babel/parser`,
+`@babel/types`) JSkelet ile birlikte gelir — ek kurulum yok.
+
+```bash
+npx jskelet migrate scan ../my-next-app
+npx jskelet migrate apply ../my-next-app --out . --write
+npx jskelet migrate config ../my-next-app --write
+```
+
+| Komut | Ne yapar |
+| --- | --- |
+| `migrate` / `migrate scan` | Sayfa, layout, `"use client"` modülleri ve engelleri (iç içe layout, Server Actions, Suspense) listeler. |
+| `migrate apply` | **Otomatik çeviri:** `page.*` → feature controller + `.jsk`; presentational bileşenler → `views/components/*.js`; client → island `mount()` iskeleti. Varsayılan dry-run; yazmak için `--write`. Üzerine yazmaz (çakışmada `.migrate` soneki). |
+| `migrate config` | `next.config`'ten `jskelet.config.mjs` taslağı (`headers` / `redirects` / `rewrites`, `images.widths`, `NEXT_PUBLIC_*` → `clientEnv`). |
+
+Bayraklar: `--out <dir>`, `--only pages,components,islands`, `--json`, `--strict` (partial/skipped → exit 1).
+
+**Otomatik çevrilenler:** `className`, `{{ }}` / `{{{ }}}`, `{#if}` / `{#each}`, `next/image` → `<Image />`, `next/link` → `<Link />`, `dangerouslySetInnerHTML`, `revalidate`, basit controller prelude.
+
+**Çevrilmeyenler (raporlanır):** React hooks, Server Actions, iç içe layout düzleştirme, Streaming/Suspense, client routing. Dosya başına `ok` / `partial` / `skipped`.
+
 ## Karşılık tablosu
 
 ### Yapılandırma
@@ -30,8 +53,8 @@ alt kümesine benzetildi — `next.config` sözdizimi, Metadata API, `notFound()
 | `app/page.js` (dosya bazlı routing) | `routes/*.mjs` içinde `app.get(...)` | Sıra açık yazılır ([03](./03-routing.md)) |
 | `app/[slug]/page.js` | `app.get("/:slug", route(...))` | Express desen sözdizimi |
 | `params`, `searchParams` | `ctx.params`, `ctx.query` | Controller'ın tek argümanı |
-| `layout.js` | `views/layout.ejs` + `hooks.layoutContext()` | Tek layout; iç içe layout yok |
-| Sunucu bileşeni (RSC) | Controller + EJS şablonu + `views/components/**` | Fonksiyon HTML string döndürür |
+| `layout.js` | `views/layout.jsk` + `hooks.layoutContext()` | Tek layout; iç içe layout yok |
+| Sunucu bileşeni (RSC) | Controller + `.jsk` şablonu + `views/components/**` | Fonksiyon HTML string döndürür |
 | İstemci bileşeni (`"use client"`) | Island (`data-island` + `mount`) | Sayfanın tamamı hidre edilmez ([05](./05-islands.md)) |
 | `notFound()` | `notFound()` | Aynı ad, aynı kontrol akışı |
 | `redirect()` | `redirect()` (307) | Kalıcı için `permanentRedirect()` (308) |
@@ -87,10 +110,13 @@ Bunları taşıma planında baştan hesaba katın:
 
 - **React'in kendisi.** Bileşenler HTML string döndüren fonksiyonlara dönüşür.
   JSX yok, hook yok, sanal DOM yok.
-- **TypeScript.** Proje düz JS + JSDoc. `jsconfig.json` içinde `checkJs: true`
-  ile editörden tip kontrolü alırsınız.
-- **İç içe layout'lar.** Tek bir layout var; ortak bölümleri EJS `include` ya da
-  bileşen fonksiyonlarıyla paylaşırsınız.
+- **TypeScript.** Framework kaynağı düz JS + JSDoc'tur ve tüketiciler için
+  `.d.ts` yayınlar. Client entry/island'lar `.ts` / `.mts` olabilir (esbuild tip
+  siler; manifest anahtarı `*.js` kalır). Sunucu route, hook ve
+  `jskelet.config.mjs` Node ESM JavaScript kalır — orada editör denetimi için
+  `jsconfig.json` içinde `checkJs: true` kullanın.
+- **İç içe layout'lar.** Tek bir layout var; ortak bölümleri `{#include}` ya da
+  bileşen fonksiyonlarıyla paylaşırsınız (legacy EJS’te `include`).
 - **Streaming / Suspense / kısmi prerender.** Yanıt tek parça üretilir.
 - **İstemci tarafı yönlendirme.** Gezinme gerçek sayfa yüklemesidir. Sunucu HTML'i
   önbellekten geldiği için pratikte çok hızlıdır, ama SPA geçişleri yoktur.
@@ -169,12 +195,12 @@ export default function register(app, { route, notFound }) {
 }
 ```
 
-```ejs
-<%# views/pages/article.ejs %>
+```jsk
+{# views/pages/article.jsk #}
 <article class="wrapper">
-  <h1 class="text-3xl font-bold"><%= article.title %></h1>
-  <%- image({ src: article.cover, alt: article.title, priority: true, width: 1200, height: 630 }) %>
-  <div><%- article.body %></div>
+  <h1 class="text-3xl font-bold">{{ article.title }}</h1>
+  <Image :src="article.cover" :alt="article.title" priority :width="1200" :height="630" />
+  <div>{{{ article.body }}}</div>
 </article>
 ```
 
@@ -188,11 +214,15 @@ de aynı yazıyı isterse tek upstream isteği yapılmasını sağlar
 
 Yeni bir dizinde `npx jskelet init` çalıştırın ve `jskelet dev`in açıldığını
 görün. Mevcut Next projesini olduğu gibi bırakın; taşıma paralel yürüsün.
+İsterseniz önce `jskelet migrate scan <next-root>` ile sayfa ve engel listesine bakın.
 
 `jsconfig.json` içindeki `paths` alias'larınızı taşıyın — `@/` gibi önekler hem
 sunucuda hem bundle'da aynı şekilde çalışır ([02-mimari.md](./02-mimari.md)).
 
 ### 2. `next.config.mjs`'i çevir (1-2 saat)
+
+`jskelet migrate config <next-root> --write` çoğunu taslaklar; ardından gözden
+geçirin:
 
 `headers()`, `redirects()` ve `rewrites()` bölümleri neredeyse birebir kopyalanır.
 Desen sözdizimini kontrol edin: JSkelet `:slug`, `:path*`, `/a-:b` ve
@@ -214,9 +244,9 @@ değildir; olduğu gibi kopyalanır. İki değişiklik yapın:
 
 ### 4. Layout'u kur (yarım gün)
 
-`app/layout.jsx`'i `views/layout.ejs`'e çevirin. Framework'ün varsayılan
-layout'unu (`node_modules/jskelet/src/templates/layout.ejs`) kopyalayıp
-üzerine yazmak en hızlı yol.
+`app/layout.jsx`'i `views/layout.jsk`'e çevirin (veya `migrate apply` taslağını
+kullanın). Framework'ün varsayılan layout'unu (`jskelet/layout` → `.jsk`)
+kopyalayıp üzerine yazmak en hızlı yol.
 
 `layout.jsx` içinde veri çekiyorsanız (navigasyon, site ayarları) bunu
 `hooks.layoutContext()` içine taşıyın: gövde render'ıyla paralel çalışır ve
@@ -226,6 +256,9 @@ Global metadata varsayılanlarını (`titleTemplate`, `siteUrl`, `description`)
 `hooks.metadata()` içine koyun.
 
 ### 5. Bileşenleri çevir (en uzun adım)
+
+`jskelet migrate apply --only components --write` hooks'suz presentational
+bileşenleri çevirir. Gerisini elle bitirin:
 
 Her React bileşeni bir fonksiyona dönüşür:
 
@@ -260,8 +293,9 @@ Bileşenleri küçük ve saf tutun; veri çekmeyi controller'da bırakın.
 
 ### 6. Sayfaları taşı (sayfa başına saatler)
 
-Her `page.jsx` bir controller + bir EJS şablonuna bölünür. Sırayı düşünerek
-dosyalayın:
+`jskelet migrate apply --only pages --write` her `page.*` dosyasını feature
+controller + `.jsk` şablonuna böler. `partial` / `skipped` satırlarını gözden
+geçirip TODO'ları bitirin. Sırayı düşünerek dosyalayın:
 
 ```
 routes/
@@ -337,7 +371,7 @@ redirect kurallarının doğruluğunu ölçmek için işe yarar.
 ## Taşıma sırasında sık yapılan hatalar
 
 - **`esc()` unutmak.** JSX'ten gelen alışkanlıkla `${value}` yazmak XSS demektir.
-  Şablonlarda `<%= %>` (kaçışlı) ile `<%- %>` (ham) ayrımına dikkat edin.
+  `.jsk`'de `{{ }}` (kaçışlı) / `{{{ }}}` (ham); bileşenlerde `esc()` kendiniz.
 - **`@source` eklemeden yeni bir dizin açmak.** Sınıflar sessizce düşer.
 - **Yakalayıcı route'u yanlış sıraya koymak.** `/:slug` her zaman en sonda.
 - **Sayfanın tamamını island yapmak.** Kazanç sunucu HTML'inin tam olmasından

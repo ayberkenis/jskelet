@@ -9,9 +9,12 @@
  *
  * Bilet süreç belleğinde; tek süreçte tüm locale host'ları servis eden
  * kurulumlar için yeterli. Değer kısa session id olmalı.
+ *
+ * Güvenlik: mint CSRF'den *sonra* mount edilir (create-app); cookie adı
+ * allowlist + RFC 6265 doğrulaması; bekleyen bilet ve IP başına mint sınırı.
  */
 import { getConfig } from "../../config/index.js";
-import { randomToken, setCookie } from "../../http/cookies.js";
+import { isValidCookieName, randomToken, setCookie } from "../../http/cookies.js";
 import {
   SHARED_COOKIE_WARN_BYTES,
   requestIsHttps,
@@ -22,11 +25,26 @@ import { resolveSharedCookieDomain } from "../../shared/cookie-domain.js";
 /** @type {Map<string, { name: string, value: string, maxAge?: number, exp: number }>} */
 const tickets = new Map();
 
+/** IP → { count, windowStart } — basit mint rate limit. */
+/** @type {Map<string, { count: number, windowStart: number }>} */
+const mintWindows = new Map();
+
 const DEFAULT_TTL_SECONDS = 60;
+const DEFAULT_MAX_PENDING = 256;
+const DEFAULT_MAX_MINTS_PER_IP = 30;
+const MINT_WINDOW_MS = 60_000;
 const HANDOFF_PATH = "/_jskelet/auth/handoff";
 
 /**
- * @returns {{ enabled: boolean, ttlSeconds: number, path: string, maxValueBytes: number }}
+ * @returns {{
+ *   enabled: boolean,
+ *   ttlSeconds: number,
+ *   path: string,
+ *   maxValueBytes: number,
+ *   allowedCookieNames: string[],
+ *   maxPendingTickets: number,
+ *   maxMintsPerIpPerMinute: number,
+ * }}
  */
 function settings() {
   const auth = getConfig().auth ?? {};
@@ -37,21 +55,26 @@ function settings() {
       ttlSeconds: DEFAULT_TTL_SECONDS,
       path: HANDOFF_PATH,
       maxValueBytes: SHARED_COOKIE_WARN_BYTES,
+      allowedCookieNames: [],
+      maxPendingTickets: DEFAULT_MAX_PENDING,
+      maxMintsPerIpPerMinute: DEFAULT_MAX_MINTS_PER_IP,
     };
   }
 
-  if (raw === true) {
-    return {
-      enabled: true,
-      ttlSeconds: DEFAULT_TTL_SECONDS,
-      path: HANDOFF_PATH,
-      maxValueBytes: SHARED_COOKIE_WARN_BYTES,
-    };
-  }
+  /** @type {Record<string, unknown>} */
+  const source = raw === true ? {} : /** @type {Record<string, unknown>} */ (raw);
 
-  const source = /** @type {Record<string, unknown>} */ (raw);
   const ttl = Number(source.ttlSeconds);
   const maxBytes = Number(source.maxValueBytes);
+  const maxPending = Number(source.maxPendingTickets);
+  const maxMints = Number(source.maxMintsPerIpPerMinute);
+
+  const namesRaw = source.allowedCookieNames;
+  /** @type {string[]} */
+  const allowedCookieNames = Array.isArray(namesRaw)
+    ? namesRaw.filter((n) => typeof n === "string" && isValidCookieName(n.trim())).map((n) => n.trim())
+    : [];
+
   return {
     enabled: source.enabled !== false,
     ttlSeconds:
@@ -64,6 +87,15 @@ function settings() {
       Number.isFinite(maxBytes) && maxBytes > 0
         ? Math.floor(maxBytes)
         : SHARED_COOKIE_WARN_BYTES,
+    allowedCookieNames,
+    maxPendingTickets:
+      Number.isFinite(maxPending) && maxPending > 0
+        ? Math.floor(maxPending)
+        : DEFAULT_MAX_PENDING,
+    maxMintsPerIpPerMinute:
+      Number.isFinite(maxMints) && maxMints > 0
+        ? Math.floor(maxMints)
+        : DEFAULT_MAX_MINTS_PER_IP,
   };
 }
 
@@ -72,6 +104,24 @@ function sweep() {
   for (const [id, entry] of tickets) {
     if (entry.exp <= now) tickets.delete(id);
   }
+}
+
+/**
+ * @param {string} ip
+ * @param {number} limit
+ * @returns {boolean} true ise mint'e izin var
+ */
+function allowMint(ip, limit) {
+  const now = Date.now();
+  const key = ip || "unknown";
+  const entry = mintWindows.get(key);
+  if (!entry || now - entry.windowStart >= MINT_WINDOW_MS) {
+    mintWindows.set(key, { count: 1, windowStart: now });
+    return true;
+  }
+  if (entry.count >= limit) return false;
+  entry.count += 1;
+  return true;
 }
 
 /**
@@ -146,6 +196,7 @@ function redeem(ticketId) {
 
 /**
  * Handoff uçlarını mount eder. `auth.crossSubdomainHandoff` kapalıysa no-op.
+ * create-app CSRF'den *sonra* çağırmalıdır.
  *
  * @param {import('express').Express} app
  * @returns {void}
@@ -154,8 +205,26 @@ export function mountAuthHandoff(app) {
   const cfg = settings();
   if (!cfg.enabled) return;
 
+  if (cfg.allowedCookieNames.length === 0) {
+    console.warn(
+      "[auth.handoff] enabled but allowedCookieNames is empty — " +
+        "POST mint will return 400 until you list cookie names in " +
+        "auth.crossSubdomainHandoff.allowedCookieNames",
+    );
+  }
+
   app.post(cfg.path, (req, res) => {
     sweep();
+
+    if (!allowMint(String(req.ip || ""), cfg.maxMintsPerIpPerMinute)) {
+      res.status(429).json({ ok: false, error: "too many handoff requests" });
+      return;
+    }
+
+    if (tickets.size >= cfg.maxPendingTickets) {
+      res.status(503).json({ ok: false, error: "handoff ticket store is full" });
+      return;
+    }
 
     const name = typeof req.body?.name === "string" ? req.body.name.trim() : "";
     const value = typeof req.body?.value === "string" ? req.body.value : "";
@@ -167,6 +236,19 @@ export function mountAuthHandoff(app) {
 
     if (!name || !next) {
       res.status(400).json({ ok: false, error: "name and next are required" });
+      return;
+    }
+
+    if (!isValidCookieName(name)) {
+      res.status(400).json({ ok: false, error: "invalid cookie name" });
+      return;
+    }
+
+    if (cfg.allowedCookieNames.length === 0 || !cfg.allowedCookieNames.includes(name)) {
+      res.status(400).json({
+        ok: false,
+        error: "cookie name is not in allowedCookieNames",
+      });
       return;
     }
 
@@ -218,6 +300,7 @@ export function mountAuthHandoff(app) {
 /** @returns {void} */
 export function _resetHandoffTickets() {
   tickets.clear();
+  mintWindows.clear();
 }
 
 /** @returns {number} */

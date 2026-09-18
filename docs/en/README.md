@@ -2,10 +2,12 @@
 
 JSkelet is a framework that "feels frameworkless", built for SEO- and
 speed-focused sites: it produces complete HTML on the server with Express 5 +
-EJS, adds interactivity with vanilla JS islands, compiles CSS into a single
-stylesheet with Tailwind v4, and instead of ISR uses an HTML TTL cache that
-lives in process memory with stale-while-revalidate. No React, no TypeScript;
-plain JavaScript and JSDoc.
+build-time `.jsk` (EJS is an optional legacy peer), adds interactivity with
+vanilla JS islands, compiles CSS into a single stylesheet with Tailwind v4, and
+instead of ISR uses an HTML TTL cache that lives in process memory with
+stale-while-revalidate. No React; the framework source is plain JavaScript with
+JSDoc. Apps may write client islands and entries in TypeScript, and the
+published package ships declaration files.
 
 This directory is the full reference for the framework. To read it in order,
 start from the beginning; if you are looking for a specific topic, go straight
@@ -22,7 +24,7 @@ change one, change the other.
 | [01-getting-started.md](./01-getting-started.md) | Installation, `jskelet init`, first route, first island, directory structure, CLI commands |
 | [02-architecture.md](./02-architecture.md) | Architectural decisions and their rationale: the island model, complete server HTML, cache strategy, middleware order |
 | [03-routing.md](./03-routing.md) | The route module contract, load order, the controller contract, `ctx`, `notFound`/`redirect`, config redirects/rewrites |
-| [04-rendering.md](./04-rendering.md) | EJS layout, pages, automatic component registration, `html`/`tags` helpers, metadata → `<head>`, hooks |
+| [04-rendering.md](./04-rendering.md) | `.jsk` layout/pages, automatic component registration, `html`/`tags`, metadata → `<head>`, hooks; EJS legacy |
 | [05-islands.md](./05-islands.md) | The `data-island` contract, hydration strategies, `client/entries/*`, `createStore`, DOM helpers, `startSafeImages` |
 | [06-caching.md](./06-caching.md) | `withHtmlCache`, `revalidate`, stale-while-revalidate, the cache key, `X-JSkelet-Cache`, in-request cache, degraded render, prewarm |
 | [07-configuration.md](./07-configuration.md) | Full `jskelet.config.mjs` reference, the `source` pattern syntax, environment variable table |

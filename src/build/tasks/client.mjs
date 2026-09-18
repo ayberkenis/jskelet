@@ -1,9 +1,11 @@
 /**
  * Island bundle'ı: esbuild, ESM, code splitting.
  *
- * `client/entries/*.js` içindeki her dosya bir entry'dir. `main.js` her sayfada
- * yüklenen ortak island bootstrap'ıdır; ek entry'ler yalnızca onları isteyen
- * sayfalarda (`controller` → `entries: ["chart.js"]`) yüklenir.
+ * `client/entries/*.{js,ts,mts}` içindeki her dosya bir entry'dir. `main.js`
+ * (veya `main.ts`) her sayfada yüklenen ortak island bootstrap'ıdır; ek
+ * entry'ler yalnızca onları isteyen sayfalarda
+ * (`controller` → `entries: ["chart.js"]`) yüklenir. Manifest anahtarı her
+ * zaman `*.js` kalır.
  *
  * Hedef tarayıcılar `package.json` → `browserslist` yerine burada sabit: ESM +
  * dinamik import + `IntersectionObserver` island modelinin zaten alt sınırı,
@@ -16,10 +18,16 @@ import * as esbuild from "esbuild";
 import { paths, patchManifest, pruneAssets } from "../paths.mjs";
 import * as log from "../../log.mjs";
 
+/** Client entry ve `@/` alias için kabul edilen kaynak uzantıları. `.tsx` yok. */
+const CLIENT_SOURCE_EXTS = [".js", ".ts", ".mts"];
+
 /**
  * `@/` alias'ını proje köküne çözer — Node tarafındaki `alias-hooks.mjs` ile
  * aynı davranış, böylece `lib/` altındaki modüller hem sunucuda hem
  * tarayıcıda aynı import stilini kullanabilir.
+ *
+ * Not: sunucu runtime `.ts` çözmez; paylaşılan `@/lib` dosyaları `.js`
+ * kalmalıdır. `.ts` yalnızca esbuild client hattında anlamlıdır.
  *
  * @param {string} root
  * @returns {esbuild.Plugin}
@@ -36,6 +44,23 @@ function aliasPlugin(root) {
 }
 
 /**
+ * Secret benzeri isimler public bundle'a gömülmemeli. `PUBLIC` / `PUBLISHABLE`
+ * içerenler (örn. Stripe publishable key) muaf; diğer `SECRET`, `PASSWORD`,
+ * `TOKEN`, `API_KEY`, `PRIVATE` vb. reddedilir.
+ */
+const SECRETISH_CLIENT_ENV =
+  /(?:^|_)(SECRET|PASSWORD|PASSWD|TOKEN|PRIVATE|CREDENTIAL|API[_-]?KEY)(?:_|$)|(?:^|_)(SECRET|PASSWORD|TOKEN|PRIVATE|KEY)$/i;
+
+/**
+ * @param {string} key
+ * @returns {boolean}
+ */
+export function isSecretLikeClientEnvKey(key) {
+  if (/PUBLIC|PUBLISHABLE/i.test(key)) return false;
+  return SECRETISH_CLIENT_ENV.test(key);
+}
+
+/**
  * Tarayıcıda `process` yoktur; sunucuyla paylaşılan modüller yine de
  * `process.env` okur. `clientEnv` ile bildirilen anahtarlar build zamanında
  * gömülür — Next'teki `NEXT_PUBLIC_*` ile aynı sözleşme, ama hangi anahtarın
@@ -48,6 +73,14 @@ function aliasPlugin(root) {
  * @returns {Record<string, string>}
  */
 function publicEnv(keys) {
+  const secretish = keys.filter((key) => isSecretLikeClientEnvKey(key));
+  if (secretish.length) {
+    throw new Error(
+      `[build] clientEnv must not include secret-like keys: ${secretish.join(", ")}. ` +
+        "Only values safe to publish in the browser bundle belong here.",
+    );
+  }
+
   /** @type {Record<string, string>} */
   const env = { NODE_ENV: process.env.NODE_ENV ?? "production" };
   for (const key of keys) {
@@ -61,18 +94,68 @@ function publicEnv(keys) {
  * @param {string} base
  * @returns {string}
  */
-function resolveWithExtension(base) {
+export function resolveWithExtension(base) {
   const candidates = [
     base,
     `${base}.js`,
     `${base}.mjs`,
+    `${base}.ts`,
+    `${base}.mts`,
     `${base}.json`,
     path.join(base, "index.js"),
+    path.join(base, "index.ts"),
   ];
   for (const candidate of candidates) {
     if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) return candidate;
   }
   return base;
+}
+
+/**
+ * Entry dosya adını manifest anahtarına çevirir (`main.ts` → `main.js`).
+ * Layout / `entries: ["chart.js"]` sözleşmesi hash'siz `.js` anahtarları bekler.
+ *
+ * @param {string} entryPath
+ * @returns {string}
+ */
+export function entryManifestName(entryPath) {
+  const base = path.basename(entryPath);
+  const ext = path.extname(base);
+  const stem = CLIENT_SOURCE_EXTS.includes(ext)
+    ? base.slice(0, -ext.length)
+    : path.basename(base, ".js");
+  return `${stem}.js`;
+}
+
+/**
+ * `client/entries/` altındaki kaynakları listeler. Aynı stem için birden fazla
+ * uzantı (`main.js` + `main.ts`) sessiz tercih yerine hata verir.
+ *
+ * @param {string} entryDir
+ * @returns {string[]}
+ */
+export function listClientEntries(entryDir) {
+  /** @type {Map<string, string>} */
+  const byStem = new Map();
+
+  for (const file of fs.readdirSync(entryDir)) {
+    const ext = path.extname(file);
+    if (!CLIENT_SOURCE_EXTS.includes(ext)) continue;
+
+    const stem = file.slice(0, -ext.length);
+    const previous = byStem.get(stem);
+    if (previous) {
+      throw new Error(
+        `[build] conflicting client entries for "${stem}": ${previous} and ${file}. ` +
+          "Keep a single extension per entry name.",
+      );
+    }
+    byStem.set(stem, file);
+  }
+
+  return [...byStem.values()]
+    .sort()
+    .map((file) => path.join(entryDir, file));
 }
 
 /**
@@ -89,10 +172,7 @@ export async function buildClient(config, { watch = false } = {}) {
     return {};
   }
 
-  const entryPoints = fs
-    .readdirSync(entryDir)
-    .filter((file) => file.endsWith(".js"))
-    .map((file) => path.join(entryDir, file));
+  const entryPoints = listClientEntries(entryDir);
 
   if (!entryPoints.length) {
     log.detail("no entries, skipped");
@@ -117,7 +197,8 @@ export async function buildClient(config, { watch = false } = {}) {
     format: "esm",
     target: ["chrome111", "edge111", "firefox111", "safari16.4"],
     minify: true,
-    sourcemap: true,
+    // Prod'da map dosyaları `public/assets` altında herkese açık kalırdı.
+    sourcemap: process.env.NODE_ENV === "development",
     metafile: true,
     entryNames: "[name].[hash]",
     chunkNames: "chunks/[name].[hash]",
@@ -256,7 +337,7 @@ function toManifest(metafile, config, entryRoot) {
   for (const [outputPath, output] of Object.entries(metafile.outputs)) {
     if (!output.entryPoint?.startsWith(entryRoot)) continue;
 
-    const name = `${path.basename(output.entryPoint, ".js")}.js`;
+    const name = entryManifestName(output.entryPoint);
     const absolute = path.resolve(config.root, outputPath);
     manifest[name] = `/${path
       .relative(config.dirs.public, absolute)

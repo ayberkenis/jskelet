@@ -129,3 +129,35 @@ test("POST rejects a JWT-sized value", async () => {
   const body = await response.json();
   assert.equal(body.ok, false);
 });
+
+test("POST rejects a cookie name outside the allowlist", async () => {
+  const response = await fetch(`${origin}/_jskelet/auth/handoff`, {
+    method: "POST",
+    headers: localeHeaders("en.investvio.com"),
+    body: JSON.stringify({
+      name: "csrf_token",
+      value: "x",
+      next: "https://tr.investvio.com/",
+    }),
+  });
+
+  assert.equal(response.status, 400);
+  const body = await response.json();
+  assert.match(body.error, /allowedCookieNames/);
+});
+
+test("POST rejects an injectable cookie name", async () => {
+  const response = await fetch(`${origin}/_jskelet/auth/handoff`, {
+    method: "POST",
+    headers: localeHeaders("en.investvio.com"),
+    body: JSON.stringify({
+      name: "sid; Path=/",
+      value: "x",
+      next: "https://tr.investvio.com/",
+    }),
+  });
+
+  assert.equal(response.status, 400);
+  const body = await response.json();
+  assert.match(body.error, /invalid cookie name/);
+});

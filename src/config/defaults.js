@@ -467,9 +467,19 @@ export const DEFAULT_BRAND = {
  */
 export const DEFAULT_AUTH = {
   /**
-   * `true` veya `{ ttlSeconds?, path?, maxValueBytes? }`.
+   * `true` veya `{ allowedCookieNames, ttlSeconds?, path?, maxValueBytes?,
+   * maxPendingTickets?, maxMintsPerIpPerMinute? }`.
    * Açıkken `POST /_jskelet/auth/handoff` ve `?handoff=` redeem middleware'i.
-   * @type {boolean | { enabled?: boolean, ttlSeconds?: number, path?: string, maxValueBytes?: number }}
+   * Mint için `allowedCookieNames` dolu olmalı (aksi halde 400).
+   * @type {boolean | {
+   *   enabled?: boolean,
+   *   allowedCookieNames?: string[],
+   *   ttlSeconds?: number,
+   *   path?: string,
+   *   maxValueBytes?: number,
+   *   maxPendingTickets?: number,
+   *   maxMintsPerIpPerMinute?: number,
+   * }}
    */
   crossSubdomainHandoff: false,
 };

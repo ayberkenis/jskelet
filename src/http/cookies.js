@@ -149,6 +149,17 @@ export function parseCookies(req) {
  */
 
 /**
+ * RFC 6265 cookie-name (token). `;`, boşluk, CRLF gibi karakterler
+ * Set-Cookie enjeksiyonuna yol açardı — reddedilir.
+ *
+ * @param {unknown} name
+ * @returns {boolean}
+ */
+export function isValidCookieName(name) {
+  return typeof name === "string" && /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/.test(name);
+}
+
+/**
  * Varsayılanlar bilinçli olarak kısıtlayıcı: `HttpOnly` ile JS okuyamaz,
  * `SameSite=Lax` ile çapraz site POST'larında gönderilmez (CSRF'nin büyük
  * kısmını kapatan tek satır), `Secure` üretimde açık.
@@ -159,6 +170,13 @@ export function parseCookies(req) {
  * @returns {string}
  */
 export function serializeCookie(name, value, options = {}) {
+  if (!isValidCookieName(name)) {
+    throw new Error(
+      `[cookies] invalid cookie name ${JSON.stringify(name)}; ` +
+        "names must be RFC 6265 tokens (no spaces, semicolons, or control chars)",
+    );
+  }
+
   const parts = [`${name}=${encodeURIComponent(value)}`];
 
   parts.push(`Path=${options.path ?? "/"}`);

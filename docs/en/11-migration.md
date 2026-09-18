@@ -8,6 +8,29 @@ modeled on the subset of Next that people actually use — concepts like the
 will feel familiar. The *reasons* behind the differences are in
 [02-architecture.md](./02-architecture.md).
 
+## `jskelet migrate` (codemod)
+
+Run the codemod against an App Router tree. Babel (`@babel/parser`,
+`@babel/types`) ships with JSkelet — no extra install.
+
+```bash
+npx jskelet migrate scan ../my-next-app
+npx jskelet migrate apply ../my-next-app --out . --write
+npx jskelet migrate config ../my-next-app --write
+```
+
+| Command | What it does |
+| --- | --- |
+| `migrate` / `migrate scan` | Inventory pages, layouts, `"use client"` modules, blockers (nested layouts, Server Actions, Suspense). |
+| `migrate apply` | **Automatic convert:** `page.*` → feature controller + `.jsk`; presentational components → `views/components/*.js`; clients → island `mount()` stubs. Default is dry-run; pass `--write`. Never overwrites (conflicts get a `.migrate` suffix). |
+| `migrate config` | Draft `jskelet.config.mjs` from `next.config` (`headers` / `redirects` / `rewrites`, `images.widths`, `NEXT_PUBLIC_*` → `clientEnv`). |
+
+Flags: `--out <dir>`, `--only pages,components,islands`, `--json`, `--strict` (exit 1 on partial/skipped).
+
+**Converted automatically:** `className`, `{{ }}` / `{{{ }}}`, `{#if}` / `{#each}`, `next/image` → `<Image />`, `next/link` → `<Link />`, `dangerouslySetInnerHTML`, `revalidate`, simple controller prelude (`await` data + `notFound()`).
+
+**Not converted (reported):** React hooks, Server Actions, nested layout flattening, Streaming/Suspense, client-side routing. Confidence per file is `ok` / `partial` / `skipped`.
+
 ## Equivalence table
 
 ### Configuration
@@ -31,8 +54,8 @@ will feel familiar. The *reasons* behind the differences are in
 | `app/page.js` (file-based routing) | `app.get(...)` inside `routes/*.mjs` | The order is written explicitly ([03](./03-routing.md)) |
 | `app/[slug]/page.js` | `app.get("/:slug", route(...))` | Express pattern syntax |
 | `params`, `searchParams` | `ctx.params`, `ctx.query` | The controller's single argument |
-| `layout.js` | `views/layout.ejs` + `hooks.layoutContext()` | A single layout; no nested layouts |
-| Server component (RSC) | Controller + EJS template + `views/components/**` | A function returns an HTML string |
+| `layout.js` | `views/layout.jsk` + `hooks.layoutContext()` | A single layout; no nested layouts |
+| Server component (RSC) | Controller + `.jsk` template + `views/components/**` | A function returns an HTML string |
 | Client component (`"use client"`) | Island (`data-island` + `mount`) | The whole page is not hydrated ([05](./05-islands.md)) |
 | `notFound()` | `notFound()` | Same name, same control flow |
 | `redirect()` | `redirect()` (307) | For permanent, `permanentRedirect()` (308) |
@@ -88,8 +111,11 @@ Account for these from the start in your migration plan:
 
 - **React itself.** Components turn into functions that return HTML strings. No
   JSX, no hooks, no virtual DOM.
-- **TypeScript.** The project is plain JS + JSDoc. With `checkJs: true` in
-  `jsconfig.json` you get type checking from the editor.
+- **TypeScript.** Framework source is plain JS + JSDoc and publishes `.d.ts` for
+  consumers. Client entries and islands may be `.ts` / `.mts` (esbuild strips
+  types; the manifest key stays `*.js`). Server routes, hooks and
+  `jskelet.config.mjs` remain Node ESM JavaScript — use `checkJs: true` in
+  `jsconfig.json` for editor checking there.
 - **Nested layouts.** There is a single layout; you share common sections with
   EJS `include` or component functions.
 - **Streaming / Suspense / partial prerendering.** The response is produced as a
@@ -172,12 +198,12 @@ export default function register(app, { route, notFound }) {
 }
 ```
 
-```ejs
-<%# views/pages/article.ejs %>
+```jsk
+{# views/pages/article.jsk #}
 <article class="wrapper">
-  <h1 class="text-3xl font-bold"><%= article.title %></h1>
-  <%- image({ src: article.cover, alt: article.title, priority: true, width: 1200, height: 630 }) %>
-  <div><%- article.body %></div>
+  <h1 class="text-3xl font-bold">{{ article.title }}</h1>
+  <Image :src="article.cover" :alt="article.title" priority :width="1200" :height="630" />
+  <div>{{{ article.body }}}</div>
 </article>
 ```
 
@@ -190,13 +216,16 @@ single upstream request is made ([06-caching.md](./06-caching.md)).
 ### 1. Set up the skeleton (half a day)
 
 Run `npx jskelet init` in a new directory and watch `jskelet dev` come up. Leave
-the existing Next project as it is; let the migration run in parallel.
+the existing Next project as it is; let the migration run in parallel. Optionally
+run `jskelet migrate scan <next-root>` first to list pages and blockers.
 
 Carry over the `paths` aliases from your `jsconfig.json` — prefixes like `@/`
 work the same way both on the server and in the bundle
 ([02-architecture.md](./02-architecture.md)).
 
 ### 2. Translate `next.config.mjs` (1-2 hours)
+
+`jskelet migrate config <next-root> --write` drafts most of this. Then review:
 
 The `headers()`, `redirects()` and `rewrites()` sections are copied almost
 verbatim. Check the pattern syntax: JSkelet supports the `:slug`, `:path*`,
@@ -218,9 +247,9 @@ they are copied as-is. Make two changes:
 
 ### 4. Set up the layout (half a day)
 
-Translate `app/layout.jsx` into `views/layout.ejs`. Copying the framework's
-default layout (`node_modules/jskelet/src/templates/layout.ejs`) and editing it
-is the fastest path.
+Translate `app/layout.jsx` into `views/layout.jsk` (or let `migrate apply` draft
+it). Copying the framework's default layout (`jskelet/layout` → `.jsk`) and
+editing it is the fastest path.
 
 If you fetch data inside `layout.jsx` (navigation, site settings), move it into
 `hooks.layoutContext()`: it runs in parallel with the body render, and every
@@ -230,6 +259,10 @@ Put your global metadata defaults (`titleTemplate`, `siteUrl`, `description`)
 into `hooks.metadata()`.
 
 ### 5. Translate the components (the longest step)
+
+`jskelet migrate apply --only components --write` converts presentational
+components that are props + JSX with no hooks. Everything else you finish by
+hand:
 
 Every React component turns into a function:
 
@@ -264,8 +297,9 @@ Keep components small and pure; leave data fetching in the controller.
 
 ### 6. Migrate the pages (hours per page)
 
-Every `page.jsx` splits into a controller plus an EJS template. File them with
-the order in mind:
+`jskelet migrate apply --only pages --write` splits each `page.*` into a
+feature controller plus a `.jsk` template. Review `partial` / `skipped` rows,
+then finish the TODO markers. File them with the order in mind:
 
 ```
 routes/
@@ -342,7 +376,8 @@ especially for verifying that the redirect rules are correct.
 ## Common mistakes during migration
 
 - **Forgetting `esc()`.** Writing `${value}` out of JSX habit means XSS. In
-  templates, mind the distinction between `<%= %>` (escaped) and `<%- %>` (raw).
+  `.jsk` templates use `{{ }}` (escaped) vs `{{{ }}}` (raw); in components call
+  `esc()` yourself.
 - **Opening a new directory without adding `@source`.** The classes are silently
   dropped.
 - **Putting the catch-all route in the wrong order.** `/:slug` always goes last.

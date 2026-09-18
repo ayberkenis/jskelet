@@ -1,0 +1,26 @@
+{
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": false,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "outDir": "types",
+    "rootDir": "src",
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "target": "es2022",
+    "lib": ["es2022", "dom"],
+    "skipLibCheck": true,
+    "maxNodeModuleJsDepth": 0,
+    "types": ["node"]
+  },
+  "include": [
+    "src/index.js",
+    "src/client/index.js",
+    "src/views/helpers/html.js",
+    "src/views/helpers/tags.js",
+    "src/http/cookies-entry.js",
+    "src/log.mjs"
+  ],
+  "exclude": ["node_modules", "**/public/assets", "src/client/devtools"]
+}

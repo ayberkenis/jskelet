@@ -1,0 +1,35 @@
+{#
+  Uygulamanın layout'u. `hooks.layoutContext()` döndürdüğü her alan burada
+  local olarak hazır (nav, structuredData, bodyClass, pathname, fontPreloadHtml).
+#}
+<!DOCTYPE html>
+{# Arka plan `<body>`de değil burada: view transition sırasında gövdenin arka
+   planı anlık görüntünün içinde kalır ve altta canvas görünür. #}
+<html :lang="lang" class="h-full bg-white antialiased">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    {# Kaynak ipuçları en başta: preconnect ve LCP preload'ını geciktirmek
+       doğrudan LCP'ye yazılır. #}
+    {{{ extraHead }}}
+    {# Yalnızca gövde ve başlık ağırlıkları preload edilir; üçünü birden
+       çekmek LCP görseliyle bant genişliği için yarışıyor. #}
+    {{{ fontPreloadHtml }}}
+    <Stylesheets :styles="styles" />
+    {{{ headMeta }}}
+    <JsonLd :items="structuredData" />
+  </head>
+  <body :class="bodyClass">
+    {#include "partials/header"}
+
+    <main class="min-w-0 flex-1">{{{ body }}}</main>
+
+    {#include "partials/footer"}
+
+    {# Overlay portal: modal/drawer içeriği buraya taşınır, böylece
+       `overflow: hidden` taşıyan bir ata element onu kırpmaz. #}
+    <div id="jskelet-overlays"></div>
+
+    <BodyScripts :entries="entries" :devtools="devtools" :devBasePath="devBasePath" />
+  </body>
+</html>

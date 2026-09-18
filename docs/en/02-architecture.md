@@ -51,7 +51,7 @@ Request
  │       └─ withHtmlCache          TTL + stale-while-revalidate
  │           └─ withUpstreamTracking
  │               └─ withRequestCache
- │                   └─ controller → renderPage → EJS
+ │                   └─ controller → renderPage → .jsk (or legacy EJS)
  ├─ 404 → hooks.notFound()
  └─ error handling                 redirect/notFound + 500 fallback
 ```
@@ -270,10 +270,10 @@ hard-to-diagnose problems like "why is there no stylesheet".
 
 ## Why this dependency list
 
-There are four runtime dependencies: `express`, `ejs`, `esbuild`,
-`tailwind-merge`. Everything else (Tailwind, PostCSS, lightningcss, sharp, the
-Phosphor icons) is an **optional peer dependency**, and if it is absent the
-corresponding build step is skipped.
+There are three runtime dependencies: `express`, `esbuild`, `tailwind-merge`.
+`ejs` is an optional peer only for legacy `.ejs` templates. Everything else
+(Tailwind, PostCSS, lightningcss, sharp, the Phosphor icons) is an **optional
+peer dependency**, and if it is absent the corresponding build step is skipped.
 
 Two decisions deserve a separate explanation:
 

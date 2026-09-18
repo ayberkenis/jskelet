@@ -51,7 +51,7 @@ controller data → import edilmiş render(data, helpers) → HTML
   {/if}
 
   {#each items as item, i}
-    <li data-i="{{ i }}">{{ item }}</li>
+    <li :data-i="i">{{ item }}</li>
   {/each}
 
   <Link href="/" text="Home" />
@@ -99,19 +99,30 @@ code --install-extension extensions/vscode-jsk
 
 Ayrıntılar uzantı README'sinde.
 
+### Yerleşik layout etiketleri
+
+`.jsk` ifade dilinde `asset()` / `hasAsset()` çağrılamaz. Layout’ta stylesheet,
+script ve JSON-LD döngüleri için yerleşikler:
+
+| Etiket | Props | Çıktı |
+| --- | --- | --- |
+| `Stylesheets` | `styles` | `app.css` + sayfa sheet’leri (`data-jskelet-css`) |
+| `BodyScripts` | `entries`, `devtools`, `devBasePath` | `main.js`, entry’ler, isteğe bağlı overlay |
+| `JsonLd` | `items` (`structuredData`) | `application/ld+json` script’leri |
+
 ### EJS ile birlikte yaşam
 
 Aynı `view` id için derlenmiş `.jsk` varsa o kullanılır; yoksa `.ejs` dosyası
-EJS ile render edilir. Mevcut uygulamalar değişmeden çalışır. `jskelet init`
-yeni iskeleti `.jsk` ile kurar.
+**yalnızca `ejs` peer’i kuruluysa** render edilir. `jskelet init` yeni iskeleti
+`.jsk` ile kurar.
 
-## EJS motoru (legacy)
+## EJS motoru (legacy peer)
 
-EJS hâlâ desteklenir. Motor ilk render'da bir kez kurulur; bileşen taraması
-dosya sistemine dokunduğu için her istekte yapılamaz ve config yüklenmeden
-hesaplanamaz.
+EJS opsiyonel peer bağımlılıktır (`npm i ejs`). `.jsk`-only uygulamalar kurmak
+zorunda değildir. Bir `.ejs` view veya layout istendiğinde paket uygulamadan
+yüklenir; yoksa göç yolunu gösteren bir hata fırlatılır.
 
-Ayarlar:
+Motor ilk EJS render’da bir kez kurulur. Ayarlar:
 
 | Ayar | Değer | Sebebi |
 | --- | --- | --- |
@@ -120,9 +131,7 @@ Ayarlar:
 | `rmWhitespace` | `true` | çıktı boyutu |
 | `async` | `true` | şablon içinde `await` kullanılabilir |
 
-Gömülü kullanımlar (test, script) için `resetRenderEngine()` dışa açık: bileşen
-dosyaları değişince kaydı yeniler. Dev sunucusu süreci yeniden başlattığı için
-normal akışta gerekmez.
+Gömülü kullanımlar (test, script) için `resetRenderEngine()` dışa açık.
 
 ## Layout
 
@@ -130,50 +139,33 @@ normal akışta gerekmez.
 
 1. `jskelet.config.mjs` → `layout` verilmişse o kullanılır. Yol, **views
    dizininin üst dizinine** göre çözülür: `views` varsayılansa
-   `layout: "views/ozel.ejs"` → `<root>/views/ozel.ejs`.
+   `layout: "views/ozel.jsk"` → `<root>/views/ozel.jsk`.
 2. Verilmemişse `views/layout.jsk` (derlenmiş) varsa o kullanılır.
-3. Yoksa `views/layout.ejs` varsa o kullanılır.
+3. Yoksa `views/layout.ejs` varsa o kullanılır (EJS peer gerekir).
 4. O da yoksa framework'ün kendi minimal layout'u kullanılır
-   (`node_modules/jskelet/src/templates/layout.ejs`, ayrıca
-   `jskelet/layout` belirteciyle de erişilebilir).
+   (`node_modules/jskelet/src/templates/layout.jsk`, `jskelet/layout`;
+   legacy kopya `jskelet/layout/ejs`).
 
 Üçüncü seçenek yeni bir projenin tek route ile çalışabilmesi için var. Kendi
-layout'unuza geçmenin en pratik yolu o dosyayı `views/layout.ejs` olarak
+layout'unuza geçmenin en pratik yolu o dosyayı `views/layout.jsk` olarak
 kopyalamaktır.
 
 ### Framework'ün varsayılan layout'u
 
-```ejs
+```jsk
 <!DOCTYPE html>
-<html lang="<%= lang %>">
+<html :lang="lang">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <%- extraHead %>
-    <% if (hasAsset('app.css')) { %>
-    <link rel="stylesheet" href="<%= asset('app.css') %>" data-jskelet-css="app.css">
-    <% } %>
-    <% styles.forEach(function (sheet) { %>
-      <% if (hasAsset(sheet)) { %>
-    <link rel="stylesheet" href="<%= asset(sheet) %>" data-jskelet-css="<%= sheet %>">
-      <% } %>
-    <% }); %>
-    <%- headMeta %>
-    <% structuredData.forEach(function (item) { %>
-    <script type="application/ld+json"><%- jsonScript(item) %></script>
-    <% }); %>
+    {{{ extraHead }}}
+    <Stylesheets :styles="styles" />
+    {{{ headMeta }}}
+    <JsonLd :items="structuredData" />
   </head>
-  <body class="<%= bodyClass %>">
-    <%- body %>
-    <% if (hasAsset('main.js')) { %>
-    <script type="module" src="<%= asset('main.js') %>"></script>
-    <% } %>
-    <% entries.forEach(function (entry) { %>
-    <script type="module" src="<%= asset(entry) %>"></script>
-    <% }); %>
-    <% if (devtools) { %>
-    <script type="module" src="<%= devBasePath %>/overlay.js"></script>
-    <% } %>
+  <body :class="bodyClass">
+    {{{ body }}}
+    <BodyScripts :entries="entries" :devtools="devtools" :devBasePath="devBasePath" />
   </body>
 </html>
 ```
@@ -187,7 +179,7 @@ Dikkat edilecek noktalar:
   sheet'leri de aynı şekilde basılır. Build çalışmadıysa `hasAsset` false olur
   ve etiket hiç basılmaz.
 - **`hasAsset` kontrolleri** build eksikken sayfanın 404 veren dosyaları
-  istememesini sağlar.
+  istememesini sağlar (`Stylesheets` / `BodyScripts` içinde).
 - **Devtools script'i** yalnızca `NODE_ENV=development` iken basılır; prod
   çıktısında hiç yoktur.
 

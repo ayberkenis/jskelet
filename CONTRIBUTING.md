@@ -105,8 +105,9 @@ it does — most "obvious improvements" are already discussed there:
 
 ## Code style
 
-- **Plain JavaScript with JSDoc.** No TypeScript, no React. Every exported
-  function documents its parameters and return type.
+- **Plain JavaScript with JSDoc for framework source.** No React. Every exported
+  function documents its parameters and return type. Apps may use `.ts` for
+  client entries/islands; do not migrate `src/` to TypeScript.
 - **Comments are written in Turkish and explain *why*.** Do not restate what the
   code does; record a decision, a trade-off or a trap.
 - Server and build code uses `node:`-prefixed core modules.

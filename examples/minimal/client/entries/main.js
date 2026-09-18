@@ -6,7 +6,7 @@ import { registerAll, start } from "jskelet/client";
  * büyütmez.
  */
 registerAll({
-  counter: () => import("../islands/counter.js"),
+  counter: () => import("../islands/counter.ts"),
 });
 
 start();

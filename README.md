@@ -4,11 +4,13 @@
 the product.
 
 JSkelet renders **complete HTML** on an Express 5 server from build-time
-**`.jsk` templates** (EJS still works), adds interactivity through vanilla JS
-**islands**, compiles CSS into a **single Tailwind v4 stylesheet**, and instead
-of ISR keeps an in-process **HTML TTL cache** with stale-while-revalidate — plus
-optional Redis sharing and path-based invalidation. No React, no TypeScript —
-plain JavaScript with JSDoc.
+**`.jsk` templates** (optional EJS peer for legacy `.ejs`), adds interactivity
+through vanilla JS **islands**, compiles CSS into a **single Tailwind v4
+stylesheet**, and instead of ISR keeps an in-process **HTML TTL cache** with
+stale-while-revalidate — plus optional Redis sharing and path-based
+invalidation. No React — the framework source is plain JavaScript with JSDoc;
+apps can write client islands and entries in TypeScript, and the published
+package ships declaration files.
 
 [![npm version](https://img.shields.io/npm/v/jskelet)](https://www.npmjs.com/package/jskelet)
 [![Node.js 22+](https://img.shields.io/badge/node-%3E%3D22-brightgreen)](https://nodejs.org)
@@ -282,9 +284,9 @@ The complete reference — every field, default and failure mode — is
 
 | Command | What it does |
 | --- | --- |
-| `jskelet dev` | Watch build plus server, live reload, devtools overlay |
+| `jskelet dev` | Watch build plus server, live reload, devtools overlay. `--murder` kills whatever already holds `PORT` and starts. |
 | `jskelet build` | Production build: templates → fonts → sprite → CSS → JS → images → manifest → precompress |
-| `jskelet start` | Production server; builds first if output is missing |
+| `jskelet start` | Production server; builds first if output is missing. `--murder` same as for `dev`. |
 | `jskelet init` | Scaffolds a feature-first `.jsk` skeleton into the current directory |
 | `jskelet generate` | Scaffolds a `feature` / `page` / `island` |
 

@@ -55,7 +55,7 @@ export default {
     lang: "tr",
   },
 
-  layout: "views/layout.ejs",
+  layout: "views/layout.jsk",
   routes: ["./routes/10-pages.mjs", "./routes/99-catch-all.mjs"],
   trailingSlash: false,
 
@@ -213,27 +213,32 @@ cross-subdomain handoff bridge for a short session id.
 
 | Field | Type | Default | Meaning |
 | --- | --- | --- | --- |
-| `crossSubdomainHandoff` | `boolean \| object` | `false` | `true` or `{ ttlSeconds?, path?, maxValueBytes? }` → `POST /_jskelet/auth/handoff` + `?handoff=` redeem |
+| `crossSubdomainHandoff` | `boolean \| object` | `false` | When on: `POST /_jskelet/auth/handoff` + `?handoff=` redeem. Object: `allowedCookieNames` (required), `ttlSeconds?`, `path?`, `maxValueBytes?`, `maxPendingTickets?`, `maxMintsPerIpPerMinute?` |
 
 ```js
 auth: {
-  crossSubdomainHandoff: { ttlSeconds: 60 },
+  crossSubdomainHandoff: {
+    allowedCookieNames: ["sid"],
+    ttlSeconds: 60,
+  },
 },
 ```
 
-Details and the `window.name` fallback:
-[12-dashboards-and-sessions.md](./12-dashboards-and-sessions.md).
+The mint endpoint is mounted **after** the CSRF middleware (origin checks).
+Cookie names outside the allowlist or that are not RFC 6265 tokens get 400.
+Details: [12-dashboards-and-sessions.md](./12-dashboards-and-sessions.md).
 
 ## `layout`
 
 **Type:** `string` — **Default:** none (automatic resolution)
 
-Path of the layout `.ejs` file. The value given is resolved relative to the
-**parent directory of the views directory**, so with the default `views`,
-`"views/custom.ejs"` → `<root>/views/custom.ejs`.
+Path of the layout file (`.jsk` or legacy `.ejs`). The value given is resolved
+relative to the **parent directory of the views directory**, so with the default
+`views`, `"views/custom.jsk"` → `<root>/views/custom.jsk`.
 
-If not given, in order: `views/layout.ejs` if it exists, otherwise the
-framework's minimal layout. Details: [04-rendering.md](./04-rendering.md).
+If not given, in order: `views/layout.jsk`, `views/layout.ejs` (legacy),
+otherwise the framework's `src/templates/layout.jsk` default. Details:
+[04-rendering.md](./04-rendering.md).
 
 ## `routes`
 
@@ -335,7 +340,7 @@ field reference.
 | `trustProxy` | `boolean` | `true` | Express's `trust proxy` setting. Needed behind a reverse proxy for the correct protocol and client IP. |
 | `cookieSecret` | `string \| null` | `null` | The signed cookie secret. When absent, `JSKELET_SECRET` is read. |
 | `csrf.enabled` | `boolean` | `true` | The origin / `Sec-Fetch-Site` check. |
-| `csrf.token` | `boolean` | `false` | The double-submit token layer. |
+| `csrf.token` | `boolean` | `false` | The double-submit token layer. **Turn on** for cookie-session forms. |
 | `csrf.allowedOrigins` | `string[]` | `[]` | Origins accepted alongside our own host. |
 | `csrf.exclude` | `string[]` | `[]` | Paths exempt from the check; `source` pattern syntax. |
 | `csrf.cookieName` | `string` | `"csrf_token"` | Name of the token cookie. |
@@ -343,14 +348,17 @@ field reference.
 | `csrf.headerName` | `string` | `"x-csrf-token"` | Header the token is also accepted in. |
 
 `trustProxy` should be **turned off** on a server exposed directly to the
-internet: while it is on, a client can forge its own `X-Forwarded-For` and rate
-limiting or audit logs see the wrong address.
+internet: while it is on, a client can forge `X-Forwarded-For` /
+`X-Forwarded-Proto` / Host, and rate limits, admin IP allowlists, Secure
+cookies, and cache `vary.host` see the wrong address. Behind a reverse proxy
+(nginx, Caddy, Cloudflare), `true` is the right default.
 
 The CSRF check only rejects requests that are **known** to be cross-site — when
 `Origin` does not match or `Sec-Fetch-Site: cross-site` arrives. If neither is
 present the request passes, because browsers always send `Origin` on a
-cross-origin POST while webhooks never do. Even so, listing non-browser
-endpoints in `csrf.exclude` makes the intent readable.
+cross-origin POST while webhooks never do. For cookie-session dashboards,
+enable `csrf.token: true` and `csrfField()` as a second layer; put webhook
+paths in `csrf.exclude`.
 
 ## `navigation`
 
@@ -555,8 +563,9 @@ When `remote.allowHosts` is set, also proxies remote images at runtime
 
 If `false` is given, neither surface runs. The build step requires `sharp` and
 never runs on a watch pass. With remote enabled, `sharp` is also needed at
-**runtime**; without it the optimizer 302-redirects to the source URL. Details:
-[08-build.md](./08-build.md).
+**runtime**; without it the optimizer 302-redirects to the source URL. Fetch
+does not auto-follow redirects: every hop is re-checked against `allowHosts`
+and private addresses. Details: [08-build.md](./08-build.md).
 
 ```js
 images: {
@@ -588,7 +597,10 @@ that is not in the list returns `undefined` instead of crashing.
 clientEnv: ["PUBLIC_WS_URL", "PUBLIC_CDN_ORIGIN"]
 ```
 
-**Do not put secrets here** — the values sit in the bundle in plain text.
+**Do not put secrets here** — the values sit in the bundle in plain text. Keys
+whose names look secret-like (`SECRET`, `PASSWORD`, `TOKEN`, `API_KEY`,
+`PRIVATE`, …) are **rejected at build time** (`PUBLIC` / `PUBLISHABLE` names
+are exempt).
 
 ## `headers()`
 
@@ -598,6 +610,7 @@ clientEnv: ["PUBLIC_WS_URL", "PUBLIC_CDN_ORIGIN"]
 Response headers by path pattern. The framework only writes long-lived cache
 headers for static files; every other header (CSP, COOP, HSTS,
 X-Frame-Options…) comes from here and takes precedence over the defaults.
+Production sites should at least define the security headers below.
 
 **All** matching rules are applied (unlike redirects, it does not stop at the
 first match), in order; if two rules write the same header, the later one wins.
@@ -612,11 +625,18 @@ async headers() {
       source: "/:path*",
       headers: [
         { key: "X-Frame-Options", value: "SAMEORIGIN" },
+        { key: "X-Content-Type-Options", value: "nosniff" },
         { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
         {
-          key: "Content-Security-Policy",
-          value: "default-src 'self'; img-src 'self' https://cdn.example.com data:",
+          key: "Permissions-Policy",
+          value: "camera=(), microphone=(), geolocation=()",
         },
+        {
+          key: "Content-Security-Policy",
+          value: "default-src 'self'; img-src 'self' https://cdn.example.com data:; script-src 'self'",
+        },
+        // Only when you terminate HTTPS yourself:
+        // { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains" },
       ],
     },
     {
@@ -1106,7 +1126,7 @@ and no warning is printed.
 | Variable | Who reads it | Default | Meaning |
 | --- | --- | --- | --- |
 | `NODE_ENV` | everywhere | `production` (start/build), `development` (dev) | Determines the dev overlay, EJS cache, manifest re-reading, route error behaviour and prewarm defaults. `jskelet dev` sets it itself — `cross-env` is not needed. |
-| `PORT` | `startServer` | `3000` | Port to listen on |
+| `PORT` | `startServer` | `3000` | Port to listen on. If busy, the process refuses to start; `jskelet start|dev --murder` kills the listener |
 | `HOST` | `startServer` | `::` | Interface to bind to. The default listens dual-stack (IPv6 + IPv4); it falls back to `0.0.0.0` where IPv6 is unavailable |
 | `JSKELET_SECRET` | `jskelet/cookies` | — | The signed cookie secret. Read when `security.cookieSecret` is not set; if neither exists, the signed cookie API throws. [12](./12-dashboards-and-sessions.md) |
 | `DEV_TOKEN` | `devGate`, `prewarm` | — | If set, every request without a token gets a 404. Prewarming carries the token as a cookie. [09](./09-dev-tools.md) |

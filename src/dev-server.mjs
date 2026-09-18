@@ -139,6 +139,18 @@ function escapeRegExp(value) {
 }
 
 /**
+ * Bekleyen hata kutusunu hemen bas. Alt süreç exit/close olduğunda 60 ms
+ * zamanlayıcıya güvenilmez: parent `shutdown` ile ölürse satır hiç görünmez.
+ */
+function flushErrorNow() {
+  if (errorTimer) {
+    clearTimeout(errorTimer);
+    errorTimer = null;
+  }
+  flushError();
+}
+
+/**
  * @param {string} line
  * @param {boolean} isError
  */
@@ -174,12 +186,18 @@ function onServerLine(line, isError) {
 
   if (!line.trim()) return;
 
-  // Hata gövdesi ve yığın satırları kutuya toplanır.
-  if (isError || /^\s+at\s/.test(line) || /Error\b/.test(line)) {
+  // Yığın / Error: kutuya. Düz stderr (port dolu vb.) anında — süreç hemen
+  // exit 1 ile öldüğü için gecikmeli flush'a kalırsa satır kayboluyor.
+  if (/^\s+at\s/.test(line) || /Error\b/.test(line)) {
     errorBuffer.push(
       line.replace(/^\[(?:uncaughtException|unhandledRejection)\]\s*/, ""),
     );
     scheduleErrorFlush();
+    return;
+  }
+
+  if (isError) {
+    log.error(line.trim());
     return;
   }
 
@@ -205,9 +223,12 @@ function run(args, label, passthrough) {
     passthrough ? onBuildLine(line) : onServerLine(line, true),
   );
 
-  child.on("exit", (code) => {
+  // `close`: stdio boşaldıktan sonra. `exit` ile yarışınca port hatası
+  // stderr'de kalıp "server exited" dışında bir şey görünmüyordu.
+  child.on("close", (code) => {
     if (code === 0 || code === null) return;
     if (child[STOPPING]) return; // yeniden başlatma: beklenen çıkış
+    if (!passthrough) flushErrorNow();
     log.error(`${label} exited (code ${code})`);
     shutdown(code);
   });
@@ -249,6 +270,7 @@ let server = null;
 
 // `--import` modül belirteci bekler: Windows'ta `H:\…` yolu `h:` şemalı URL
 // sanılıp reddediliyor, bu yüzden file:// URL'e çevrilir.
+// `--murder` sunucu sürecine iletilir: dolu portta dinleyen öldürülüp başlanır.
 const SERVER_ARGS = [
   // `.env` yoksa bayrak hiç geçilmez: `--env-file-if-exists` dosya yokken bir
   // bildirim satırı basıyor ve bu satır hata kutusuna dönüşüyordu.
@@ -256,6 +278,7 @@ const SERVER_ARGS = [
   "--import",
   pathToFileURL(path.join(SRC, "runtime", "register.mjs")).href,
   path.join(SRC, "start.mjs"),
+  ...(process.argv.includes("--murder") ? ["--murder"] : []),
 ];
 
 function startServerProcess() {

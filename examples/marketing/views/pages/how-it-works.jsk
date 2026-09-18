@@ -1,0 +1,80 @@
+<section class="page-hero glow">
+  <div class="grid-surface pointer-events-none absolute inset-0" aria-hidden="true"></div>
+  <div class="wrapper relative py-20 sm:py-28">
+    <SectionHead :section="t.howItWorks.hero" :level="1" />
+
+    {# Adım şeridi: sayfanın tamamını okumadan önce akışın kaç durağı olduğunu gösterir. #}
+    <div class="mt-10 flex max-w-3xl items-center gap-2" aria-hidden="true">
+      {#each pipeline as item, i}
+      <span class="flex size-9 shrink-0 items-center justify-center rounded-full bg-brand-400 font-mono text-xs font-bold text-ink-950 shadow-[0_0_20px_rgb(34_211_238_/_0.35)]">{{ item.step }}</span>
+      {#if i < pipeline.length - 1}<span class="h-px flex-1 bg-gradient-to-r from-brand-400 to-brand-500/40"></span>{/if}
+      {/each}
+    </div>
+  </div>
+</section>
+
+<section class="wrapper py-16">
+  {#
+    Timeline: çizgi yalnızca daire sütununun ortasından geçer; daireler
+    opak zeminle üstte durduğu için çizgi kart gövdesini kesmez.
+  #}
+  <ol class="relative grid list-none gap-5 p-0">
+    <span
+      class="pointer-events-none absolute top-12 bottom-12 left-12 w-px -translate-x-1/2 bg-brand-400/60"
+      aria-hidden="true"
+    ></span>
+    {#each pipeline as item}
+    <li class="glass-panel glass-panel--lit relative grid grid-cols-[3rem_1fr] items-start gap-4 p-6 sm:gap-5">
+      <span
+        class="relative z-10 inline-flex size-12 items-center justify-center rounded-full bg-brand-400 font-mono text-sm font-bold text-ink-950 shadow-[0_0_24px_rgb(34_211_238_/_0.35)]"
+        aria-hidden="true"
+      >{{ item.step }}</span>
+      <div class="min-w-0 pt-1.5">
+        <h2 class="m-0 text-lg font-semibold tracking-tight">{{ item.title }}</h2>
+        <p class="mt-2 mb-0 max-w-3xl text-sm/6 text-slate-600 dark:text-slate-300">{{ item.body }}</p>
+      </div>
+    </li>
+    {/each}
+  </ol>
+</section>
+
+<section class="border-t border-slate-200 bg-slate-50 py-16 dark:border-white/10 dark:bg-white/[0.02]">
+  <div class="wrapper grid gap-10 lg:grid-cols-2 lg:items-start">
+    <div>
+      <SectionHead
+        :eyebrow="t.islandContract.eyebrow"
+        :title="t.islandContract.title"
+        :lead="t.islandContract.lead"
+      />
+
+      <ul class="mt-6 grid list-none gap-3 p-0 text-sm/6 text-slate-600 dark:text-slate-300">
+        {#each t.islandContract.points as point}
+        <li class="flex gap-2.5">
+          <span aria-hidden="true" class="text-brand-500 dark:text-brand-300">→</span>
+          <span>{{ point }}</span>
+        </li>
+        {/each}
+      </ul>
+    </div>
+
+    <div class="grid gap-4">
+      <CodeBlock label="views/pages/pricing.jsk" :code="islandViewCode" />
+      <CodeBlock label="client/islands/pricing-calculator.js" :code="islandClientCode" />
+    </div>
+  </div>
+</section>
+
+<section class="wrapper py-16">
+  <SectionHead :section="t.islandContract.payoff" />
+
+  <div class="mt-10 grid gap-5 md:grid-cols-3">
+    {#each pillars as item, i}
+    <FeatureCard :item="item" :index="i + 1" />
+    {/each}
+  </div>
+
+  <div class="mt-10 flex flex-wrap gap-3">
+    <ButtonLink :href="paths.compare" :text="t.islandContract.ctaPrimary" icon="ArrowRight" />
+    <ButtonLink :href="paths.docs" :text="t.islandContract.ctaSecondary" variant="ghost" />
+  </div>
+</section>

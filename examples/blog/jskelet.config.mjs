@@ -4,6 +4,7 @@
  *
  * Tam referans: node_modules/jskelet/docs/07-yapilandirma.md
  */
+import { asset, hasAsset } from "jskelet";
 import { allPostPaths } from "./lib/posts.js";
 
 const SITE_URL = process.env.SITE_URL ?? "http://localhost:3000";
@@ -160,10 +161,17 @@ export default {
      * paralel çalıştırır, yani sıraya girmez.
      */
     layoutContext({ pathname }) {
+      // Font preload `.jsk` ifadesinde asset()/hasAsset() çağrılamadığı için
+      // burada HTML string olarak hazırlanır.
+      const fontPreloadHtml = hasAsset("inter-400.woff2")
+        ? `<link rel="preload" href="${asset("inter-400.woff2")}" as="font" type="font/woff2" crossorigin>`
+        : "";
+
       return {
         pathname,
         // Arka plan burada değil `<html>`de; gerekçesi layout'un başında.
-        bodyClass: "min-h-screen text-slate-900",
+        bodyClass: "min-h-screen text-slate-900 flex flex-col",
+        fontPreloadHtml,
         nav: [
           { href: "/", label: "Ana sayfa" },
           { href: "/blog", label: "Blog" },

@@ -1,10 +1,12 @@
 # JSkelet belgeleri
 
 JSkelet, SEO ve hız odaklı siteler için "framework'süz hissettiren" bir
-framework: Express 5 + EJS ile sunucuda tam HTML üretir, etkileşimi vanilla JS
-island'larla ekler, CSS'i Tailwind v4 ile tek bir stylesheet'e derler ve ISR
-yerine süreç belleğinde yaşayan, stale-while-revalidate'li bir HTML TTL cache
-kullanır. React yok, TypeScript yok; düz JavaScript ve JSDoc.
+framework: Express 5 + build-time `.jsk` ile sunucuda tam HTML üretir (EJS
+opsiyonel legacy peer), etkileşimi vanilla JS island'larla ekler, CSS'i
+Tailwind v4 ile tek bir stylesheet'e derler ve ISR yerine süreç belleğinde
+yaşayan, stale-while-revalidate'li bir HTML TTL cache kullanır. React yok;
+framework kaynağı düz JavaScript + JSDoc'tur. Uygulama tarafında client
+island/entry'ler TypeScript yazılabilir ve paket `.d.ts` yayınlar.
 
 Bu dizin framework'ün tam referansıdır. Sıralı okumak için baştan başlayın;
 belirli bir konuyu arıyorsanız doğrudan ilgili başlığa gidin.
@@ -19,7 +21,7 @@ eşlenik tutuluyor; birini değiştiriyorsan diğerini de değiştir.
 | [01-baslangic.md](./01-baslangic.md) | Kurulum, `jskelet init`, ilk route, ilk island, dizin yapısı, CLI komutları |
 | [02-mimari.md](./02-mimari.md) | Mimari kararlar ve gerekçeleri: island modeli, tam sunucu HTML'i, cache stratejisi, middleware sırası |
 | [03-routing.md](./03-routing.md) | Route modülü sözleşmesi, yükleme sırası, controller sözleşmesi, `ctx`, `notFound`/`redirect`, config redirects/rewrites |
-| [04-render-ve-sablonlar.md](./04-render-ve-sablonlar.md) | EJS layout, sayfalar, otomatik bileşen kaydı, `html`/`tags` yardımcıları, metadata → `<head>`, hook'lar |
+| [04-render-ve-sablonlar.md](./04-render-ve-sablonlar.md) | `.jsk` layout/sayfalar, otomatik bileşen kaydı, `html`/`tags`, metadata → `<head>`, hook'lar; EJS legacy |
 | [05-islands.md](./05-islands.md) | `data-island` sözleşmesi, hidrasyon stratejileri, `client/entries/*`, `createStore`, DOM yardımcıları, `startSafeImages` |
 | [06-cache.md](./06-cache.md) | `withHtmlCache`, `revalidate`, stale-while-revalidate, cache anahtarı, `X-JSkelet-Cache`, istek içi cache, degraded render, prewarm |
 | [07-yapilandirma.md](./07-yapilandirma.md) | `jskelet.config.mjs` tam referansı, `source` desen sözdizimi, ortam değişkenleri tablosu |

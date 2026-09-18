@@ -53,6 +53,108 @@ html.dark {
   --color-brand-400: #22d3ee;
   --color-brand-500: #06b6d4;
   --color-ink-950: #05080f;
+  --color-ink-900: #0a0f1c;
+  --color-ink-850: #0c1222;
+  --color-violet-glow: #c4b5fd;
+}
+
+/**
+ * Cam kart: koyu tuvalde frosted panel. Light'ta da aynı dil — beyaz/slate
+ * kart yerine ince kenar + soft gölge; dark'ta blur ve cyan ışıltı.
+ */
+.glass-panel {
+  border: 1px solid color-mix(in oklab, var(--color-slate-300) 70%, transparent);
+  border-radius: 1.25rem;
+  background: color-mix(in oklab, white 92%, transparent);
+  box-shadow:
+    0 1px 0 color-mix(in oklab, white 60%, transparent) inset,
+    0 18px 40px color-mix(in oklab, var(--color-slate-950) 6%, transparent);
+  backdrop-filter: blur(16px);
+}
+
+.dark .glass-panel {
+  border-color: color-mix(in oklab, white 12%, transparent);
+  background: color-mix(in oklab, var(--color-ink-900) 78%, transparent);
+  box-shadow:
+    0 1px 0 color-mix(in oklab, white 8%, transparent) inset,
+    0 0 0 1px color-mix(in oklab, var(--color-brand-400) 8%, transparent),
+    0 24px 60px color-mix(in oklab, black 45%, transparent);
+}
+
+/**
+ * Dönen cyan kenar ışığı. Conic-gradient bir ::before halkasında; mask ile
+ * yalnızca border kalınlığında görünür — panel gövdesinin arkasından sızmaz.
+ */
+@property --lit-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+.glass-panel--lit {
+  position: relative;
+  isolation: isolate;
+  /* Statik kenar: ışık halkası üstte; boşlukta yine ince çerçeve kalsın. */
+  border-color: color-mix(in oklab, var(--color-slate-300) 55%, transparent);
+  box-shadow:
+    0 1px 0 color-mix(in oklab, white 60%, transparent) inset,
+    0 18px 40px color-mix(in oklab, var(--color-slate-950) 6%, transparent),
+    0 0 24px color-mix(in oklab, var(--color-brand-400) 10%, transparent);
+}
+
+.dark .glass-panel--lit {
+  border-color: color-mix(in oklab, white 10%, transparent);
+  box-shadow:
+    0 1px 0 color-mix(in oklab, white 8%, transparent) inset,
+    0 24px 60px color-mix(in oklab, black 45%, transparent),
+    0 0 28px color-mix(in oklab, var(--color-brand-400) 16%, transparent);
+}
+
+.glass-panel--lit::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: inherit;
+  padding: 1px;
+  background: conic-gradient(
+    from var(--lit-angle),
+    transparent 0deg,
+    transparent 250deg,
+    color-mix(in oklab, var(--color-brand-400) 35%, transparent) 280deg,
+    var(--color-brand-400) 310deg,
+    #fff 325deg,
+    var(--color-brand-300) 340deg,
+    transparent 360deg
+  );
+  pointer-events: none;
+  animation: lit-border-spin 3.6s linear infinite;
+  /* İçini oy: yalnızca 1px halka boyanır. */
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+}
+
+@keyframes lit-border-spin {
+  to {
+    --lit-angle: 360deg;
+  }
+}
+
+.page-hero {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border-bottom: 1px solid var(--color-slate-200);
+}
+
+.dark .page-hero {
+  border-color: color-mix(in oklab, white 10%, transparent);
 }
 
 /**
@@ -313,14 +415,19 @@ html.dark {
 .glow {
   background-image:
     radial-gradient(
-      48rem 30rem at 12% 0%,
-      color-mix(in oklab, var(--color-brand-400) 22%, transparent),
+      52rem 34rem at 8% -5%,
+      color-mix(in oklab, var(--color-brand-400) 26%, transparent),
+      transparent 72%
+    ),
+    radial-gradient(
+      44rem 32rem at 92% 8%,
+      color-mix(in oklab, var(--color-brand-500) 18%, transparent),
       transparent 70%
     ),
     radial-gradient(
-      40rem 28rem at 88% 10%,
-      color-mix(in oklab, var(--color-brand-500) 14%, transparent),
-      transparent 68%
+      36rem 24rem at 70% 70%,
+      color-mix(in oklab, var(--color-violet-glow) 8%, transparent),
+      transparent 65%
     );
 }
 
@@ -335,8 +442,8 @@ html.dark {
 
 .dark .grid-surface {
   background-image:
-    linear-gradient(to right, rgb(34 211 238 / 0.09) 1px, transparent 1px),
-    linear-gradient(to bottom, rgb(34 211 238 / 0.09) 1px, transparent 1px);
+    linear-gradient(to right, rgb(34 211 238 / 0.1) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(34 211 238 / 0.1) 1px, transparent 1px);
 }
 
 /** Hero görselindeki hareket dekoratiftir ve düşük hareket tercihinde kapanır. */
@@ -347,26 +454,42 @@ html.dark {
 }
 
 /**
- * Hero'daki el yazısı not. Web font yok: sistem cursive yığını + hafif
- * eğim; LCP'ye yazılmaz.
+ * Hero sağındaki 3D illüstrasyon. PNG şeffaf; cyan glow CSS'te, idle
+ * float `logo-orbit` ile aynı keyframe.
  */
-.hero-annotation {
-  font-family: "Segoe Script", "Apple Chancery", "Comic Sans MS", cursive;
-  font-size: 1.05rem;
-  line-height: 1.2;
-  color: white;
-  letter-spacing: 0.01em;
-  transform: rotate(-6deg);
-  text-shadow: 0 0 18px rgb(34 211 238 / 0.35);
+.hero-visual {
+  position: relative;
+  margin: 0 auto;
+  width: 100%;
+  max-width: 36rem;
 }
 
-.hero-annotation-arrow {
-  stroke: rgb(226 232 240);
-  fill: none;
-  stroke-width: 1.5;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  filter: drop-shadow(0 0 6px rgb(34 211 238 / 0.25));
+.hero-visual::before {
+  content: "";
+  position: absolute;
+  inset: 18% 12% 22%;
+  border-radius: 50%;
+  background: radial-gradient(
+    closest-side,
+    color-mix(in oklab, var(--color-brand-400) 42%, transparent),
+    transparent 75%
+  );
+  filter: blur(28px);
+  pointer-events: none;
+}
+
+.hero-visual img {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: auto;
+  animation: logo-float 6s ease-in-out infinite;
+  filter: drop-shadow(0 0 36px rgb(34 211 238 / 0.35));
+}
+
+/** PNG siyah tuval; koyu temada lighten siyahı kaybeder, yalnızca glow kalır. */
+.dark .hero-visual img {
+  mix-blend-mode: lighten;
 }
 
 /** Ölçümlü trust/stats şeridi — marquee yerine sabit, okunabilir satır. */
@@ -484,14 +607,12 @@ html.dark {
 @media (prefers-reduced-motion: reduce) {
   .bar-fill,
   .logo-orbit,
+  .hero-visual img,
   .status-pulse,
-  .marquee-track {
+  .marquee-track,
+  .glass-panel--lit::before {
     animation: none;
     transition: none;
-  }
-
-  .hero-annotation {
-    transform: none;
   }
 }
 

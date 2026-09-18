@@ -145,7 +145,9 @@ export default {
     sharedCookieRoots: [".investvio.com", ".localhost"],
   },
   auth: {
-    crossSubdomainHandoff: true, // POST /_jskelet/auth/handoff
+    crossSubdomainHandoff: {
+      allowedCookieNames: ["sid"], // required allowlist
+    },
   },
 };
 ```
@@ -210,17 +212,20 @@ a **read-back** runs; if the browser rejected the Domain, `handoff: true`.
 
 With `auth.crossSubdomainHandoff` on:
 
-1. `POST /_jskelet/auth/handoff` `{ name, value, next }` → `{ url }` (with `?handoff=`)
+1. `POST /_jskelet/auth/handoff` `{ name, value, next }` → `{ url }` (with
+   `?handoff=`). Mint is mounted **after** the CSRF middleware; `name` must be
+   in `allowedCookieNames` and an RFC 6265 token.
 2. On the target host a GET middleware redeems the one-time ticket, sets the
    cookie (shared Domain first, else host-only), and 303-redirects without
    `handoff`
 
 `next` must be under the same `sharedCookieRoots`. Tickets live ~60s in process
-memory. Do not put a JWT in the URL.
+memory, with pending-ticket and per-IP mint limits. Do not put a JWT in the URL.
 
 The `window.name` bridge is the cookie-less fallback:
 `handoffViaWindowName` on the source page, `consumeWindowNameHandoff` on the
-target.
+target. Prefer the server handoff when possible — `window.name` remains readable
+across origins in the same tab.
 
 ## CSRF
 

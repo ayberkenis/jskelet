@@ -174,8 +174,10 @@ a new utility is written. Changes are coalesced over 120 ms.
 
 ## Client JS — esbuild
 
-Every `.js` file inside `client/entries/*.js` is an entry. If the directory does
-not exist or is empty, the step is skipped.
+Every source file under `client/entries/*.{js,ts,mts}` is an entry (no `.tsx`).
+The manifest key is always `*.js` (`main.ts` → `main.js`). Multiple extensions
+for the same stem fail the build. If the directory does not exist or is empty,
+the step is skipped.
 
 esbuild settings:
 
@@ -185,7 +187,7 @@ esbuild settings:
 | `format` | `esm` | `type="module"` scripts |
 | `target` | `chrome111`, `edge111`, `firefox111`, `safari16.4` | The lower bound of the ESM + dynamic import + `IntersectionObserver` island model; transpiling to anything older grows the output without winning a single visitor |
 | `minify` | `true` | — |
-| `sourcemap` | `true` | Diagnostics in the browser |
+| `sourcemap` | only when `NODE_ENV=development` | Production builds do not publish `.map` files under `public/assets` |
 | `entryNames` | `[name].[hash]` | `immutable` cache |
 | `chunkNames` | `chunks/[name].[hash]` | — |
 | `legalComments` | `none` | — |
@@ -196,17 +198,19 @@ The output lands under `public/assets/js/` and is cleaned first on every pass.
 ### The `@/` alias
 
 On the esbuild side, `@/` resolves to the project root and extension completion
-is performed (`.js`, `.mjs`, `.json`, `/index.js`). The same behaviour as
-`alias-hooks.mjs` on the Node side, so the modules under `lib/` can use the same
-import style both on the server and in the browser.
+is performed (`.js`, `.mjs`, `.ts`, `.mts`, `.json`, `/index.js`, `/index.ts`).
+Node `alias-hooks.mjs` resolves only `.js` / `.mjs` / `.json` on the server, so
+shared `@/lib` modules must stay `.js`. Client-only `.ts` imports work on the
+esbuild path.
 
 ### Inlining `clientEnv`
 
 There is no `process` in the browser; modules shared with the server still read
 `process.env`. The keys declared through `config.clientEnv` plus `NODE_ENV` are
 defined as a single object at build time, which means that reading a key not in
-the list returns `undefined` instead of crashing. Details:
-[07-configuration.md](./07-configuration.md).
+the list returns `undefined` instead of crashing. Secret-like key names
+(`SECRET`, `API_KEY`, …) fail the build; names containing `PUBLIC` /
+`PUBLISHABLE` are exempt. Details: [07-configuration.md](./07-configuration.md).
 
 ### Manifest keys
 
@@ -285,7 +289,7 @@ Local file names:
   `0 0 256 256` (recommended for Phosphor / `icon()` compatibility).
 - The scanned directories default to `views`, `client`, `routes`, `lib`,
   `features`, `shared`; they can be changed with `icons.scan`. Scanned
-  extensions: `.ejs`, `.jsk`, `.js`, `.mjs`.
+  extensions: `.ejs`, `.jsk`, `.js`, `.mjs`, `.ts`, `.mts`.
 - Weights: `thin`, `light`, `regular`, `bold`, `fill`, `duotone`. An
   unrecognised weight counts as `regular`.
 
@@ -355,7 +359,9 @@ and `image()` falls back to the original file. It never runs on a watch pass.
 When `images.remote.allowHosts` is set, `createApp` mounts `/_jskelet/image`.
 CMS / CDN covers never enter the build, so `image()` rewrites those host URLs to
 `?url=&w=`; the endpoint encodes webp with sharp and stores files under
-`.jskelet/image-cache/`. Details: [07-configuration.md](./07-configuration.md).
+`.jskelet/image-cache/`. Upstream fetch follows redirects manually: every hop is
+re-checked against the allowlist and private IP / DNS rules (open-redirect SSRF
+is closed). Details: [07-configuration.md](./07-configuration.md).
 
 ## Precompress
 

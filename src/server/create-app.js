@@ -21,13 +21,12 @@
  *      body parser'dan önce, admin ile aynı katmanda.
  *   5. body parser'lar — statikten sonra: görsel isteklerinde gövde ayrıştırma
  *      maliyeti ödenmesin.
- *   5b. auth handoff (açıksa) — POST bilet + `?handoff=` redeem; csrf'den
- *      önce değil sonra: JSON gövde parser'ı hazır olsun. Redeem GET route
- *      render'ından önce olmalı.
- *   6. csrf — body parser'lardan sonra olmalı: token form alanından okunuyor.
+ *   5b. csrf — body parser'lardan sonra: token form alanından okunuyor.
  *      Rewrite'lardan önce, çünkü kontrol istemcinin gördüğü yola bakar.
- *   7. rewrites(afterFiles) — statik denendikten sonra, sayfalardan önce.
- *   8. route'lar → 404 → hata yönetimi.
+ *   5c. auth handoff (açıksa) — CSRF'den *sonra*: mint POST origin koruması
+ *      görsün. Redeem GET güvenli metot; route render'ından önce kalır.
+ *   6. rewrites(afterFiles) — statik denendikten sonra, sayfalardan önce.
+ *   7. route'lar → 404 → hata yönetimi.
  */
 import path from "node:path";
 import process from "node:process";
@@ -51,6 +50,7 @@ import { configureUpstreamLimiter } from "./upstream-limiter.js";
 import { connectRedis, disconnectRedis } from "./redis.js";
 import { configureLogs, flushLogs, closeLogs } from "./logs/pipeline.js";
 import { isNotFoundError, isRedirectError } from "../http/control-flow.js";
+import { ensurePortFree } from "./port-guard.js";
 
 /**
  * @param {{ root?: string, configFile?: string }} [options]
@@ -152,6 +152,8 @@ export async function createApp(options = {}) {
   app.use(express.urlencoded({ extended: false, limit: "64kb" }));
   app.use(express.json({ limit: "256kb" }));
 
+  app.use(csrf());
+
   const handoff = config.auth?.crossSubdomainHandoff;
   if (
     handoff === true ||
@@ -162,8 +164,6 @@ export async function createApp(options = {}) {
     const { mountAuthHandoff } = await import("./auth/handoff.js");
     mountAuthHandoff(app);
   }
-
-  app.use(csrf());
 
   app.use(configRewrites("afterFiles"));
 
@@ -222,12 +222,21 @@ export async function createApp(options = {}) {
  * Uygulamayı kurup dinlemeye başlar. CLI `jskelet start` bunu çağırır;
  * gömülü kullanımda `createApp()` tercih edilir.
  *
- * @param {{ root?: string, configFile?: string, port?: number, host?: string }} [options]
+ * Port doluysa başlamaz. `murder: true` veya argv'de `--murder` varsa
+ * dinleyen süreç öldürülüp bağlama denenir.
+ *
+ * @param {{ root?: string, configFile?: string, port?: number, host?: string, murder?: boolean }} [options]
  * @returns {Promise<import('http').Server>}
  */
 export async function startServer(options = {}) {
-  const app = await createApp(options);
   const port = Number(options.port ?? process.env.PORT ?? 3000);
+  const murder =
+    options.murder === true || process.argv.includes("--murder");
+
+  // createApp pahalı; dolu portta uygulama kurmadan önce net hata ver.
+  await ensurePortFree(port, { murder });
+
+  const app = await createApp(options);
 
   // Varsayılan `::`, `0.0.0.0` değil: ikisi de "tüm arayüzler" demek, ama
   // yalnızca IPv6 soketi çift yığın çalışır ve `localhost`un `::1`e çözüldüğü
@@ -274,6 +283,15 @@ export async function startServer(options = {}) {
         // kullanıcı bir adres verdiyse sessizce başkasını dinlemek yanlış olur.
         if (!host && isAddressUnsupported(error)) {
           listen("0.0.0.0");
+          return;
+        }
+        if (error.code === "EADDRINUSE") {
+          const hint = murder
+            ? `port ${port} is still in use after --murder`
+            : `port ${port} is already in use. Pass --murder to kill it and start, or set PORT to another value.`;
+          const wrapped = new Error(hint);
+          /** @type {NodeJS.ErrnoException} */ (wrapped).code = "EADDRINUSE";
+          reject(wrapped);
           return;
         }
         reject(error);

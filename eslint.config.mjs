@@ -7,7 +7,10 @@ export default [
       "**/node_modules/**",
       "**/public/assets/**",
       "**/.jskelet/**",
+      "types/**",
       "src/client/devtools/**",
+      "extensions/**",
+      "scripts/**",
     ],
   },
 

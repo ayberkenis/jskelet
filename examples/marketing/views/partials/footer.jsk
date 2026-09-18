@@ -1,0 +1,95 @@
+<footer class="border-t border-slate-200 bg-slate-50/70 dark:border-white/10 dark:bg-white/[0.02]">
+  <div class="wrapper grid gap-10 py-14 sm:grid-cols-2 lg:grid-cols-[1.4fr_1fr_1fr]">
+    <div class="max-w-sm">
+      <p class="m-0 flex items-center gap-2.5 text-lg font-bold">
+        {#include "partials/logo"}
+      </p>
+      <p class="mt-3 text-sm/6 text-slate-600 dark:text-slate-400">
+        {{ t.ui.footerTagline }}
+      </p>
+      <p class="mt-3 text-xs/5 text-slate-500 dark:text-slate-400">
+        {{ t.ui.footerNote }}
+      </p>
+    </div>
+
+    <nav class="grid content-start gap-2 text-sm" :aria-label="t.ui.mainMenu">
+      {#each nav as item}
+      <Link
+        :href="item.href"
+        :text="item.label"
+        class="text-slate-600 hover:text-cyan-700 hover:underline dark:text-slate-300 dark:hover:text-brand-300"
+      />
+      {/each}
+      <Link
+        :href="paths.download"
+        :text="t.ui.download"
+        class="text-slate-600 hover:text-cyan-700 hover:underline dark:text-slate-300 dark:hover:text-brand-300"
+      />
+    </nav>
+
+    <div class="grid content-start gap-3 text-sm">
+      {#
+        Sürüm künyesi kurulu paketten okunuyor; footer'da durması "hangi
+        sürüme bakıyorum" sorusunu her sayfada cevaplıyor.
+      #}
+      <div class="glass-panel glass-panel--lit rounded-2xl p-4">
+        <p class="m-0 text-[10px] font-bold tracking-[0.18em] text-slate-500 uppercase dark:text-slate-400">
+          {{ t.ui.releaseLabel }}
+        </p>
+        <p class="mt-1 mb-0 font-mono text-lg font-bold">{{ releaseVersionLabel }}</p>
+        <p class="mt-2 mb-0 text-xs text-slate-600 dark:text-slate-400">
+          {{ nodeRequirementText }} · {{ licenseText }}
+        </p>
+        <Link
+          :href="paths.changelog"
+          :text="changelogNavLabel"
+          class="mt-3 inline-block text-xs font-bold text-cyan-700 hover:underline dark:text-brand-300"
+        />
+      </div>
+
+      <div class="flex flex-wrap gap-x-4 gap-y-2 text-sm">
+        <a
+          href="https://github.com/ayberkenis/jskelet"
+          rel="noopener"
+          class="inline-flex items-center gap-1.5 text-slate-600 hover:text-cyan-700 hover:underline dark:text-slate-300 dark:hover:text-cyan-300"
+        >
+          <Icon name="GithubLogo" :size="16" />
+          <span>{{ t.ui.githubShort }}</span>
+        </a>
+        <Link
+          href="/sitemap.xml"
+          :text="t.ui.sitemap"
+          class="text-slate-600 hover:text-cyan-700 hover:underline dark:text-slate-300 dark:hover:text-brand-300"
+        />
+      </div>
+    </div>
+  </div>
+
+  <div class="wrapper flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 py-5 text-xs text-slate-600 dark:border-white/10 dark:text-slate-400">
+    <span>{{ licenseText }} · {{ nodeRequirementText }}</span>
+
+    <div class="flex flex-wrap items-center gap-4">
+      {# Dil seçimi footer'da da duruyor: header'da yalnızca bir ikon var. #}
+      <span class="inline-flex items-center gap-2">
+        {#each languages as language, i}
+        {#if i > 0}<span aria-hidden="true" class="text-slate-300 dark:text-slate-600">·</span>{/if}
+        {#if language.current}
+        <span class="font-semibold text-slate-900 dark:text-white" aria-current="true">{{ language.label }}</span>
+        {#else}
+        <a
+          :href="language.href"
+          :hreflang="language.locale"
+          :lang="language.locale"
+          class="hover:text-cyan-700 hover:underline dark:hover:text-cyan-300"
+        >{{ language.label }}</a>
+        {/if}
+        {/each}
+      </span>
+
+      <span class="inline-flex items-center gap-2">
+        <span class="status-pulse size-2 rounded-full bg-emerald-400"></span>
+        {{ t.ui.activeDevelopment }}
+      </span>
+    </div>
+  </div>
+</footer>

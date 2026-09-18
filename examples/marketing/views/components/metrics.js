@@ -3,15 +3,15 @@ import { cn, esc } from "jskelet/html";
 import { formatBytes } from "../../lib/payload.js";
 
 /**
- * Bileşen dosyalarındaki her named export şablon local'i olduğu için biçimleme
- * yardımcısı da buradan açılıyor; şablonların `lib/` içinden import etme yolu
- * yok.
+ * Bayt değerini okunur etikete çevirir. `.jsk` içinde
+ * `<Bytes :value="payload.total?.gzip" />`.
  *
- * @param {number} value
+ * @param {{ value?: number | null, empty?: string }} props
  * @returns {string}
  */
-export function bytes(value) {
-  return formatBytes(value);
+export function bytes({ value, empty = "—" } = {}) {
+  if (value == null) return empty;
+  return formatBytes(Number(value));
 }
 
 /**
@@ -20,10 +20,9 @@ export function bytes(value) {
  */
 export function statCard({ value, label, note, tone = "plain" }) {
   return `<div class="${cn(
-    "rounded-2xl border p-6 shadow-sm",
-    tone === "sky"
-      ? "border-cyan-200 bg-gradient-to-br from-cyan-50 to-white dark:border-brand-400/30 dark:from-brand-400/10 dark:to-white/[0.03]"
-      : "border-slate-200 bg-white dark:border-white/10 dark:bg-white/[0.04]",
+    "glass-panel p-6",
+    tone === "sky" &&
+      "border-cyan-200 bg-gradient-to-br from-cyan-50 to-white dark:border-brand-400/30 dark:from-brand-400/10 dark:to-transparent",
   )}">
     <p class="m-0 font-mono text-3xl font-bold tracking-tight tabular-nums">${esc(value)}</p>
     <p class="mt-1 m-0 text-sm font-medium">${esc(label)}</p>
@@ -68,7 +67,7 @@ export function payloadTable({ payload, labels }) {
       </tr>`
     : "";
 
-  return `<div class="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
+  return `<div class="glass-panel overflow-x-auto shadow-sm">
     <table class="w-full text-sm">
       <caption class="border-b border-slate-200 px-4 py-3 text-left text-xs/5 text-slate-600 dark:border-white/10 dark:text-slate-400">${esc(labels.caption)}</caption>
       <thead class="text-xs tracking-wide text-slate-500 uppercase dark:text-slate-400">

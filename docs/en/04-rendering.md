@@ -52,7 +52,7 @@ controller data → imported render(data, helpers) → HTML
   {/if}
 
   {#each items as item, i}
-    <li data-i="{{ i }}">{{ item }}</li>
+    <li :data-i="i">{{ item }}</li>
   {/each}
 
   <Link href="/" text="Home" />
@@ -68,7 +68,7 @@ controller data → imported render(data, helpers) → HTML
 | Loop | `{#each list as item}` or `as item, i` |
 | Include | `{#include "partials/header"}` (compiled `.jsk`) |
 | Component | PascalCase tag; `:prop="expr"`, `prop="literal"`, boolean `disabled` |
-| Built-ins | `Link`, `Image`, `Icon`, `CsrfField`, `PreloadImage` |
+| Built-ins | `Link`, `Image`, `Icon`, `CsrfField`, `PreloadImage`, `Stylesheets`, `BodyScripts`, `JsonLd` |
 
 The expression language is intentionally small (access, compare, ternary,
 `.length`). No assignments, object literals, or arbitrary calls — keep logic in
@@ -104,12 +104,15 @@ See the extension README for details.
 
 If a compiled `.jsk` exists for a view id it wins; otherwise `.ejs` is rendered
 with EJS. Existing apps keep working unchanged. `jskelet init` scaffolds `.jsk`.
+Legacy `.ejs` needs the optional `ejs` peer installed in the application
+(`npm install ejs`); without it only `.jsk` templates run.
 
 ## The EJS engine (legacy)
 
-EJS remains supported. The engine is set up once on the first render; the
-component scan touches the file system, so it cannot be done on every request
-and cannot be computed before the config is loaded.
+EJS remains supported as an **optional peer dependency** for legacy templates.
+The engine is set up once on the first render; the component scan touches the
+file system, so it cannot be done on every request and cannot be computed
+before the config is loaded.
 
 Settings:
 
@@ -130,66 +133,54 @@ normal flow because the dev server restarts the process.
 
 1. `jskelet.config.mjs` → if `layout` is given, it is used. The path is
    resolved relative to the **parent directory of the views directory**: if
-   `views` is the default, `layout: "views/custom.ejs"` → `<root>/views/custom.ejs`.
+   `views` is the default, `layout: "views/custom.jsk"` → `<root>/views/custom.jsk`.
 2. If it is not given and `views/layout.jsk` exists (compiled), that is used.
-3. Else if `views/layout.ejs` exists, that is used.
+3. Else if `views/layout.ejs` exists (legacy), that is used.
 4. If that does not exist either, the framework's own minimal layout is used
-   (`node_modules/jskelet/src/templates/layout.ejs`, also reachable through the
+   (`node_modules/jskelet/src/templates/layout.jsk`, also reachable through the
    `jskelet/layout` specifier).
 
 These fallbacks exist so that a new project can work with a single route. The
 most practical way to move to your own layout is to copy that file to
-`views/layout.ejs` or author `views/layout.jsk`.
+`views/layout.jsk`.
 
 ### The framework's default layout
 
-```ejs
+```html
 <!DOCTYPE html>
-<html lang="<%= lang %>">
+<html :lang="lang">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <%- extraHead %>
-    <% if (hasAsset('app.css')) { %>
-    <link rel="stylesheet" href="<%= asset('app.css') %>" data-jskelet-css="app.css">
-    <% } %>
-    <% styles.forEach(function (sheet) { %>
-      <% if (hasAsset(sheet)) { %>
-    <link rel="stylesheet" href="<%= asset(sheet) %>" data-jskelet-css="<%= sheet %>">
-      <% } %>
-    <% }); %>
-    <%- headMeta %>
-    <% structuredData.forEach(function (item) { %>
-    <script type="application/ld+json"><%- jsonScript(item) %></script>
-    <% }); %>
+    {{{ extraHead }}}
+    <Stylesheets :styles="styles" />
+    {{{ headMeta }}}
+    <JsonLd :items="structuredData" />
   </head>
-  <body class="<%= bodyClass %>">
-    <%- body %>
-    <% if (hasAsset('main.js')) { %>
-    <script type="module" src="<%= asset('main.js') %>"></script>
-    <% } %>
-    <% entries.forEach(function (entry) { %>
-    <script type="module" src="<%= asset(entry) %>"></script>
-    <% }); %>
-    <% if (devtools) { %>
-    <script type="module" src="<%= devBasePath %>/overlay.js"></script>
-    <% } %>
+  <body :class="bodyClass">
+    {{{ body }}}
+    <BodyScripts :entries="entries" :devtools="devtools" :devBasePath="devBasePath" />
   </body>
 </html>
 ```
+
+The `.jsk` expression language has no function calls, so asset loops live in the
+built-in `<Stylesheets />`, `<BodyScripts />` and `<JsonLd />` tags instead of
+inline `hasAsset` / `asset` / `forEach` in the layout.
 
 Points to watch:
 
 - **`extraHead` comes first.** Delaying resource hints (`preconnect`, LCP
   `preload`) writes straight into LCP.
-- **Global `app.css` is render-blocking**, with the reasoning in
-  [02-architecture.md](./02-architecture.md). Controller `styles: [...]` adds
-  page sheets the same way. If the build has not run, `hasAsset` is false and
-  the tag is never emitted.
-- **The `hasAsset` checks** keep the page from requesting files that 404 when
-  the build is missing.
-- **The devtools script** is emitted only when `NODE_ENV=development`; it does
-  not exist at all in production output.
+- **`<Stylesheets />` emits global `app.css` (render-blocking)** plus controller
+  `styles: [...]`, with the reasoning in
+  [02-architecture.md](./02-architecture.md). If the build has not run,
+  `hasAsset` is false inside the tag and nothing is emitted.
+- **`<BodyScripts />` emits `main.js`, page `entries`, and the
+  development-only overlay.** The overlay script exists only when
+  `NODE_ENV=development`; it is absent from production output.
+- **`<JsonLd />` turns `structuredData` into safe
+  `application/ld+json` scripts.**
 
 ### Layout locals
 
@@ -219,30 +210,27 @@ of bug where every page thinks it is the home page and renders the logo as an
 ## Page templates
 
 The `view` field gives the path under `views/` without an extension:
-`"pages/home"` → `views/pages/home.ejs`. The locals passed to the template are
-the contents of the `data` field plus `metadata` — **not** the layout locals.
-The page template still has access to all helpers and components.
+`"pages/home"` → `views/pages/home.jsk` (else legacy `home.ejs`). The locals
+passed to the template are the contents of the `data` field plus `metadata` —
+**not** the layout locals. The page template still has access to all helpers
+and components.
 
-```ejs
-<%# views/pages/home.ejs %>
+```html
+{# views/pages/home.jsk #}
 <section class="wrapper">
-  <h1 class="text-3xl font-bold"><%= heading %></h1>
+  <h1 class="text-3xl font-bold">{{ heading }}</h1>
 
-  <%# `list` is defined in views/components/list.js; no import needed. %>
-  <%- list({ items }) %>
+  {# `list` is defined in views/components/list.js; no import needed. #}
+  <List :items="items" />
 
   <div class="mt-8" data-island="counter" data-island-props='{"start":5}'></div>
 </section>
 ```
 
-Do not mix up the two output forms in EJS:
-
-- `<%= value %>` — HTML escaped. **Always** this for user/upstream data.
-- `<%- html %>` — raw. Only for HTML strings you produced yourself and know to
-  be safe (component calls, `headMeta`, `body`).
-
-Because `async: true` is on, `await` can also be used inside a template, but
-keeping data fetching in the controller makes diagnosis easier.
+In `.jsk`, `{{ }}` escapes and `{{{ }}}` emits raw HTML (trusted strings only).
+Legacy EJS keeps `<%= %>` / `<%- %>` with the same meaning; because `async: true`
+is on there, `await` can also be used inside an `.ejs` template, but keeping
+data fetching in the controller makes diagnosis easier.
 
 ## Components: `views/components/**`
 

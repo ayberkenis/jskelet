@@ -1,6 +1,8 @@
 import { attrs, cn, esc } from "jskelet/html";
 import { icon, link } from "jskelet/tags";
 
+import { format } from "../../lib/content.js";
+
 /**
  * `views/components/**` altındaki her named export otomatik olarak şablon
  * local'i olur; import gerekmez. Bileşenler EJS değil, HTML string döndüren
@@ -9,30 +11,67 @@ import { icon, link } from "jskelet/tags";
  */
 
 /**
- * Şablonların `lib/` içinden import etme yolu yok; sözlükteki `%s` yer
- * tutucularını dolduran yardımcı bu yüzden buradan yeniden açılıyor.
+ * Sözlükteki `%s` yer tutucularını doldurur. `.jsk` ifade dilinde fonksiyon
+ * çağrısı olmadığı için şablon `<FormatText :template="…" :a="…" />` yazar.
+ *
+ * @param {{ template: string, a?: string | number, b?: string | number, c?: string | number }} props
+ * @returns {string}
  */
-export { format } from "../../lib/content.js";
+export function formatText({ template, a, b, c }) {
+  return esc(format(template, ...[a, b, c].filter((value) => value !== undefined)));
+}
+
+/**
+ * `%s` yerini bir bağlantıyla doldurur (FAQ "more" satırı gibi).
+ *
+ * @param {{ template: string, href: string, text: string, class?: string }} props
+ * @returns {string}
+ */
+export function linkedFormat({ template, href, text, class: className }) {
+  return format(esc(template), link({ href, text, class: className }));
+}
 
 /**
  * Bölüm başlığı. Pazarlama sayfalarında en çok tekrarlanan blok; tek yerde
- * tutmak başlık hiyerarşisinin (h2 → h3) kaymasını da engelliyor.
+ * tutmak başlık hiyerarşisinin kaymasını da engelliyor.
  *
- * @param {{ eyebrow?: string, title: string, lead?: string, align?: 'left' | 'center' }} props
+ * Sayfa hero'sunda `level: 1` (tek H1), alt bölümlerde varsayılan `2`.
+ * `.jsk` spread yazamadığı için `section` ile nesne + ayrı `level` verilir:
+ * `<SectionHead :section="t.compare.hero" :level="1" />`.
+ *
+ * @param {{ section?: { eyebrow?: string, title?: string, lead?: string, align?: 'left' | 'center' },
+ *   eyebrow?: string, title?: string, lead?: string, align?: 'left' | 'center', level?: 1 | 2 }} props
  * @returns {string}
  */
-export function sectionHead({ eyebrow, title, lead, align = "left" }) {
+export function sectionHead({
+  section,
+  eyebrow,
+  title,
+  lead,
+  align,
+  level,
+} = {}) {
+  eyebrow = eyebrow ?? section?.eyebrow;
+  title = title ?? section?.title ?? "";
+  lead = lead ?? section?.lead;
+  align = align ?? section?.align ?? "left";
+  level = level ?? 2;
   const centered = align === "center";
+  const tag = level === 1 ? "h1" : "h2";
+  const titleClass =
+    level === 1
+      ? "mt-3 text-4xl font-bold tracking-[-0.04em] text-balance sm:text-5xl"
+      : "mt-3 text-3xl font-bold tracking-[-0.035em] text-balance sm:text-4xl";
 
   return `<div class="${cn("max-w-3xl", centered && "mx-auto text-center")}">
     ${
       eyebrow
-        ? `<p class="m-0 inline-flex items-center gap-2 text-xs font-bold tracking-[0.2em] text-cyan-700 uppercase dark:text-brand-300">
-          <span class="h-px w-5 bg-brand-500" aria-hidden="true"></span>${esc(eyebrow)}
+        ? `<p class="m-0 inline-flex items-center gap-2 text-xs font-bold tracking-[0.22em] text-violet-600 uppercase dark:text-violet-glow">
+          <span class="h-px w-5 bg-violet-500/80 dark:bg-violet-glow/80" aria-hidden="true"></span>${esc(eyebrow)}
         </p>`
         : ""
     }
-    <h2 class="mt-3 text-3xl font-bold tracking-[-0.035em] text-balance sm:text-4xl">${esc(title)}</h2>
+    <${tag} class="${titleClass}">${esc(title)}</${tag}>
     ${
       lead
         ? `<p class="mt-4 text-base/7 text-slate-600 sm:text-lg/8 dark:text-slate-300">${esc(lead)}</p>`
@@ -42,13 +81,14 @@ export function sectionHead({ eyebrow, title, lead, align = "left" }) {
 }
 
 /**
- * @param {{ children: string, class?: string, as?: string }} props
+ * @param {{ children: string, class?: string, as?: string, lit?: boolean }} props
  * @returns {string}
  */
-export function card({ children, class: className, as = "div" }) {
+export function card({ children, class: className, as = "div", lit = false }) {
   const attributes = attrs({
     class: cn(
-      "rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm shadow-slate-950/5 dark:border-white/10 dark:bg-white/[0.04]",
+      "glass-panel p-6",
+      lit && "glass-panel--lit",
       className,
     ),
   });
@@ -57,19 +97,33 @@ export function card({ children, class: className, as = "div" }) {
 }
 
 /**
- * @param {{ icon?: string, title: string, body: string, hint?: string }} props
+ * @param {{ item?: { icon?: string, title?: string, body?: string, hint?: string },
+ *   icon?: string, title?: string, body?: string, hint?: string, index?: number }} props
  * @returns {string}
  */
-export function featureCard({ icon: iconName, title, body, hint }) {
+export function featureCard({ item, icon: iconName, title, body, hint, index }) {
+  iconName = iconName ?? item?.icon;
+  title = title ?? item?.title ?? "";
+  body = body ?? item?.body ?? "";
+  hint = hint ?? item?.hint;
   const glyph = iconName
-    ? `<span class="inline-flex size-11 items-center justify-center rounded-xl border border-cyan-400/30 bg-cyan-400/10 text-cyan-700 dark:border-brand-400/35 dark:bg-brand-400/10 dark:text-brand-300">${icon({ name: iconName, size: 22 })}</span>`
+    ? `<span class="inline-flex size-11 items-center justify-center rounded-xl border border-cyan-400/35 bg-cyan-400/10 text-cyan-700 shadow-[0_0_24px_rgb(34_211_238_/_0.18)] dark:border-brand-400/40 dark:bg-brand-400/10 dark:text-brand-300">${icon({ name: iconName, size: 22 })}</span>`
     : "";
+
+  const ordinal =
+    typeof index === "number"
+      ? `<span class="font-mono text-[11px] font-bold tracking-[0.18em] text-brand-500/80 dark:text-brand-300/70">${String(index).padStart(2, "0")}</span>`
+      : "";
 
   return card({
     as: "article",
+    lit: true,
     class:
-      "group flex flex-col gap-4 transition duration-300 hover:-translate-y-1 hover:border-cyan-400/50 hover:shadow-xl hover:shadow-cyan-950/10 dark:hover:border-brand-400/40 dark:hover:shadow-brand-400/5",
-    children: `${glyph}
+      "group flex flex-col gap-4 transition duration-300 hover:-translate-y-1 hover:border-cyan-400/50 dark:hover:border-brand-400/45",
+    children: `<div class="flex items-start justify-between gap-3">
+        ${glyph}
+        ${ordinal}
+      </div>
       <h3 class="m-0 text-lg font-semibold tracking-tight">${esc(title)}</h3>
       <p class="m-0 text-sm/6 text-slate-600 dark:text-slate-300">${esc(body)}</p>
       ${
@@ -126,7 +180,7 @@ export function buttonLink({ href, text, variant = "primary", icon: iconName }) 
  * @returns {string}
  */
 export function commandChip({ command, copy }) {
-  return `<div class="inline-flex max-w-full items-center gap-2 rounded-xl border border-slate-300 bg-slate-950 px-3.5 py-2.5 font-mono text-sm text-slate-100 shadow-lg shadow-slate-950/20 dark:border-white/15 dark:bg-[#0a0f1c]">
+  return `<div class="inline-flex max-w-full items-center gap-2 rounded-xl border border-brand-400/40 bg-slate-950 px-3.5 py-2.5 font-mono text-sm text-slate-100 shadow-lg shadow-brand-400/15 dark:border-brand-400/35 dark:bg-[#070b14]">
     <span class="min-w-0 truncate"><span class="text-brand-400">$</span> ${esc(command)}</span>
     <button
       type="button"

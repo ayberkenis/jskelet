@@ -44,7 +44,7 @@ export function docsSidebar({
 
   // Sürüm kartı en üstte: "hangi sürümün belgelerini okuyorum" sorusu belge
   // sitelerinde en sık sorulan ve en seyrek cevaplanan soru.
-  const version = `<div class="rounded-2xl border border-slate-200 bg-white p-3 dark:border-white/10 dark:bg-white/[0.04]">
+  const version = `<div class="glass-panel p-3">
     <div class="flex items-center gap-2.5">
       <span class="inline-flex size-8 shrink-0 items-center justify-center rounded-xl border border-cyan-400/30 bg-cyan-400/10 text-cyan-700 dark:border-brand-400/35 dark:bg-brand-400/10 dark:text-brand-300">${icon({ name: "Tag", size: 16 })}</span>
       <span class="min-w-0">
@@ -186,7 +186,7 @@ export function docsCard({ href, index, title, body, hint }) {
   return link({
     href,
     class:
-      "group rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition duration-300 hover:-translate-y-1 hover:border-cyan-400 hover:shadow-xl hover:shadow-cyan-950/5 dark:border-white/10 dark:bg-white/[0.04] dark:hover:border-brand-400/40",
+      "glass-panel glass-panel--lit group block p-5 transition duration-300 hover:-translate-y-1 hover:border-cyan-400 dark:hover:border-brand-400/40",
     html: `<span class="font-mono text-xs font-bold text-cyan-700 dark:text-cyan-300">${esc(index)}</span>
       <span class="mt-2 block font-semibold tracking-tight">${esc(title)}</span>
       <span class="mt-1.5 block text-sm/6 text-slate-600 dark:text-slate-300">${esc(body)}</span>

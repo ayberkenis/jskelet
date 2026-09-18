@@ -1,8 +1,11 @@
 # AGENTS.md
 
-Bu depo **JSkelet** framework'ünün kaynağıdır: Express 5 + EJS sunucu render,
-vanilla JS island'lar, Tailwind v4 ve süreç belleğinde yaşayan HTML TTL cache.
-React ve TypeScript yok; düz JavaScript + JSDoc.
+Bu depo **JSkelet** framework'ünün kaynağıdır: Express 5 + build-time `.jsk`
+sunucu render (EJS opsiyonel legacy peer), vanilla JS island'lar, Tailwind v4
+ve süreç belleğinde yaşayan HTML TTL cache. React yok; framework kaynağı düz
+JavaScript + JSDoc. Uygulama client island/entry'leri `.ts` olabilir; paket
+`types/` altında `.d.ts` yayınlar. Sunucu route/hook/config hâlâ Node ESM
+`.js`/`.mjs`.
 
 Bir JSkelet **uygulamasında** çalışıyorsan (framework'ün kendisinde değil), aynı
 kuralların uygulama tarafı karşılıkları için [docs/](./docs/README.md) yeterli;
@@ -96,16 +99,18 @@ parçalar ayrı ve `no-store` işaretli fragment uçlarında.
   yalnızca `exports` haritasındaki belirteçler kullanılır (`jskelet`,
   `jskelet/client`, `jskelet/html`, `jskelet/tags`).
 
-## EJS tuzakları
+## `.jsk` tuzakları
 
-- `include` **async**'tir: `await include('partials/x')` yalnızca şablonun kendi
-  gövdesinde çalışır. Bir `forEach` callback'i içinde derleme hatası verir —
-  `for` döngüsü kullan.
-- `views/components/**` altındaki her named export otomatik olarak şablon local'i
-  olur; import gerekmez. Bileşenler EJS değil, HTML string döndüren
-  fonksiyonlardır.
-- Şablona giden her kullanıcı verisi `<%= %>` ile ya da `esc()` üzerinden
-  geçmeli; `<%- %>` yalnızca güvenli bildiğin HTML için.
+- İfade dilinde fonksiyon çağrısı, object/array literal ve atama yok — mantık
+  controller veya `views/components/*.js` içinde kalır. Layout’ta `asset()` /
+  `hasAsset()` için yerleşik `<Stylesheets />` / `<BodyScripts />` /
+  `<JsonLd />` kullan.
+- `{#include "partials/x"}` aynı `data` nesnesini geçer; EJS’teki ikinci-argüman
+  locals yok — veriyi controller’da hazırla.
+- `views/components/**` named export’ları PascalCase etiket olur; import yok.
+- Kullanıcı verisi `{{ }}` ile kaçar; `{{{ }}}` yalnızca güvendiğin HTML için.
+- Legacy EJS hâlâ varsa: `include` async’tir (`forEach` içinde `await` yok);
+  `<%= %>` / `<%- %>` ayrımına dikkat et; `ejs` opsiyonel peer olarak kurulmalı.
 
 ## Tailwind
 

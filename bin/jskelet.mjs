@@ -2,11 +2,12 @@
 /**
  * JSkelet CLI.
  *
- *   jskelet dev      build watch + sunucu, canlı yenileme, dev overlay
- *   jskelet build    tek seferlik prod build (fontlar, sprite, CSS, JS, görseller)
- *   jskelet start    prod sunucu (build eksikse önce üretir)
+ *   jskelet dev [--murder]   build watch + sunucu, canlı yenileme, dev overlay
+ *   jskelet build            tek seferlik prod build (fontlar, sprite, CSS, JS, görseller)
+ *   jskelet start [--murder] prod sunucu (build eksikse önce üretir)
  *   jskelet init       bulunduğun dizine minimal iskelet kurar
  *   jskelet generate   feature / page / island iskeleti
+ *   jskelet migrate    Next.js App Router → JSkelet codemod
  *
  * Alt komutlar ayrı süreçlerde çalışır. Sebep: `dev` iki uzun ömürlü süreci
  * (build watch + sunucu) yönetiyor ve sunucunun ESM resolve hook'larına
@@ -102,15 +103,28 @@ switch (command) {
     break;
   }
 
+  case "migrate": {
+    const { migrate } = await import("../src/migrate.mjs");
+    try {
+      await migrate(process.cwd(), rest);
+    } catch (error) {
+      process.stderr.write(`${error instanceof Error ? error.message : error}\n`);
+      process.exit(1);
+    }
+    break;
+  }
+
   default: {
     const known = command ? `unknown command: ${command}\n\n` : "";
     process.stderr.write(
-      `${known}usage: jskelet <dev|build|start|init|generate>\n\n` +
-        "  dev       build watch + server (live reload, dev overlay)\n" +
-        "  build     production build\n" +
-        "  start     production server\n" +
-        "  init      scaffold a minimal skeleton in the current directory\n" +
-        "  generate  scaffold feature | page | island\n",
+      `${known}usage: jskelet <dev|build|start|init|generate|migrate> [options]\n\n` +
+        "  dev [--murder]    build watch + server (live reload, dev overlay)\n" +
+        "  build             production build\n" +
+        "  start [--murder]  production server\n" +
+        "  init              scaffold a minimal skeleton in the current directory\n" +
+        "  generate          scaffold feature | page | island\n" +
+        "  migrate           Next.js App Router → JSkelet codemod (scan | apply | config)\n\n" +
+        "  --murder          if the listen port is busy, kill the listener and start\n",
     );
     process.exit(command ? 1 : 0);
   }

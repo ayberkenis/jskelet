@@ -1,0 +1,26 @@
+{#
+  Uygulamanın kendi layout'u. Bu dosya varsa framework'ün varsayılan
+  layout'u (jskelet/layout) devre dışı kalır.
+#}
+<!DOCTYPE html>
+<html :lang="lang">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    {{{ extraHead }}}
+    <Stylesheets :styles="styles" />
+    {{{ headMeta }}}
+  </head>
+  <body :class="bodyClass">
+    <header class="border-b border-slate-200">
+      <nav class="wrapper flex gap-4 py-4">
+        <Link href="/" text="Ana sayfa" class="font-semibold" />
+        <Link href="/hakkinda" text="Hakkında" />
+      </nav>
+    </header>
+
+    <main>{{{ body }}}</main>
+
+    <BodyScripts :entries="entries" :devtools="devtools" :devBasePath="devBasePath" />
+  </body>
+</html>

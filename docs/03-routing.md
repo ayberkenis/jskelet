@@ -210,7 +210,7 @@ Controller `async (ctx) => sayfa` biçimindedir ve şu alanları döndürebilir:
 
 | Alan | Tip | Varsayılan | Anlamı |
 | --- | --- | --- | --- |
-| `view` | `string` | — | `views/` altındaki şablon yolu, uzantısız: `"pages/home"` → `views/pages/home.ejs`. |
+| `view` | `string` | — | `views/` altındaki şablon yolu, uzantısız: `"pages/home"` → `views/pages/home.jsk` (yoksa legacy `.ejs`). |
 | `data` | `object` | `{}` | Şablona local olarak geçen veriler. |
 | `metadata` | `object` | `{}` | `<head>` etiketlerine çevrilir; `hooks.metadata()` çıktısının üzerine biner. Şema: [04-render-ve-sablonlar.md](./04-render-ve-sablonlar.md). |
 | `status` | `number` | `200` | HTTP durum kodu. Yalnızca 200 önbelleğe yazılır. |

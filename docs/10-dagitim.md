@@ -23,6 +23,10 @@ kendisi çalıştırır. Docker imajında build zaten yapıldığı için bu bir
 amaç `npm start`ı doğrudan çalıştıran birinin stilsiz bir sayfayla
 karşılaşmaması.
 
+Port doluysa süreç **başlamaz** (PID + ipucu). `jskelet start --murder` o
+porttaki dinleyiciyi öldürüp bağlar — geliştirmede unutulmuş bir süreç için;
+üretim orkestratöründe genelde gerekmez.
+
 Sunucu hazır olduğunda tek satır basar:
 
 ```
@@ -63,7 +67,8 @@ değerin geçerli olduğunu belirsizleştirir; prod imajında `.env` bulundurmam
 temizidir.
 
 **Gizli anahtarlar `clientEnv` listesine konmamalıdır:** oradaki değerler client
-bundle'a düz metin olarak gömülür ([08-build.md](./08-build.md)).
+bundle'a düz metin olarak gömülür ([08-build.md](./08-build.md)). Secret benzeri
+isimler (`SECRET`, `API_KEY`, …) artık build'i düşürür.
 
 ## Docker
 

@@ -40,7 +40,9 @@ export default function register(app, { route, fragment, redirect, seeOther }) {
             ozet: getSummary(user.username),
             siparisler: getOrders(user.username, Number.isFinite(page) ? page : 1),
             notlar: getNotes(user.username),
-            notHatasi: query.not === "hata" ? "Not kaydedilemedi." : null,
+            // note-form aynı `data` nesnesini paylaşır (include locals yok).
+            hata: query.not === "hata" ? "Not kaydedilemedi." : null,
+            metin: "",
           },
         };
       },

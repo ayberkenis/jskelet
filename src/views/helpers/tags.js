@@ -1,9 +1,15 @@
 /**
  * `next/link`, `next/image` ve `@phosphor-icons/react` karşılıkları.
- * Hepsi HTML string döndürür; EJS içinden `<%- %>` ile basılır.
+ * Hepsi HTML string döndürür; şablonlarda PascalCase etiket veya
+ * (legacy EJS) `<%- %>` ile basılır.
  */
-import { attrs, esc, cn } from "./html.js";
-import { asset, getSpriteIds, optimizedImage } from "../../server/assets.js";
+import { attrs, esc, cn, jsonScript } from "./html.js";
+import {
+  asset,
+  hasAsset,
+  getSpriteIds,
+  optimizedImage,
+} from "../../server/assets.js";
 import {
   parseAllowedRemoteUrl,
   remoteImageUrl,
@@ -289,4 +295,81 @@ export function toKebab(name) {
     .replace(/([a-z0-9])([A-Z])/g, "$1-$2")
     .replace(/([A-Z]+)([A-Z][a-z])/g, "$1-$2")
     .toLowerCase();
+}
+
+/**
+ * Layout `<head>` stylesheet'leri. `hasAsset` false olanları basmaz —
+ * build yokken 404 link'i istememek için. `.jsk` ifade dilinde `asset()` /
+ * `hasAsset()` çağrılamadığı için layout bu etiketi kullanır.
+ *
+ * @param {{ styles?: string[] }} [props]
+ * @returns {string}
+ */
+export function stylesheets(props = {}) {
+  const styles = Array.isArray(props.styles) ? props.styles : [];
+  /** @type {string[]} */
+  const parts = [];
+
+  if (hasAsset("app.css")) {
+    parts.push(
+      `<link rel="stylesheet" href="${esc(asset("app.css"))}" data-jskelet-css="app.css">`,
+    );
+  }
+
+  for (const sheet of styles) {
+    if (!sheet || !hasAsset(sheet)) continue;
+    parts.push(
+      `<link rel="stylesheet" href="${esc(asset(sheet))}" data-jskelet-css="${esc(sheet)}">`,
+    );
+  }
+
+  return parts.join("\n    ");
+}
+
+/**
+ * Layout gövde sonu script'leri: `main.js`, controller `entries`, isteğe
+ * bağlı dev overlay.
+ *
+ * @param {{ entries?: string[], devtools?: boolean, devBasePath?: string }} [props]
+ * @returns {string}
+ */
+export function bodyScripts(props = {}) {
+  const entries = Array.isArray(props.entries) ? props.entries : [];
+  const devBasePath = props.devBasePath ?? "/__jskelet/dev";
+  /** @type {string[]} */
+  const parts = [];
+
+  if (hasAsset("main.js")) {
+    parts.push(`<script type="module" src="${esc(asset("main.js"))}"></script>`);
+  }
+
+  for (const entry of entries) {
+    if (!entry) continue;
+    parts.push(`<script type="module" src="${esc(asset(entry))}"></script>`);
+  }
+
+  if (props.devtools) {
+    parts.push(
+      `<script type="module" src="${esc(devBasePath)}/overlay.js"></script>`,
+    );
+  }
+
+  return parts.join("\n    ");
+}
+
+/**
+ * JSON-LD script etiketleri. `structuredData` dizisindeki her öğe için bir
+ * `<script type="application/ld+json">`.
+ *
+ * @param {{ items?: unknown[] }} [props]
+ * @returns {string}
+ */
+export function jsonLd(props = {}) {
+  const items = Array.isArray(props.items) ? props.items : [];
+  return items
+    .map(
+      (item) =>
+        `<script type="application/ld+json">${jsonScript(item)}</script>`,
+    )
+    .join("\n    ");
 }

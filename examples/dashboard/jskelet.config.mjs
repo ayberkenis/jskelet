@@ -93,9 +93,15 @@ export default {
     },
 
     layoutContext({ pathname }) {
+      // `.jsk` ifadelerinde `.startsWith` çağrısı yok; sınıf burada hesaplanır.
+      const active = "font-semibold text-slate-900";
+      const idle = "text-slate-600 hover:text-slate-900";
+
       return {
         pathname,
-        bodyClass: "min-h-screen bg-slate-50 text-slate-900",
+        bodyClass: "min-h-screen bg-slate-50 text-slate-900 flex flex-col",
+        navHomeClass: pathname === "/" ? active : idle,
+        navPanelClass: pathname.startsWith("/panel") ? active : idle,
       };
     },
 

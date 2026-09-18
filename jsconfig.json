@@ -13,5 +13,5 @@
       "jskelet/tags": ["./src/views/helpers/tags.js"]
     }
   },
-  "exclude": ["node_modules", "**/public/assets", "src/client/devtools"]
+  "exclude": ["node_modules", "**/public/assets", "src/client/devtools", "types"]
 }

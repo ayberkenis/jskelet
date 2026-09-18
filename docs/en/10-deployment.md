@@ -23,6 +23,10 @@ runs the build itself. In a Docker image the build has already happened, so this
 is a no-op; the point is that someone running `npm start` directly does not end
 up with an unstyled page.
 
+If the listen port is already taken, the process **does not start** (PID + hint).
+`jskelet start --murder` kills that listener and binds — useful for a leftover
+dev process; production orchestrators usually do not need it.
+
 When the server is ready it prints a single line:
 
 ```
@@ -64,7 +68,8 @@ Using both sources together blurs which value actually applies; not shipping a
 `.env` in the prod image is the cleanest option.
 
 **Secret keys must not go into the `clientEnv` list:** those values are embedded
-into the client bundle as plain text ([08-build.md](./08-build.md)).
+into the client bundle as plain text ([08-build.md](./08-build.md)). Secret-like
+names (`SECRET`, `API_KEY`, …) now fail the build.
 
 ## Docker
 

@@ -123,25 +123,30 @@ will still mount.
 ```
 client/
 ├── entries/
-│   ├── main.js       the shared bootstrap loaded on every page
+│   ├── main.js       shared bootstrap on every page (or main.ts)
 │   └── chart.js      only on the pages that ask for it
 └── islands/
-    ├── counter.js
+    ├── counter.ts    .js or .ts
     └── chart.js
 ```
 
-**Every file** under `client/entries/*.js` **is an esbuild entry**. `main.js`
-is loaded by the layout on every page (if it is in the manifest). Extra entries
-are loaded only on the pages that ask for them:
+**Every file** under `client/entries/*.{js,ts,mts}` **is an esbuild entry**.
+`main.js` (or `main.ts`) is loaded by the layout on every page (if it is in the
+manifest). Extra entries are loaded only on the pages that ask for them. Two
+extensions for the same stem (`main.js` + `main.ts`) fail the build.
 
 ```js
-// controller
+// controller — the manifest key is always *.js
 return { view: "pages/markets", entries: ["chart.js"] };
 ```
 
 The layout resolves every name in the `entries` array with `asset(entry)` and
-emits a `<script type="module">`. The name is the manifest key, that is, the
-file name itself (`chart.js`), not its hashed form.
+emits a `<script type="module">`. The name is the manifest key (`chart.js`);
+even when the source is `chart.ts`, the unhashed key stays `.js`.
+
+Shared `@/lib` modules imported on the server must stay **`.js`** — the Node
+runtime does not resolve `.ts`; TypeScript is compiled only on the esbuild
+client path.
 
 Code splitting (`splitting: true`) is on: modules shared by two entries end up
 in a common chunk and are not downloaded twice.

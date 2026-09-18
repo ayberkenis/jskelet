@@ -213,7 +213,7 @@ fields:
 
 | Field | Type | Default | Meaning |
 | --- | --- | --- | --- |
-| `view` | `string` | — | The template path under `views/`, without the extension: `"pages/home"` → `views/pages/home.ejs`. |
+| `view` | `string` | — | The template path under `views/`, without the extension: `"pages/home"` → `views/pages/home.jsk` (else legacy `.ejs`). |
 | `data` | `object` | `{}` | Data passed to the template as locals. |
 | `metadata` | `object` | `{}` | Turned into `<head>` tags; it overrides the output of `hooks.metadata()`. Schema: [04-rendering.md](./04-rendering.md). |
 | `status` | `number` | `200` | The HTTP status code. Only 200 is written to the cache. |

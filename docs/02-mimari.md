@@ -51,7 +51,7 @@ JSkelet bu gözlemi mimarinin merkezine alır:
  │       └─ withHtmlCache          TTL + stale-while-revalidate
  │           └─ withUpstreamTracking
  │               └─ withRequestCache
- │                   └─ controller → renderPage → EJS
+ │                   └─ controller → renderPage → .jsk (veya legacy EJS)
  ├─ 404 → hooks.notFound()
  └─ hata yönetimi                  redirect/notFound + 500 fallback
 ```
@@ -254,8 +254,9 @@ teşhisi zor sorunlara dönüşüyor.
 
 ## Neden bu bağımlılık listesi
 
-Çalışma zamanı bağımlılıkları dörttür: `express`, `ejs`, `esbuild`,
-`tailwind-merge`. Geri kalan her şey (Tailwind, PostCSS, lightningcss, sharp,
+Çalışma zamanı bağımlılıkları üçtür: `express`, `esbuild`,
+`tailwind-merge`. `ejs` yalnızca legacy `.ejs` şablonları için opsiyonel peer'dır.
+Geri kalan her şey (Tailwind, PostCSS, lightningcss, sharp,
 Phosphor ikonları) **opsiyonel peer bağımlılığıdır** ve yoksa ilgili build adımı
 atlanır.
 

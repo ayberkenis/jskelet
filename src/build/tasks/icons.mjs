@@ -24,12 +24,15 @@ import { createRequire } from "node:module";
 import { pruneAssets, writeAsset } from "../paths.mjs";
 import * as log from "../../log.mjs";
 
-const SCAN_EXTENSIONS = new Set([".ejs", ".jsk", ".js", ".mjs"]);
+const SCAN_EXTENSIONS = new Set([".ejs", ".jsk", ".js", ".mjs", ".ts", ".mts"]);
 
 /** `icon({ … })` çağrısının tamamı; `name:` ifadesi ayrıca çözümlenir. */
 const ICON_CALL = /icon\(\s*\{([^}]*)\}/g;
 const ICON_NAME_EXPR = /name:\s*([^,}]+)/;
 const ICON_WEIGHT = /weight:\s*["']([^"']+)["']/;
+/** `.jsk` / JSX tarzı `<Icon name="Moon" />` ve isteğe bağlı `weight="bold"`. */
+const ICON_TAG =
+  /<Icon\b[^>]*\bname=["']([A-Z][A-Za-z0-9]*)["'][^>]*(?:\bweight=["']([a-z]+)["'])?/gi;
 /** `data-icon="flag:fill"` ve JS nesnesindeki `"data-icon": "flag:fill"`. */
 const ICON_ATTR = /data-icon"?\s*[:=]\s*["']([a-z0-9-]+)(?::([a-z]+))?["']/g;
 
@@ -189,6 +192,13 @@ function scanUsedIcons(scanDirs) {
         }
 
         for (const name of names) used.add(`${toKebab(name)}:${weight}`);
+      }
+
+      for (const match of source.matchAll(ICON_TAG)) {
+        const weight = match[2] ?? "regular";
+        used.add(
+          `${toKebab(match[1])}:${WEIGHTS.has(weight) ? weight : "regular"}`,
+        );
       }
 
       for (const match of source.matchAll(ICON_NAME_PROP)) {

@@ -62,7 +62,7 @@ export default {
     howItWorks: {
       title: "Bir isteğin yolculuğu",
       description:
-        "İstekten ekrana beş net durak: Express, HTML cache, controller, EJS ve yalnızca gerektiğinde uyanan island'lar.",
+        "İstekten ekrana beş net durak: Express, HTML cache, controller, .jsk ve yalnızca gerektiğinde uyanan island'lar.",
     },
     compare: {
       title: "Projeniz için doğru aracı seçin",
@@ -100,15 +100,25 @@ export default {
     ctaSecondary: "v%s sürümünü indir",
     chips: ["Minimal ayak izi", "Şimşek hızında", "Geliştirici için"],
     hero: {
-      diagramLabel: "JSkelet istek akışı",
+      diagramLabel: "JSkelet, içeriğiniz ile web arasında ince bir katman",
       logoAlt: "JSkelet logosu",
       responseLabel: "Yanıt",
       responseValue: "200 · HTML hazır",
       routesLabel: "Route'lar",
-      routesValue: "route() · TTL",
-      terminalLabel: "terminal",
-      terminalLines: ["route hazır", "island hazır"],
-      annotation: "Sadece çalışır.",
+      routesValue: "route() → islands()",
+      checklistLabel: "Dahili",
+      checklist: [
+        "Önce HTML",
+        "Islands mimarisi",
+        "Bellek içi TTL cache",
+        "React runtime yok",
+      ],
+      layers: [
+        { id: "web", label: "Web" },
+        { id: "core", label: "JSkelet çekirdeği" },
+        { id: "content", label: "İçeriğiniz" },
+      ],
+      annotation: "Daha az JavaScript. Daha çok web.",
     },
     trust: {
       runtimeLabel: "Çekirdek payload (gzip)",
@@ -234,7 +244,7 @@ export default {
     fit: {
       eyebrow: "Doğru eşleşme",
       title: "Her işi yapmaya çalışmaz.",
-      lead: "JSkelet içerik ve keşfedilebilirlik için tasarlandı. Durum ağırlıklı uygulamalarda başka bir araç genelde daha doğru cevaptır.",
+      lead: "Merkezde herkese aynı, cache'lenebilir sayfalar var. Oturumlu dashboard ve kişiye özel paneller private: true ile desteklenir — HTML cache'e girmezler. React SPA ya da gömülü bir gerçek zamanlı istemci olmak istemez.",
     },
     faq: {
       eyebrow: "SSS",
@@ -244,7 +254,7 @@ export default {
     },
     finalCta: {
       title: "İlk sayfanız beş dakikada hazır.",
-      body: "Tek komut, birlikte çalışan bir route, bir bileşen ve bir island'dan oluşan bir iskelet kurar.",
+      body: "Tek komut, birlikte çalışan bir .jsk sayfa, bir bileşen ve bir island'dan oluşan bir iskelet kurar.",
       primary: "İndir",
       secondary: "Belgeleri oku",
     },
@@ -278,7 +288,7 @@ export default {
     {
       icon: "Code",
       title: "Geliştirici odaklı",
-      body: "Düz async controller, EJS şablon ve küçük bir API. Tören olmadan okunur, drama olmadan değiştirilir.",
+      body: "Düz async controller, .jsk şablon ve küçük bir API. Tören olmadan okunur, drama olmadan değiştirilir.",
     },
   ],
 
@@ -301,7 +311,7 @@ export default {
     {
       step: "4",
       title: "Sayfa birleştirilir",
-      body: "EJS gövdeyi ve layout'u eksiksiz HTML'e dönüştürür. Küçük fonksiyon bileşenleri sayfalarda ve fragment'larda aynı şekilde kullanılabilir.",
+      body: "Build'de derlenen bir .jsk şablon, gövdeyi ve layout'u eksiksiz HTML'e dönüştürür. Küçük fonksiyon bileşenleri sayfalarda ve fragment'larda aynı şekilde kullanılabilir.",
     },
     {
       step: "5",
@@ -427,7 +437,10 @@ export default {
       {
         label: "Tipler",
         values: [
-          { text: "Düz JS ve JSDoc; derleme adımı yok", tone: "neutral" },
+          {
+            text: "Yayınlanan .d.ts; client .ts island (sunucu JS + JSDoc)",
+            tone: "good",
+          },
           { text: "TypeScript birinci sınıf", tone: "good" },
           { text: "TypeScript birinci sınıf", tone: "good" },
           { text: "Size bağlı", tone: "neutral" },
@@ -545,18 +558,20 @@ export default {
   },
 
   fit: {
-    title: { good: "İyi uyum", bad: "Yanlış seçim" },
+    title: { good: "İyi uyum", bad: "Zayıf uyum" },
     good: [
       "İçerik siteleri, bloglar ve dokümantasyon",
       "Pazarlama ve kampanya sayfaları",
       "Ürün listeleri, kataloglar ve ilanlar",
       "SEO'nun gelir kalemi olduğu her sayfa",
+      "Oturumlu dashboard ve kişiye özel paneller (private: true)",
+      "Fragment ve bölge değişimiyle form odaklı arayüzler",
     ],
     bad: [
-      "Ziyaretçiye açık dashboard ve uygulama arayüzleri",
-      "Editör benzeri, durum ağırlıklı arayüzler",
-      "Her oturum açan kullanıcıya göre değişen sayfalar",
-      "Saniyede güncellenen gerçek zamanlı ekranlar",
+      "Tam SPA kabukları ve istemci tarafı app router'lar",
+      "Editör benzeri, işbirlikçi, durum ağırlıklı istemci ağaçları",
+      "Streaming SSR veya React Server Components",
+      "Gömülü gerçek zamanlı push (SSE, WebSocket veya polling size ait)",
     ],
   },
 
@@ -568,8 +583,8 @@ export default {
     },
     examples: {
       label: "örnekleri çalıştır",
-      title: "Depoda üç örnek",
-      body: "Minimal örnek çalışan en küçük hâl, blog örneği framework'ün her yüzeyine dokunur, pazarlama örneği ise okuduğunuz bu sayfa.",
+      title: "Depoda dört örnek",
+      body: "Minimal çalışan en küçük hâl, blog herkese açık yüzeyi dolaşır, pazarlama okuduğunuz bu sayfa, dashboard ise private: true ekseni — oturum, CSRF ve fragment.",
       note: "Sunucu ayaktayken duman testi her ucun beklendiği gibi yanıt verdiğini doğrular.",
     },
     openLabel: "Bölümü oku",
@@ -619,7 +634,7 @@ export default {
       {
         slug: "rendering",
         title: "Render ve şablonlar",
-        body: "Layout, bileşenler, yardımcılar ve metadata şeması.",
+        body: ".jsk şablonlar, layout, bileşenler, yardımcılar ve metadata şeması.",
       },
       {
         slug: "islands",
@@ -665,7 +680,7 @@ export default {
       title: "Next.js bilginizi çöpe atmayın.",
       lead: "Kullandığınız kavramların çoğunun burada daha küçük bir karşılığı var. Trafik akmaya devam ederken sayfaları birer birer taşıyın.",
       chips: [
-        "page.tsx → EJS",
+        "page.tsx → .jsk",
         "Client Component → Island",
         "ISR → HTML TTL",
       ],
@@ -701,8 +716,8 @@ export default {
           text: "TTL'lerinizi ölçün: cache başlığı ve dev overlay'i yeterli.",
         },
         {
-          tone: "bad",
-          text: "Dashboard'ı olduğu yerde bırakın. O sayfalar için doğru araç bu değil.",
+          tone: "good",
+          text: "Dashboard ve kişiye özel sayfaları private: true ile işaretleyin; oturum, CSRF ve canlı bölgeleri fragment'ta tutun.",
         },
       ],
       configLabel: "jskelet.config.mjs",
@@ -711,9 +726,9 @@ export default {
     },
     faq: { eyebrow: "SSS", title: "Taşırken en çok sorulanlar" },
     items: [
-      { from: "app/page.tsx", to: "Bir route kaydı ve bir EJS sayfa şablonu" },
+      { from: "app/page.tsx", to: "Bir route kaydı ve bir .jsk sayfa şablonu" },
       { from: "generateMetadata()", to: "Controller'ın döndürdüğü metadata alanı" },
-      { from: "layout.tsx", to: "Layout şablonu ve bir layout bağlamı hook'u" },
+      { from: "layout.tsx", to: "Bir .jsk layout ve bir layout bağlamı hook'u" },
       { from: "not-found.tsx", to: "Config içindeki notFound hook'u" },
       { from: "redirect() / notFound()", to: "Aynı adlar, jskelet'ten import edilir" },
       {
@@ -739,7 +754,7 @@ export default {
     },
     {
       q: "TypeScript kullanabilir miyim?",
-      a: "Framework'ün kendisi düz JavaScript ve JSDoc; derleme adımı yok. Uygulama tarafında denetlenen JavaScript'i açıp aynı tip güvenliğinin çoğunu derlemesiz alabilirsiniz; .ts dosyaları için hatta kendiniz bir adım eklersiniz.",
+      a: "Framework kaynağı düz JavaScript + JSDoc ve jskelet import'ları için .d.ts yayınlar. Client entry ve island'lar .ts olabilir (esbuild tip siler; manifest anahtarı *.js kalır). Sunucu route, hook ve jskelet.config.mjs JavaScript kalır — orada jsconfig ile checkJs kullanın.",
     },
     {
       q: "Cache süreç belleğinde: birden fazla instance'ta ne olur?",
@@ -830,7 +845,7 @@ export default {
     steps: {
       eyebrow: "Dört komut",
       title: "Kurulumun tamamı",
-      lead: "Her komut kopyalanabilir. İskelet, birlikte çalışan bir route, bir bileşen ve bir island verir.",
+      lead: "Her komut kopyalanabilir. İskelet, birlikte çalışan bir .jsk sayfa, bir bileşen ve bir island verir.",
       serveLabel: "5 · Prod'da sun",
       serveNote:
         "Derlenmiş çıktıyı sunar, açılışta cache'i ısıtır ve her yanıtta durumunu bildirir.",
@@ -843,7 +858,7 @@ export default {
         {
           label: "2 · İskeleti oluştur",
           command: "init",
-          note: "Dizin yapısını, ilk route'u, bir bileşeni ve bir island'ı kurar.",
+          note: "Dizin yapısını, ilk .jsk sayfayı, bir bileşeni ve bir island'ı kurar.",
         },
         {
           label: "3 · Geliştirmeye başla",

@@ -9,7 +9,7 @@
  *
  * Tam referans: node_modules/jskelet/docs/07-yapilandirma.md
  */
-import { getContent } from "./lib/content.js";
+import { format, getContent } from "./lib/content.js";
 import { docPaths } from "./lib/docs.js";
 import {
   DEFAULT_LOCALE,
@@ -27,10 +27,6 @@ const HOUR = 3600;
 export default {
   brand: { lang: DEFAULT_LOCALE },
 
-  // Logo hem header'da hem hero'da bu CDN'den geliyor; bağlantıyı geciktirmek
-  // doğrudan LCP'ye yazılır.
-  preconnect: ["https://cdn.ayberkenis.com.tr"],
-
   /**
    * Bilinçli olarak boş: site sistem font yığınını kullanıyor, yani hiç web
    * font isteği yok. Sayfanın kendi iddiası bu; `fonts: [...]` eklemek o
@@ -39,11 +35,12 @@ export default {
   fonts: [],
 
   /**
-   * Sprite yalnızca bu dizinlerde geçen ikonları içerir. `lib` de taranıyor:
-   * içerik sözlüklerindeki `icon: "Lightning"` alanları şablona değişkenle
-   * geldiği için statik olarak yalnızca orada görünüyor.
+   * Sprite yalnızca bu dizinlerde geçen ikonları içerir. `lib` (sözlüklerdeki
+   * `icon: "Lightning"`) ve `routes` (controller'da önceden üretilen trust /
+   * meta satırları) taranır — `.jsk` ifade dilinde çağrı olmadığı için adlar
+   * çoğu zaman şablonda literal görünmez.
    */
-  icons: { scan: ["views", "client", "lib"] },
+  icons: { scan: ["views", "client", "lib", "routes"] },
 
   clientEnv: ["SITE_URL"],
 
@@ -144,9 +141,17 @@ export default {
           type: "website",
           // Sayfa controller'ları kendi kartını `/og/:locale/:page.png` ile
           // basar; burada yalnızca metadata'sız yanıtlar için sabit fallback.
-          image: "https://cdn.ayberkenis.com.tr/jskelet/jskelet.png",
+          image: `${SITE_URL}/logo.png`,
         },
         twitter: { card: "summary_large_image" },
+        // Tarayıcı `/favicon.ico`'yu da doğrudan ister; link etiketleri
+        // boyut seçimini ve apple-touch'ı netleştirir.
+        extraTags: [
+          `<link rel="icon" href="/favicon.ico" sizes="any">`,
+          `<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">`,
+          `<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">`,
+          `<link rel="apple-touch-icon" href="/apple-touch-icon.png">`,
+        ],
       };
     },
 
@@ -162,38 +167,67 @@ export default {
         ]),
       );
 
+      const languages = alternatePaths(basePath).map((alternate) => {
+        const content = getContent(alternate.locale);
+        return {
+          ...alternate,
+          label: content.label,
+          short: content.short,
+          current: alternate.locale === locale,
+          // `.jsk` şablonunda format/concat yok; title hazır geliyor.
+          switchTitle: `${t.ui.languageSwitch}: ${content.label}`,
+        };
+      });
+
+      const nav = t.nav.map((item) => {
+        const href = paths[item.key];
+        // Belge bölümünün alt sayfaları da "Docs" başlığına ait: eşitlik
+        // kontrolü tek başına `/docs/routing` üzerinde menüyü sönük
+        // bırakıyordu. Ana sayfa önek kontrolünden muaf: `/tr` her Türkçe
+        // yolun öneki.
+        const active =
+          pathname === href ||
+          (href !== paths.home && pathname.startsWith(`${href}/`));
+
+        return {
+          href,
+          label: item.label,
+          active,
+          // `cn()` şablonda yok; etkin/pasif sınıflar burada çözülüyor.
+          class: active
+            ? "rounded-xl px-3 py-2 text-sm bg-cyan-50 font-semibold text-cyan-800 dark:bg-brand-400/10 dark:text-brand-300"
+            : "rounded-xl px-3 py-2 text-sm text-slate-600 hover:bg-slate-100 hover:text-slate-950 dark:text-slate-300 dark:hover:bg-white/5 dark:hover:text-white",
+          mobileClass: active
+            ? "rounded-xl px-3 py-2.5 text-sm bg-cyan-50 font-semibold text-cyan-800 dark:bg-brand-400/10 dark:text-brand-300"
+            : "rounded-xl px-3 py-2.5 text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-white/5",
+        };
+      });
+
       return {
         pathname,
         locale,
         // `lang` özel yorumlanır: `<html lang>` bunu okur.
         lang: t.htmlLang,
-        // Sayfaya özel bir gövde sınıfı gerektiğinde bu alan genişletilebilir.
-        // Temel renkler Tailwind'in taradığı layout'ta; aksi hâlde CSS'e girmez.
-        bodyClass: "",
+        // Temel gövde sınıfları burada: layout yalnızca `:class="bodyClass"` yazar.
+        bodyClass:
+          "flex min-h-full flex-col font-sans text-slate-950 dark:text-slate-100",
         t,
         paths,
         release,
-        nav: t.nav.map((item) => ({
-          href: paths[item.key],
-          label: item.label,
-          // Belge bölümünün alt sayfaları da "Docs" başlığına ait: eşitlik
-          // kontrolü tek başına `/docs/routing` üzerinde menüyü sönük
-          // bırakıyordu.
-          // Ana sayfa önek kontrolünden muaf: `/tr` her Türkçe yolun öneki.
-          active:
-            pathname === paths[item.key] ||
-            (paths[item.key] !== paths.home &&
-              pathname.startsWith(`${paths[item.key]}/`)),
-        })),
-        // Dil değiştirici ve `hreflang` etiketleri aynı listeden besleniyor;
-        // ayrıştıklarında düğmenin götürdüğü yer ile arama motoruna bildirilen
-        // adres farklı oluyor.
-        languages: alternatePaths(basePath).map((alternate) => ({
-          ...alternate,
-          label: getContent(alternate.locale).label,
-          short: getContent(alternate.locale).short,
-          current: alternate.locale === locale,
-        })),
+        nav,
+        languages,
+        // Dil değiştirici yalnızca karşı dil(ler)i gösterir; filter şablonda yok.
+        otherLanguages: languages.filter((language) => !language.current),
+        copyLabels: {
+          idle: t.ui.copy,
+          done: t.ui.copied,
+          failed: t.ui.copyFailed,
+        },
+        licenseText: format(t.ui.license, release.license),
+        nodeRequirementText: format(t.ui.nodeRequirement, release.nodeLabel),
+        changelogNavLabel:
+          t.nav.find((item) => item.key === "changelog")?.label ?? "",
+        releaseVersionLabel: `v${release.version}`,
         structuredData: [
           {
             "@context": "https://schema.org",

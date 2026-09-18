@@ -1,7 +1,7 @@
 {
   "name": "jskelet",
-  "version": "0.5.6",
-  "description": "A framework that feels like no framework: Express 5 + build-time .jsk (or EJS) SSR, vanilla JS islands, Tailwind v4 and an in-process HTML TTL cache.",
+  "version": "0.6.0",
+  "description": "A framework that feels like no framework: Express 5 + build-time .jsk SSR (optional EJS peer), vanilla JS islands, Tailwind v4 and an in-process HTML TTL cache.",
   "type": "module",
   "license": "MIT",
   "author": "Ayberk Enis",
@@ -17,7 +17,7 @@
     "ssr",
     "islands",
     "express",
-    "ejs",
+    "jsk",
     "esbuild",
     "tailwind",
     "seo",
@@ -28,19 +28,42 @@
   },
   "main": "./src/index.js",
   "exports": {
-    ".": "./src/index.js",
-    "./server": "./src/index.js",
-    "./client": "./src/client/index.js",
-    "./html": "./src/views/helpers/html.js",
-    "./tags": "./src/views/helpers/tags.js",
-    "./cookies": "./src/http/cookies-entry.js",
-    "./log": "./src/log.mjs",
+    ".": {
+      "types": "./types/index.d.ts",
+      "default": "./src/index.js"
+    },
+    "./server": {
+      "types": "./types/index.d.ts",
+      "default": "./src/index.js"
+    },
+    "./client": {
+      "types": "./types/client/index.d.ts",
+      "default": "./src/client/index.js"
+    },
+    "./html": {
+      "types": "./types/views/helpers/html.d.ts",
+      "default": "./src/views/helpers/html.js"
+    },
+    "./tags": {
+      "types": "./types/views/helpers/tags.d.ts",
+      "default": "./src/views/helpers/tags.js"
+    },
+    "./cookies": {
+      "types": "./types/http/cookies-entry.d.ts",
+      "default": "./src/http/cookies-entry.js"
+    },
+    "./log": {
+      "types": "./types/log.d.mts",
+      "default": "./src/log.mjs"
+    },
     "./register": "./src/runtime/register.mjs",
-    "./layout": "./src/templates/layout.ejs"
+    "./layout": "./src/templates/layout.jsk",
+    "./layout/ejs": "./src/templates/layout.ejs"
   },
   "files": [
     "bin",
     "src",
+    "types",
     "docs",
     "README.md",
     "AGENTS.md",
@@ -53,12 +76,16 @@
   "scripts": {
     "lint": "eslint",
     "test": "node --test \"test/**/*.test.mjs\"",
+    "types": "tsc -p tsconfig.types.json",
+    "prepublishOnly": "npm run types",
+    "test:framework-layout": "node scripts/compile-framework-layout.mjs --check",
     "example:minimal": "npm --prefix examples/minimal run dev",
     "example:blog": "npm --prefix examples/blog run dev",
     "example:dashboard": "npm --prefix examples/dashboard run dev"
   },
   "dependencies": {
-    "ejs": "^6.0.1",
+    "@babel/parser": "^8.0.6",
+    "@babel/types": "^8.0.6",
     "esbuild": "^0.28.2",
     "express": "^5.2.1",
     "tailwind-merge": "^3.5.0"
@@ -66,6 +93,7 @@
   "peerDependencies": {
     "@phosphor-icons/core": "^2.1.1",
     "@tailwindcss/postcss": "^4.3.3",
+    "ejs": "^6.0.1",
     "ioredis": "^5.4.0 || ^6.0.0",
     "lightningcss": "^1.32.0",
     "postcss": "^8.5.26",
@@ -77,6 +105,9 @@
       "optional": true
     },
     "@tailwindcss/postcss": {
+      "optional": true
+    },
+    "ejs": {
       "optional": true
     },
     "ioredis": {
@@ -97,7 +128,11 @@
   },
   "devDependencies": {
     "@eslint/js": "^9",
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.6.1",
+    "ejs": "^6.0.1",
     "eslint": "^9",
-    "globals": "^16"
+    "globals": "^16",
+    "typescript": "^7.0.2"
   }
 }

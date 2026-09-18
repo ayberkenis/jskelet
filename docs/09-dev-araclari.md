@@ -21,6 +21,10 @@ jskelet dev
 bastırır) ve TTY varsa `JSKELET_COLOR=1` (borulanmış çıktıda renk zorlar)
 geçirilir.
 
+Port (`PORT`, varsayılan `3000`) doluysa sunucu **başlamaz**; hata satırında
+PID ve `--murder` ipucu vardır. `jskelet dev --murder` dinleyiciyi öldürüp aynı
+porta bağlanır (başka bir terminalde unutulmuş süreç için).
+
 Açılış sırası: banner → build adımları → sunucu hazır → `Ready` özeti. Özet hem
 build hem sunucu hazır olduğunda basılır; aksi hâlde arkadan gelen build
 satırlarının arasında kalıyordu.
@@ -70,7 +74,7 @@ WATCH_DIRS = [
 Ayrıca `jskelet.config.mjs` dosyasının kendisi izlenir: config değişince hem
 sunucu hem build yeni ayarlarla açılmalı.
 
-İzlenen uzantılar: `.js`, `.mjs`, `.json`, `.ejs`.
+İzlenen uzantılar: `.js`, `.mjs`, `.json`, `.jsk`, `.ejs`.
 
 `views` de izlenir çünkü bileşenlerin çoğu `views/components/**.js` içinde ve bu
 modüller sunucuya bir kez import edildiği için, restart olmadan yapılan

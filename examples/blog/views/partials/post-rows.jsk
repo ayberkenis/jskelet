@@ -1,0 +1,5 @@
+{#
+  Fragment gövdesi. `/_fragment/*` uçları bunu layout'suz render eder, sekme
+  island'ı da aynı HTML'i alır — markup'ın tek kaynağı PostRows bileşeninde.
+#}
+<PostRows :posts="posts" />

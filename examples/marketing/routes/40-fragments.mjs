@@ -33,7 +33,10 @@ async function produceDemo() {
   // Bilinçli: gerçek sitelerde bu `await getPosts()` / `fetch(api)` olur.
   await sleep(DEMO_UPSTREAM_MS);
   const html = await renderView("partials/render-demo", {
-    rows: getContent(DEFAULT_LOCALE).comparison.rows,
+    rows: getContent(DEFAULT_LOCALE).comparison.rows.map((row) => ({
+      label: row.label,
+      text: row.values.map((value) => value.text).join(" / "),
+    })),
   });
   return { html, produceMs: Date.now() - started };
 }

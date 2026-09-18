@@ -244,7 +244,7 @@ export function changelogEntry({
 
   return `<article
     id="v${esc(entry.version)}"
-    class="scroll-mt-24 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8 dark:border-white/10 dark:bg-white/[0.035]"
+    class="glass-panel glass-panel--lit scroll-mt-24 p-6 sm:p-8"
     data-changelog-card
     data-version="${esc(entry.version)}"
     data-search="${esc(searchBlob)}"
@@ -352,7 +352,7 @@ export function metaRow({ items }) {
     )
     .join("");
 
-  return `<div class="grid divide-y divide-slate-200 overflow-hidden rounded-2xl border border-slate-200 bg-white sm:grid-cols-3 sm:divide-x sm:divide-y-0 dark:divide-white/10 dark:border-white/10 dark:bg-white/[0.04]">${cells}</div>`;
+  return `<div class="glass-panel grid divide-y divide-slate-200 overflow-hidden sm:grid-cols-3 sm:divide-x sm:divide-y-0 dark:divide-white/10">${cells}</div>`;
 }
 
 /**
@@ -372,7 +372,7 @@ export function dependencyTable({ title, items, nameColumn, versionColumn }) {
     )
     .join("");
 
-  return `<div class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
+  return `<div class="glass-panel overflow-hidden shadow-sm">
     <p class="m-0 border-b border-slate-200 px-4 py-3 text-sm font-semibold dark:border-white/10">${esc(title)}</p>
     <table class="w-full">
       <thead class="text-[11px] tracking-wide text-slate-500 uppercase dark:text-slate-400">

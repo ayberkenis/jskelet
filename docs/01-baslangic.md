@@ -249,11 +249,12 @@ resolve hook'larına (`--import`) süreç başlangıcında ihtiyaç duyması.
 
 | Komut | Ne yapar |
 | --- | --- |
-| `jskelet dev` | Build watch + sunucu, tek terminalde. Canlı yenileme, CSS hot-swap, dev overlay. `NODE_ENV=development`. |
+| `jskelet dev` | Build watch + sunucu, tek terminalde. Canlı yenileme, CSS hot-swap, dev overlay. `NODE_ENV=development`. Port doluysa başlamaz; `--murder` dinleyiciyi öldürüp bağlar. |
 | `jskelet build` | Tek seferlik prod build: fontlar → ikon sprite → CSS → client JS → görseller → manifest → precompress. `NODE_ENV` verilmemişse `production`. |
-| `jskelet start` | Prod sunucu. Build çıktısı yoksa önce üretir. `NODE_ENV` verilmemişse `production`. |
+| `jskelet start` | Prod sunucu. Build çıktısı yoksa önce üretir. `NODE_ENV` verilmemişse `production`. Port davranışı `dev` ile aynı (`--murder`). |
 | `jskelet init` | Bulunduğun dizine feature-first `.jsk` iskeleti kurar; var olan dosyalara dokunmaz. |
 | `jskelet generate` | `feature` / `page` / `island` iskeleti üretir. |
+| `jskelet migrate` | Next.js App Router → JSkelet codemod (`scan` / `apply` / `config`). [11-tasima.md](./11-tasima.md). |
 
 Bilinmeyen bir komut ya da argümansız çağrı kullanım metnini basar.
 
@@ -280,7 +281,7 @@ yalnızca bu belirteçleri kullanın:
 | `jskelet/tags` | `link`, `image`, `icon`, `preloadImage`, `toKebab` |
 | `jskelet/log` | Konsol çıktısı yardımcıları (`banner`, `event`, `task`, `size`, `ms`, …) |
 | `jskelet/register` | `node --import jskelet/register` ile alias + uzantı hook'ları |
-| `jskelet/layout` | Framework'ün varsayılan `layout.ejs` dosyasının yolu |
+| `jskelet/layout` | Framework'ün varsayılan `layout.jsk` dosyasının yolu |
 
 ## Sırada ne var
 

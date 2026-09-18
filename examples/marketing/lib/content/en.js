@@ -68,7 +68,7 @@ export default {
     howItWorks: {
       title: "The journey of a request",
       description:
-        "Five clear stops from request to screen: Express, the HTML cache, the controller, EJS, and islands that wake only when needed.",
+        "Five clear stops from request to screen: Express, the HTML cache, the controller, .jsk, and islands that wake only when needed.",
     },
     compare: {
       title: "Pick the right tool for your project",
@@ -106,15 +106,25 @@ export default {
     ctaSecondary: "Download v%s",
     chips: ["Minimal footprint", "Lightning fast", "Built for developers"],
     hero: {
-      diagramLabel: "The JSkelet request flow",
+      diagramLabel: "JSkelet as a thin layer between your content and the web",
       logoAlt: "JSkelet logo",
       responseLabel: "Response",
       responseValue: "200 · HTML ready",
       routesLabel: "Routes",
-      routesValue: "route() · TTL",
-      terminalLabel: "terminal",
-      terminalLines: ["route ready", "island ready"],
-      annotation: "It just works.",
+      routesValue: "route() → islands()",
+      checklistLabel: "Built in",
+      checklist: [
+        "HTML first",
+        "Islands architecture",
+        "In-memory TTL cache",
+        "No React runtime",
+      ],
+      layers: [
+        { id: "web", label: "The web" },
+        { id: "core", label: "JSkelet core" },
+        { id: "content", label: "Your content" },
+      ],
+      annotation: "Less JavaScript. More web.",
     },
     trust: {
       runtimeLabel: "Core payload (gzip)",
@@ -241,7 +251,7 @@ export default {
     fit: {
       eyebrow: "The right match",
       title: "It doesn't try to do everything.",
-      lead: "JSkelet is built for content and discoverability. For state-heavy applications, another tool is often the better answer.",
+      lead: "Public, cacheable pages are the center of gravity. Signed-in dashboards and per-visitor pages are supported with private: true — they skip the HTML cache. A React SPA or a built-in real-time client is not what this is.",
     },
     faq: {
       eyebrow: "FAQ",
@@ -251,7 +261,7 @@ export default {
     },
     finalCta: {
       title: "Your first page is ready in five minutes.",
-      body: "One command scaffolds a working skeleton with a route, a component and an island.",
+      body: "One command scaffolds a working skeleton with a .jsk page, a component and an island.",
       primary: "Download",
       secondary: "Read the docs",
     },
@@ -289,7 +299,7 @@ export default {
     {
       icon: "Code",
       title: "Developer First",
-      body: "Plain async controllers, EJS templates and a small API. Readable without ceremony, replaceable without drama.",
+      body: "Plain async controllers, .jsk templates and a small API. Readable without ceremony, replaceable without drama.",
     },
   ],
 
@@ -312,7 +322,7 @@ export default {
     {
       step: "4",
       title: "The page is assembled",
-      body: "EJS turns the body and the layout into complete HTML. Small function components can be reused on pages and inside fragments alike.",
+      body: "A .jsk template — compiled at build time — turns the body and the layout into complete HTML. Small function components can be reused on pages and inside fragments alike.",
     },
     {
       step: "5",
@@ -438,7 +448,10 @@ export default {
       {
         label: "Types",
         values: [
-          { text: "Plain JS with JSDoc; no compile step", tone: "neutral" },
+          {
+            text: "Published .d.ts; client .ts islands (server stays JS + JSDoc)",
+            tone: "good",
+          },
           { text: "TypeScript as a first-class citizen", tone: "good" },
           { text: "TypeScript as a first-class citizen", tone: "good" },
           { text: "Up to you", tone: "neutral" },
@@ -556,18 +569,20 @@ export default {
   },
 
   fit: {
-    title: { good: "Good fit", bad: "Wrong choice" },
+    title: { good: "Good fit", bad: "Poor fit" },
     good: [
       "Content sites, blogs and documentation",
       "Marketing and campaign pages",
       "Product listings, catalogues and classifieds",
       "Any page where SEO is a revenue line",
+      "Signed-in dashboards and per-visitor panels (private: true)",
+      "Form-driven UIs with fragments and region swaps",
     ],
     bad: [
-      "Visitor-facing dashboards and app UIs",
-      "Editor-like, state-heavy interfaces",
-      "Pages that change with every signed-in user",
-      "Real-time screens that update every second",
+      "Full SPA shells and client-side app routers",
+      "Editor-like, collaborative, state-heavy client trees",
+      "Streaming SSR or React Server Components",
+      "Built-in real-time push (SSE, WebSocket or polling is yours)",
     ],
   },
 
@@ -579,8 +594,8 @@ export default {
     },
     examples: {
       label: "run the examples",
-      title: "Three examples in the repository",
-      body: "The minimal example is the smallest thing that runs, the blog example touches every surface of the framework, and the marketing example is the page you are reading.",
+      title: "Four examples in the repository",
+      body: "Minimal is the smallest thing that runs, blog touches every public surface, marketing is the page you are reading, and dashboard is the private: true axis — sessions, CSRF and fragments.",
       note: "With the server running, the smoke script verifies that every endpoint answers as expected.",
     },
     openLabel: "Read chapter",
@@ -630,7 +645,7 @@ export default {
       {
         slug: "rendering",
         title: "Rendering and templates",
-        body: "Layout, components, helpers and the metadata schema.",
+        body: ".jsk templates, layout, components, helpers and the metadata schema.",
       },
       {
         slug: "islands",
@@ -676,7 +691,7 @@ export default {
       title: "Don't throw away what you know about Next.js.",
       lead: "Most of the concepts you already use have a smaller counterpart here. Move pages one at a time while traffic keeps flowing.",
       chips: [
-        "page.tsx → EJS",
+        "page.tsx → .jsk",
         "Client Component → Island",
         "ISR → HTML TTL",
       ],
@@ -712,8 +727,8 @@ export default {
           text: "Measure your TTLs: the cache header and the dev overlay are enough.",
         },
         {
-          tone: "bad",
-          text: "Leave the dashboard where it is. This is not the right tool for those pages.",
+          tone: "good",
+          text: "Mark dashboards and per-visitor pages with private: true; keep sessions, CSRF and live regions on fragments.",
         },
       ],
       configLabel: "jskelet.config.mjs",
@@ -722,9 +737,9 @@ export default {
     },
     faq: { eyebrow: "FAQ", title: "Asked most often while migrating" },
     items: [
-      { from: "app/page.tsx", to: "A route entry plus an EJS page template" },
+      { from: "app/page.tsx", to: "A route entry plus a .jsk page template" },
       { from: "generateMetadata()", to: "The metadata field your controller returns" },
-      { from: "layout.tsx", to: "The layout template plus a layout context hook" },
+      { from: "layout.tsx", to: "A .jsk layout plus a layout context hook" },
       { from: "not-found.tsx", to: "A not-found hook in the config" },
       { from: "redirect() / notFound()", to: "The same names, imported from jskelet" },
       {
@@ -750,7 +765,7 @@ export default {
     },
     {
       q: "Can I use TypeScript?",
-      a: "The framework itself is plain JavaScript with JSDoc and has no compile step. On the application side you can enable checked JavaScript and keep most of the same type safety without a build; for .ts files you would add a step to the pipeline yourself.",
+      a: "The framework source is plain JavaScript with JSDoc and ships .d.ts for imports from jskelet. Client entries and islands may be .ts (esbuild strips types; manifest keys stay *.js). Server routes, hooks and jskelet.config.mjs stay JavaScript — use checkJs in jsconfig for editor checking there.",
     },
     {
       q: "The cache lives in process memory. What happens with multiple instances?",
@@ -842,7 +857,7 @@ export default {
     steps: {
       eyebrow: "Four commands",
       title: "The whole setup",
-      lead: "Each command is copyable. The scaffold gives you a route, a component and an island that already work together.",
+      lead: "Each command is copyable. The scaffold gives you a .jsk page, a component and an island that already work together.",
       serveLabel: "5 · Serve in production",
       serveNote:
         "Serves the built output, warms the cache at boot and reports its status on every response.",
@@ -855,7 +870,7 @@ export default {
         {
           label: "2 · Scaffold the skeleton",
           command: "init",
-          note: "Creates the directory layout, a first route, a component and an island.",
+          note: "Creates the directory layout, a first .jsk page, a component and an island.",
         },
         {
           label: "3 · Start developing",
