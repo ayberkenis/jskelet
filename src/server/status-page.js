@@ -5,11 +5,12 @@
  * "Internal Server Error" çıktısını görmesi istenmiyor; bu yüzden framework
  * şablonsuz, tek dosyada duran minimal bir HTML üretir.
  *
- * Metin bilinçli olarak yalın: yalnızca bir şeyin ters gittiğini söyler.
- * Marka adı, ürün tanıtımı ya da hata ayrıntısı yok — hata sayfası
- * ziyaretçiye bir şey satmaz ve sunucunun içini dışa açmaz.
+ * Production metni bilinçli olarak yalın: yalnızca bir şeyin ters gittiğini
+ * söyler. Marka adı, ürün tanıtımı ya da hata ayrıntısı yok — hata sayfası
+ * ziyaretçiye bir şey satmaz ve sunucunun içini dışa açmaz. Development'ta
+ * 5xx için ayrıntılı teşhis sayfası üretilir (aşağıya bak).
  *
- * Ezme yolları (öncelik sırasıyla):
+ * Ezme yolları (öncelik sırasıyla; development 5xx hariç):
  *   1. `hooks.notFound()` — yalnızca 404 için, geriye dönük uyumluluk.
  *   2. `hooks.error({ status })` — tüm durumlar için; sayfa tanımı ya da
  *      doğrudan HTML string döner.
@@ -23,11 +24,19 @@ import { esc } from "../views/helpers/html.js";
  * hata sayfasının kendisi patlarsa ziyaretçi boş yanıt görür, bu yüzden her
  * başarısızlık gömülü HTML'e düşer.
  *
+ * Development'ta 5xx yanıtları `hooks.error` ve gömülü 500 sayfasını atlar;
+ * yığın izini içeren bir teşhis sayfası döner. Production'da ayrıntı
+ * gösterilmez — sunucu içi ziyaretçiye açılmaz.
+ *
  * @param {number} status
  * @param {{ error?: unknown }} [options]
  * @returns {Promise<string>}
  */
 export async function renderStatusPage(status, options = {}) {
+  if (process.env.NODE_ENV === "development" && status >= 500) {
+    return developmentErrorPage(status, options.error);
+  }
+
   const page =
     (status === 404 ? await hook("notFound", null) : null) ??
     (await hook("error", null, { status, error: options.error }));
@@ -161,4 +170,96 @@ p { margin: 0.375rem 0 0; color: var(--muted); }
 </main>
 </body>
 </html>`;
+}
+
+/**
+ * Development teşhis sayfası: mesaj + yığın izi. Yalnızca
+ * `NODE_ENV=development` iken `renderStatusPage` üzerinden çağrılır;
+ * production yolu buraya hiç girmez.
+ *
+ * @param {number} status
+ * @param {unknown} [error]
+ * @returns {string}
+ */
+function developmentErrorPage(status, error) {
+  const name =
+    error instanceof Error && error.name ? error.name : "Error";
+  const message =
+    error instanceof Error
+      ? error.message || "(no message)"
+      : error == null
+        ? "(no error object)"
+        : String(error);
+  const body = serializeError(error);
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>${status} — ${esc(name)}: ${esc(message)}</title>
+<style>
+:root { color-scheme: light dark; --fg: #18181b; --muted: #71717a; --bg: #fafafa; --panel: #fff; --border: #e4e4e7; }
+@media (prefers-color-scheme: dark) {
+  :root { --fg: #f4f4f5; --muted: #a1a1aa; --bg: #09090b; --panel: #18181b; --border: #27272a; }
+}
+html, body { margin: 0; background: var(--bg); color: var(--fg); }
+body {
+  padding: 1.5rem; max-width: 56rem; margin: 0 auto;
+  font: 1rem/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+.banner {
+  display: inline-block; margin: 0 0 1rem; padding: 0.2rem 0.5rem;
+  font-size: 0.75rem; font-weight: 600; letter-spacing: 0.04em;
+  text-transform: uppercase; color: var(--muted); border: 1px solid var(--border);
+}
+.code { font-size: 2.5rem; font-weight: 600; letter-spacing: -0.02em; margin: 0; }
+h1 { font-size: 1.25rem; font-weight: 600; margin: 0.5rem 0 0; word-break: break-word; }
+pre {
+  margin: 1.25rem 0 0; padding: 1rem; overflow: auto;
+  background: var(--panel); border: 1px solid var(--border);
+  font: 0.8125rem/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  white-space: pre-wrap; word-break: break-word;
+}
+</style>
+</head>
+<body>
+<p class="banner">Development only — not shown in production</p>
+<p class="code">${status}</p>
+<h1>${esc(name)}: ${esc(message)}</h1>
+<pre>${esc(body)}</pre>
+</body>
+</html>`;
+}
+
+/**
+ * Hata nesnesini yığın izi + `cause` zinciriyle metne çevirir.
+ *
+ * @param {unknown} error
+ * @returns {string}
+ */
+function serializeError(error) {
+  if (error == null) return "(no error object)";
+
+  /** @type {string[]} */
+  const parts = [];
+  /** @type {unknown} */
+  let current = error;
+  let depth = 0;
+
+  while (current != null && depth < 6) {
+    if (depth > 0) parts.push("\nCaused by:");
+
+    if (current instanceof Error) {
+      parts.push(current.stack || `${current.name}: ${current.message}`);
+      current = "cause" in current ? current.cause : undefined;
+    } else {
+      parts.push(String(current));
+      break;
+    }
+    depth += 1;
+  }
+
+  return parts.join("\n");
 }

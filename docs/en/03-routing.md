@@ -332,13 +332,18 @@ handler kicks in, logs the error and returns the framework's own error page with
 `Cache-Control: no-store`. The status code is read from the error's `statusCode`
 (or `status`) field; if it is not in the 400–599 range, 500 is used.
 
-The framework's page is deliberately plain: the status code, a one-line heading
-and a one-line description. It carries no brand name, no navigation and no error
-detail — the innards of the server are not opened up to the visitor. The
-language comes from `brand.lang` (`tr` and `en` are built in, others fall back
-to `en`).
+**Development** (`NODE_ENV=development`, i.e. `jskelet dev`): for 5xx responses
+the built-in 500 page and `hooks.error()` are skipped; a diagnostic page with
+the message, stack trace, and any `cause` chain is returned instead. 4xx (404
+and friends) still use the usual status page in development.
 
-To provide your own page, `hooks.error()`:
+**Production**: the framework's page is deliberately plain — status code, a
+one-line heading and a one-line description. It carries no brand name, no
+navigation and no error detail; the innards of the server are not opened up to
+the visitor. The language comes from `brand.lang` (`tr` and `en` are built in,
+others fall back to `en`).
+
+To provide your own page, `hooks.error()` (production / 4xx only):
 
 ```js
 // jskelet.config.mjs

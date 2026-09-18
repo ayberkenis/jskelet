@@ -326,12 +326,17 @@ hata yöneticisi devreye girer, hatayı loglar ve framework'ün kendi hata sayfa
 `Cache-Control: no-store` ile döner. Durum kodu hatanın `statusCode` (ya da
 `status`) alanından okunur; 400–599 aralığında değilse 500 kullanılır.
 
-Framework'ün sayfası bilinçli olarak yalın: durum kodu, tek satır başlık ve tek
-satır açıklama. Marka adı, gezinme ya da hata ayrıntısı taşımaz — sunucunun içi
-ziyaretçiye açılmaz. Dil `brand.lang`ten gelir (`tr` ve `en` hazır, diğerleri
-`en`e düşer).
+**Development** (`NODE_ENV=development`, yani `jskelet dev`): 5xx yanıtlarında
+gömülü 500 sayfası ve `hooks.error()` atlanır; mesaj, yığın izi ve varsa
+`cause` zinciri içeren bir teşhis sayfası döner. 4xx (404 vb.) development'ta
+da her zamanki gibi durum sayfasıdır.
 
-Kendi sayfanı vermek için `hooks.error()`:
+**Production**: framework'ün sayfası bilinçli olarak yalın — durum kodu, tek
+satır başlık ve tek satır açıklama. Marka adı, gezinme ya da hata ayrıntısı
+taşımaz; sunucunun içi ziyaretçiye açılmaz. Dil `brand.lang`ten gelir (`tr` ve
+`en` hazır, diğerleri `en`e düşer).
+
+Kendi sayfanı vermek için `hooks.error()` (yalnızca production / 4xx):
 
 ```js
 // jskelet.config.mjs

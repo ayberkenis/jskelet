@@ -23,6 +23,10 @@ one is listed under a **Breaking** heading.
 
 ### Changed
 
+- In development (`NODE_ENV=development`), 5xx responses show a diagnostic
+  page with the error message and stack trace instead of the polished 500
+  status page / `hooks.error()`. Production still returns the minimal status
+  page with no internals.
 - Marketing example copy (EN/TR) reflects 0.5.x cache surfaces: host `vary`,
   early refresh, classic vs `onVisit` prewarm, local `icons/`, shared cookies,
   and `opengraph-image` → `ogHandler` on the migrate table. Pages now serve
