@@ -43,8 +43,9 @@ sayfa da ilk ziyaretçide milisaniyeler içinde üretilir ve kota harcamaz.
 ## Public ve kişiye özel ayrımı
 
 Bu belgedeki her şey **herkese aynı gidebilen** HTML için geçerli. Cache
-anahtarında kimlik yok (yalnızca yol + query), yani önbellekteki bir sayfa onu
-ilk isteyen kişinin değil, o yolun cevabıdır.
+anahtarında kimlik yok (yalnızca yol + query + isteğe bağlı `vary`); yani
+önbellekteki bir sayfa onu ilk isteyen kişinin değil, o yolun (ve vary
+parçalarının) cevabıdır.
 
 Kullanıcıya bağlı bir sayfa bu yüzden ayrı bir yoldan geçer:
 
@@ -110,13 +111,14 @@ saklayabiliyordu.
 ## Cache anahtarı
 
 ```
-`${yol}?${izin verilen query parametreleri, sıralı}`
+`${varyPrefix}${yol}?${izin verilen query parametreleri, sıralı}`
 ```
 
-Query'siz bir istek için anahtar yalnızca yoldur. **Query parametresi taşıyan
-istek varsayılan olarak dinamiktir**: önbelleğe hiç girmez ve `private,
-no-store` ile gider. Bir yolun bütün varyantlarını cache'lemek `?utm_source=…`
-gibi sonsuz sayıda anahtar üretiyor ve 500 girdilik store'da LRU, gerçek
+`varyPrefix` varsayılan olarak boştur. Query'siz bir istek için anahtar
+`${varyPrefix}${yol}?` biçimindedir. **Query parametresi taşıyan istek
+varsayılan olarak dinamiktir**: önbelleğe hiç girmez ve `private, no-store`
+ile gider. Bir yolun bütün varyantlarını cache'lemek `?utm_source=…` gibi
+sonsuz sayıda anahtar üretiyor ve 500 girdilik store'da LRU, gerçek
 sayfaları kampanya varyantları için dışarı atıyor.
 
 Hangi parametrenin çıktıyı gerçekten değiştirdiğini uygulama bildirir —
@@ -134,6 +136,48 @@ ise `?sayfa=2` kopyasını paylaşır: listede olmayan parametre anahtara girmez
 Bir desen `true` ile eşlenirse bütün parametreler anahtara girer (dikkat: girdi
 sayısını sınırlayan tek şey `maxEntries` olur), `[]` ile eşlenirse query tamamen
 yok sayılır. Ayrıntı: [07-yapilandirma.md](./07-yapilandirma.md).
+
+### Host / locale: `cache().vary`
+
+CDN zaten tam URL ile ayırır; asıl risk **origin L1** ve Redis HTML anahtarıdır.
+Host'tan locale üreten sitelerde (`tr.example.com` / `en.example.com`) vary
+olmadan ilk locale'in HTML'i diğer host'a servis edilir — Express 5'te istek
+nesnesine locale yazmak kırılgan bir kaçış yoludur.
+
+```js
+cache: () => ({
+  html: { "/": 300, "/instruments/:slug": 300 },
+  vary: {
+    // true → public Host (x-forwarded-host || host), lowercase, portsuz
+    host: true,
+    // veya özel:
+    // headers: ["x-locale"],
+    // fn: (req) => req.hostname.startsWith("tr.") ? "l=tr" : "l=en",
+  },
+}),
+```
+
+Örnek anahtarlar: `h=tr.investvio.com|/instruments/aapl?`,
+`h=tr.example.com&l=tr|/…?`.
+
+| Alan | Tip | Anlamı |
+| --- | --- | --- |
+| `host` | `boolean` | Public Host'u `h=…` olarak anahtara ekler |
+| `headers` | `string[]` | Verilen istek başlıklarını (`ad=değer`) ekler |
+| `fn` | `(req) => string \| null` | Dönüş değeri bir segment olarak eklenir (tam kontrol) |
+
+**Prewarm:** varsayılan ısıtma `http://127.0.0.1:<port>` üzerinden gider. 
+`vary.host` açıksa bu yalnızca loopback anahtarını ısıtır; locale sitelerinde
+çoklu origin gerekir:
+
+```js
+prewarm: {
+  origins: ["http://localhost", "http://tr.localhost"],
+},
+```
+
+Port yazılmazsa dinleme portu eklenir. `onVisit` modunda ısıtma, vary açıkken
+ziyaretçinin `Host` başlığını kullanır.
 
 ## Stale-while-revalidate
 
@@ -771,7 +815,7 @@ her istek ağ zaman aşımı beklemez.
 ### Anahtar düzeni
 
 ```
-_jskelet:{namespace}:{buildId}:html:{yol}?{query}
+_jskelet:{namespace}:{buildId}:html:{vary|}{yol}?{query}
 _jskelet:{namespace}:{buildId}:data:{anahtar}
 _jskelet:{namespace}:events
 ```
@@ -1074,9 +1118,12 @@ da trafik geldikçe (`onVisit`) yapılır. Kazanç aynı — tıklanan / komşu 
 soğuk render'ı beklemez — fakat veri dondurulmaz; her girdi route'un
 `revalidate` süresiyle yaşlanır ve stale-while-revalidate ile arkada tazelenir.
 
-Isıtma **gerçek HTTP istekleriyle** yapılır (`http://127.0.0.1:<port>`), çünkü
-cache anahtarı, sıkıştırma ve middleware zinciri normal trafikle bire bir aynı
-olsun.
+Isıtma **gerçek HTTP istekleriyle** yapılır (`http://127.0.0.1:<port>` ya da
+`cache().prewarm.origins`), çünkü cache anahtarı, sıkıştırma ve middleware
+zinciri normal trafikle bire bir aynı olsun. `vary.host` açıksa varsayılan
+loopback yalnızca o host'un anahtarını ısıtır — locale sitelerinde
+`origins: ["http://localhost", "http://tr.localhost"]` gibi çoklu origin
+gerekir.
 
 İki mod **karşılıklı dışlayıcıdır**. `cache().prewarm.onVisit` açıksa klasik
 alanlar (`max`, `priority`, `rotate`, `intervalSeconds`, …) ve
@@ -1336,6 +1383,10 @@ turunun gerçekten `MISS` → önbellek doldurup doldurmadığını buradan gör
   fazla `revalidate` + bir tazeleme turudur.
 - **Önbellek şişiyor.** Query parametreleri anahtara girdiği için kampanya
   parametreleri girdi çoğaltıyor olabilir.
+- **Yanlış dil / host HTML'i geliyor.** Host'tan locale üreten bir sitede
+  `cache().vary.host: true` yoksa ilk locale'in HTML'i diğer host'a servis
+  edilir. Prewarm yalnızca `127.0.0.1` ile ısınıyorsa `prewarm.origins` ile
+  locale host'larını ekleyin.
 - **Isıtma hiç çalışmıyor.** Klasik modda `hooks.prewarmPaths` tanımlı değil,
   `PREWARM=0` ayarlı ya da `cache().prewarm.enabled === false`. `onVisit`
   modunda `listen` sonrası logda `onVisit mode` satırını ve public cache'li

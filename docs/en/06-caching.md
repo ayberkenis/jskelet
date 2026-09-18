@@ -46,9 +46,9 @@ milliseconds on the first visit, and spends no quota.
 ## Public versus per-visitor
 
 Everything in this document applies to HTML that **can go to everyone
-unchanged**. There is no identity in the cache key (only path + query), so a
-page in the cache is the answer for that path, not the answer for whoever asked
-for it first.
+unchanged**. There is no identity in the cache key (only path + query + optional
+`vary`), so a page in the cache is the answer for that path (and vary parts),
+not the answer for whoever asked for it first.
 
 A page that depends on the user therefore takes a separate path:
 
@@ -117,14 +117,15 @@ The cache also only kicks in for `GET` requests.
 ## The cache key
 
 ```
-`${path}?${the allowed query parameters, sorted}`
+`${varyPrefix}${path}?${the allowed query parameters, sorted}`
 ```
 
-For a request without a query the key is just the path. **A request that carries
-a query parameter is dynamic by default**: it never enters the cache and is sent
-with `private, no-store`. Caching every variant of a path mints an unbounded
-number of keys (`?utm_source=…` and friends), and in a 500-entry store LRU then
-evicts the real pages in favour of campaign variants.
+`varyPrefix` is empty by default. For a request without a query the key is
+`${varyPrefix}${path}?`. **A request that carries a query parameter is dynamic
+by default**: it never enters the cache and is sent with `private, no-store`.
+Caching every variant of a path mints an unbounded number of keys
+(`?utm_source=…` and friends), and in a 500-entry store LRU then evicts the
+real pages in favour of campaign variants.
 
 Which parameter actually changes the output is declared by the application, in
 `jskelet.config.mjs` → `cache().query`:
@@ -142,6 +143,49 @@ list never reaches the key. A pattern mapped to `true` puts every parameter in
 the key (careful: nothing but `maxEntries` then bounds the entry count), and one
 mapped to `[]` ignores the query entirely. Details:
 [07-configuration.md](./07-configuration.md).
+
+### Host / locale: `cache().vary`
+
+A CDN already separates by full URL; the real risk is the **origin L1** and the
+Redis HTML key. On sites that derive locale from the host
+(`tr.example.com` / `en.example.com`), without vary the first locale's HTML is
+served to the other host — mutating the request object for locale is a fragile
+workaround under Express 5.
+
+```js
+cache: () => ({
+  html: { "/": 300, "/instruments/:slug": 300 },
+  vary: {
+    // true → public Host (x-forwarded-host || host), lowercase, no port
+    host: true,
+    // or custom:
+    // headers: ["x-locale"],
+    // fn: (req) => req.hostname.startsWith("tr.") ? "l=tr" : "l=en",
+  },
+}),
+```
+
+Example keys: `h=tr.investvio.com|/instruments/aapl?`,
+`h=tr.example.com&l=tr|/…?`.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `host` | `boolean` | Adds the public Host as `h=…` |
+| `headers` | `string[]` | Adds the given request headers as `name=value` |
+| `fn` | `(req) => string \| null` | Appends the return value as a segment (full control) |
+
+**Prewarm:** the default warm-up goes through `http://127.0.0.1:<port>`. With
+`vary.host` that only warms the loopback key; locale sites need multiple
+origins:
+
+```js
+prewarm: {
+  origins: ["http://localhost", "http://tr.localhost"],
+},
+```
+
+If no port is written, the listen port is added. In `onVisit` mode, when vary
+is on, warming uses the visitor's `Host` header.
 
 ## Stale-while-revalidate
 
@@ -788,7 +832,7 @@ five consecutive failures, so requests do not each wait for a network timeout.
 ### Key layout
 
 ```
-_jskelet:{namespace}:{buildId}:html:{path}?{query}
+_jskelet:{namespace}:{buildId}:html:{vary|}{path}?{query}
 _jskelet:{namespace}:{buildId}:data:{key}
 _jskelet:{namespace}:events
 ```
@@ -1075,8 +1119,11 @@ but the data is not frozen; every entry ages with the route's `revalidate` and
 is refreshed in the background with stale-while-revalidate.
 
 The warm-up is done with **real HTTP requests**
-(`http://127.0.0.1:<port>`), so that the cache key, the compression and the
-middleware chain are exactly the same as with normal traffic.
+(`http://127.0.0.1:<port>` or `cache().prewarm.origins`), so that the cache key,
+the compression and the middleware chain are exactly the same as with normal
+traffic. With `vary.host`, the default loopback only warms that host's key —
+locale sites need multiple origins such as
+`origins: ["http://localhost", "http://tr.localhost"]`.
 
 The two modes are **mutually exclusive**. If `cache().prewarm.onVisit` is on,
 classic fields (`max`, `priority`, `rotate`, `intervalSeconds`, …) and
@@ -1339,6 +1386,10 @@ filled the cache.
   lag is at most `revalidate` + one refresh round.
 - **The cache is bloating.** Because query parameters go into the key, campaign
   parameters may be multiplying entries.
+- **Wrong language / host HTML.** On a site that derives locale from the host,
+  without `cache().vary.host: true` the first locale's HTML is served to the
+  other host. If prewarm only hits `127.0.0.1`, add the locale hosts via
+  `prewarm.origins`.
 - **The warm-up never runs.** In classic mode `hooks.prewarmPaths` is not
   defined, `PREWARM=0` is set, or `cache().prewarm.enabled === false`. In
   `onVisit` mode check the `onVisit mode` log line after `listen` and that a

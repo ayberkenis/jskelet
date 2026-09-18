@@ -34,6 +34,7 @@ import { getConfig } from "../config/index.js";
 import { DEFAULT_HTML_CACHE_MAX_ENTRIES } from "../config/defaults.js";
 import { collectDependencies } from "./cache-deps.js";
 import { compilePattern, matchPattern } from "../config/pattern.js";
+import { pathOfCacheKey } from "./cache-vary.js";
 import {
   cacheKey,
   onCacheEvent,
@@ -662,8 +663,9 @@ function invalidateKey(key, hard) {
  * arkada ve anahtar başına tek seferde koşar. `hard: true` yalnızca eski
  * HTML'in gerçekten geçersiz olduğu durumlar için.
  *
- * Anahtar `yol?query` olduğundan eşleştirme **yol kısmına** yapılır: bir
- * yolun bütün query varyantları (`?utm_source=…` dahil) tek çağrıyla düşer.
+ * Anahtar `yol?query` (isteğe bağlı `vary|` önekiyle) olduğundan eşleştirme
+ * **yol kısmına** yapılır: bir yolun bütün query / host varyantları tek
+ * çağrıyla düşer.
  *
  * @param {string | RegExp | (string | RegExp)[]} target
  * @param {{ hard?: boolean }} [options]
@@ -733,14 +735,14 @@ function compileMatchers(targets) {
 }
 
 /**
- * Anahtar `yol?query`; eşleştirme **yol kısmına** yapılır.
+ * Anahtar `[vary|]yol?query`; eşleştirme **yol** kısmına yapılır.
+ * Vary öneki (`h=…|`) invalidation hedefiyle karışmasın.
  *
  * @param {string} key
  * @returns {string}
  */
 function pathOf(key) {
-  const mark = key.indexOf("?");
-  return mark === -1 ? key : key.slice(0, mark);
+  return pathOfCacheKey(key);
 }
 
 /**
@@ -879,6 +881,9 @@ function dropLocalKey(key) {
  * boşaltır. Isıtma turu bunları başa alır; iki tur aynı yolu tekrar
  * ısıtmasın diye okuma yıkıcıdır.
  *
+ * Vary öneki (`h=…|`) düşülür — HTTP ısıtması yalnızca yolu ister; host
+ * ayrımı `prewarm.origins` / istek Host'u ile yapılır.
+ *
  * @returns {string[]}
  */
 export function takeInvalidatedPaths() {
@@ -886,8 +891,13 @@ export function takeInvalidatedPaths() {
 
   const paths = [...invalidated];
   invalidated.clear();
-  // Anahtar `yol?query`; query boşsa sondaki `?` atılır.
-  return paths.map((key) => (key.endsWith("?") ? key.slice(0, -1) : key));
+  return paths.map((key) => {
+    const pathname = pathOfCacheKey(key);
+    const q = key.indexOf("?");
+    if (q === -1) return pathname;
+    const query = key.slice(q + 1);
+    return query ? `${pathname}?${query}` : pathname;
+  });
 }
 
 /**

@@ -87,6 +87,13 @@ export const DEFAULT_PREWARM = {
    * @type {(string | RegExp)[]}
    */
   priority: [],
+  /**
+   * Klasik turda ısıtılacak origin listesi. Boşsa `http://127.0.0.1:<port>`.
+   * `cache().vary.host` açıkken locale host'ları buraya yazılmazsa yalnızca
+   * loopback anahtarı ısınır.
+   * @type {string[]}
+   */
+  origins: [],
 };
 
 /**
@@ -122,6 +129,7 @@ export const CLASSIC_PREWARM_KEYS = [
   "retryDelayMs",
   "rotate",
   "priority",
+  "origins",
 ];
 
 /**

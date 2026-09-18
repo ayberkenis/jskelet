@@ -614,9 +614,9 @@ Ayrıntı: [03-routing.md](./03-routing.md).
 ## `cache()`
 
 **Tip:**
-`() => { html?: Record<string, number>, query?: Record<string, string[] | true>, maxEntries?: number, data?: object, trackUpstream?: boolean, trackDependencies?: boolean, transientRetry?: object | false, upstream?: object, redis?: object, prewarm?: object }` —
+`() => { html?: Record<string, number>, query?: Record<string, string[] | true>, vary?: { host?: boolean, headers?: string[], fn?: (req) => string | null }, maxEntries?: number, data?: object, trackUpstream?: boolean, trackDependencies?: boolean, transientRetry?: object | false, upstream?: object, redis?: object, prewarm?: object }` —
 **Varsayılan:**
-`{ html: {}, query: {}, maxEntries: 500, data: { maxEntries: 10000, staleFactor: 10 }, trackUpstream: true, trackDependencies: true, transientRetry: { attempts: 1, delayMs: 300 }, upstream: { rate: 0 }, redis: { enabled: false }, prewarm: { enabled: true, max: 400, intervalSeconds: 0 } }`
+`{ html: {}, query: {}, vary: { host: false }, maxEntries: 500, data: { maxEntries: 10000, staleFactor: 10 }, trackUpstream: true, trackDependencies: true, transientRetry: { attempts: 1, delayMs: 300 }, upstream: { rate: 0 }, redis: { enabled: false }, prewarm: { enabled: true, max: 400, intervalSeconds: 0, origins: [] } }`
 
 ### `cache().html`
 
@@ -670,6 +670,30 @@ query: {
 Parametreler anahtara **sıralı** yazılır: `?a=1&b=2` ile `?b=2&a=1` aynı girdiyi
 paylaşır. `route(fn, { private: true })` bu bölümden etkilenmez; private route
 hiçbir koşulda cache'lenmez.
+
+### `cache().vary`
+
+HTML cache anahtarına query allowlist'ten **bağımsız** sabit parçalar ekler.
+Host'tan locale üreten sitelerde `host: true` **zorunlu**; aksi halde ilk
+locale'in HTML'i diğer host'a servis edilir. CDN zaten tam URL ile ayırır —
+bu ayar origin L1 ve Redis HTML anahtarı içindir.
+
+```js
+vary: {
+  host: true, // h=tr.example.com|…
+  // headers: ["x-locale"],
+  // fn: (req) => req.hostname.startsWith("tr.") ? "l=tr" : "l=en",
+}
+```
+
+| Alan | Tip | Varsayılan | Anlamı |
+| --- | --- | --- | --- |
+| `host` | `boolean` | `false` | Public Host (`x-forwarded-host` yoksa `Host`), lowercase, portsuz → `h=…` |
+| `headers` | `string[]` | `[]` | İstek başlıkları `ad=değer` olarak eklenir |
+| `fn` | `(req) => string \| null` | — | Dönüş bir segment olarak eklenir |
+
+Anahtar biçimi: `${vary}|${yol}?${query}` (vary yoksa önek yok). Ayrıntı:
+[06-cache.md](./06-cache.md).
 
 ### `cache().maxEntries`
 
@@ -900,6 +924,7 @@ sayfadaki linkler). Birlikte verilemez — config yüklenirken hata.
 | `intervalSeconds` | `number` | `0` | 0'dan büyükse tur periyodik tekrarlanır |
 | `rotate` | `boolean` | `true` | Liste `max`'tan uzunsa periyodik turlar kaldığı yerden devam eder |
 | `priority` | `(string \| RegExp)[]` | `[]` | Isıtma sırası; eşleşen yollar her turda başa alınır |
+| `origins` | `string[]` | `[]` | Klasik turda ısıtılacak origin'ler. Boşsa `http://127.0.0.1:<port>`. `vary.host` açıksa locale host'ları buraya yazın |
 
 `priority` iki biçim kabul eder: config'in her yerinde geçerli olan desen
 sözdizimi ve doğrudan `RegExp`. Önce yazılan önce ısınır.
@@ -909,6 +934,8 @@ prewarm: {
   max: 500,
   rps: 4,
   intervalSeconds: 300,
+  // vary.host açıksa loopback tek başına yetmez:
+  origins: ["http://localhost", "http://tr.localhost"],
   priority: [
     "/",                     // ana sayfa
     "/piyasalar/:path*",      // tüm piyasa bölümü

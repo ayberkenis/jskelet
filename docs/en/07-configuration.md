@@ -627,9 +627,9 @@ Details: [03-routing.md](./03-routing.md).
 ## `cache()`
 
 **Type:**
-`() => { html?: Record<string, number>, query?: Record<string, string[] | true>, maxEntries?: number, data?: object, trackUpstream?: boolean, trackDependencies?: boolean, transientRetry?: object | false, upstream?: object, redis?: object, prewarm?: object }` —
+`() => { html?: Record<string, number>, query?: Record<string, string[] | true>, vary?: { host?: boolean, headers?: string[], fn?: (req) => string | null }, maxEntries?: number, data?: object, trackUpstream?: boolean, trackDependencies?: boolean, transientRetry?: object | false, upstream?: object, redis?: object, prewarm?: object }` —
 **Default:**
-`{ html: {}, query: {}, maxEntries: 500, data: { maxEntries: 10000, staleFactor: 10 }, trackUpstream: true, trackDependencies: true, transientRetry: { attempts: 1, delayMs: 300 }, upstream: { rate: 0 }, redis: { enabled: false }, prewarm: { enabled: true, max: 400, intervalSeconds: 0 } }`
+`{ html: {}, query: {}, vary: { host: false }, maxEntries: 500, data: { maxEntries: 10000, staleFactor: 10 }, trackUpstream: true, trackDependencies: true, transientRetry: { attempts: 1, delayMs: 300 }, upstream: { rate: 0 }, redis: { enabled: false }, prewarm: { enabled: true, max: 400, intervalSeconds: 0, origins: [] } }`
 
 ### `cache().html`
 
@@ -683,6 +683,31 @@ query: {
 Parameters are written into the key **sorted**, so `?a=1&b=2` and `?b=2&a=1`
 share one entry. `route(fn, { private: true })` is unaffected by this section; a
 private route is never cached under any condition.
+
+### `cache().vary`
+
+Adds fixed segments to the HTML cache key **independently** of the query
+allowlist. On sites that derive locale from the host, `host: true` is
+**required**; otherwise the first locale's HTML is served to the other host. A
+CDN already separates by full URL — this setting is for the origin L1 and the
+Redis HTML key.
+
+```js
+vary: {
+  host: true, // h=tr.example.com|…
+  // headers: ["x-locale"],
+  // fn: (req) => req.hostname.startsWith("tr.") ? "l=tr" : "l=en",
+}
+```
+
+| Field | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `host` | `boolean` | `false` | Public Host (`x-forwarded-host` else `Host`), lowercase, no port → `h=…` |
+| `headers` | `string[]` | `[]` | Request headers added as `name=value` |
+| `fn` | `(req) => string \| null` | — | Return value appended as a segment |
+
+Key shape: `${vary}|${path}?${query}` (no prefix when vary is empty). Details:
+[06-caching.md](./06-caching.md).
 
 ### `cache().maxEntries`
 
@@ -920,6 +945,7 @@ page just visited). They cannot be combined — config load throws.
 | `intervalSeconds` | `number` | `0` | If greater than 0, the pass repeats periodically |
 | `rotate` | `boolean` | `true` | If the list is longer than `max`, periodic passes continue where they left off |
 | `priority` | `(string \| RegExp)[]` | `[]` | Warm-up order; matching paths are taken first on every pass |
+| `origins` | `string[]` | `[]` | Origins for the classic pass. Empty → `http://127.0.0.1:<port>`. With `vary.host`, list the locale hosts here |
 
 `priority` accepts two forms: the pattern syntax used everywhere in the config,
 and a plain `RegExp`. Whatever is written first is warmed first.
@@ -929,6 +955,8 @@ prewarm: {
   max: 500,
   rps: 4,
   intervalSeconds: 300,
+  // with vary.host, loopback alone is not enough:
+  origins: ["http://localhost", "http://tr.localhost"],
   priority: [
     "/",                     // the home page
     "/markets/:path*",        // the whole markets section

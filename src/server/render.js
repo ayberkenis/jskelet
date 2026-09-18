@@ -18,6 +18,7 @@ import fs from "node:fs";
 import { pathToFileURL } from "node:url";
 import ejs from "ejs";
 import { withHtmlCache } from "./html-cache.js";
+import { buildVaryPrefix } from "./cache-vary.js";
 import { getConfig, hook } from "../config/index.js";
 import { matchPattern } from "../config/pattern.js";
 import { encodeText, negotiateEncoding } from "./middleware/compression.js";
@@ -329,12 +330,14 @@ export function route(controller, options = {}) {
     // Anahtar `null` ise query bu yol için cache'lenebilir değil: sayfa
     // dinamik davranır. Anahtar yine de gerekiyor (hata sayfası ölçümü,
     // teşhis) ama TTL sıfırlanıp cache yolu kapatılır.
-    const key = buildCacheKey(req.path, ctx.query);
+    const key = buildCacheKey(req.path, ctx.query, req);
     const cacheable =
       !isPrivate && req.method === "GET" && Boolean(revalidate) && key !== null;
-    const cacheKey = key ?? `${req.path}?${new URLSearchParams(
-      Object.entries(ctx.query).map(([k, v]) => [k, String(v)]),
-    ).toString()}`;
+    const cacheKey =
+      key ??
+      `${buildVaryPrefix(req)}${req.path}?${new URLSearchParams(
+        Object.entries(ctx.query).map(([k, v]) => [k, String(v)]),
+      ).toString()}`;
 
     try {
       const result = await withRequestContext(context, () =>
@@ -582,6 +585,10 @@ function resolveQueryPolicy(pathname) {
 /**
  * HTML cache anahtarı, ya da query bu yol için cache'lenebilir değilse `null`.
  *
+ * Biçim: `${varyPrefix}${pathname}?${izin verilen query}`.
+ * Vary (`cache().vary`) query allowlist'ten bağımsız; host/locale sitelerinde
+ * ilk host'un HTML'inin diğerine servis edilmesini engeller.
+ *
  * Varsayılan olarak query parametresi taşıyan istek dinamiktir: `cache().query`
  * altında eşleşen bir kural olmadıkça cache'e hiç girmez. Aksi hâlde bir yolun
  * bütün `?utm_source=…` varyantları ayrı girdi olur ve LRU'daki gerçek
@@ -592,11 +599,13 @@ function resolveQueryPolicy(pathname) {
  *
  * @param {string} pathname
  * @param {Record<string, unknown>} query
+ * @param {{ headers?: Record<string, unknown>, get?: (name: string) => string | undefined }} [req]
  * @returns {string | null}
  */
-function buildCacheKey(pathname, query) {
+function buildCacheKey(pathname, query, req) {
+  const vary = buildVaryPrefix(req);
   const entries = Object.entries(query);
-  if (!entries.length) return `${pathname}?`;
+  if (!entries.length) return `${vary}${pathname}?`;
 
   const policy = resolveQueryPolicy(pathname);
   if (policy === null) return null;
@@ -612,7 +621,7 @@ function buildCacheKey(pathname, query) {
       .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
   );
 
-  return `${pathname}?${params.toString()}`;
+  return `${vary}${pathname}?${params.toString()}`;
 }
 
 /**

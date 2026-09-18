@@ -8,6 +8,14 @@ one is listed under a **Breaking** heading.
 
 ## [Unreleased]
 
+### Added
+
+- HTML cache key vary (`cache().vary`): `host: true` adds the public Host
+  (`x-forwarded-host` or `Host`, lowercase, no port) as `h=…|` before the path;
+  optional `headers` and `fn(req)` add further segments. Required on host-based
+  locale sites so one locale's HTML is not served on another. Classic prewarm
+  accepts `prewarm.origins` for multi-host warming when vary is on.
+
 ### Changed
 
 - Marketing example visual language: darker ink canvas, solid cyan primary

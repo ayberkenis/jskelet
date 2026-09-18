@@ -16,7 +16,9 @@
  *   redirects() → [{ source, destination, permanent?, statusCode? }]
  *   rewrites()  → [{ source, destination }] | { beforeFiles?, afterFiles? }
  *   cache()     → { html?: { [source]: saniye },
- *                   query?: { [source]: string[] | true }, maxEntries?: number,
+ *                   query?: { [source]: string[] | true },
+ *                   vary?: { host?: boolean, headers?: string[], fn?: Function },
+ *                   maxEntries?: number,
  *                   data?: {...}, redis?: {...}, prewarm?: {...} }
  *   admin()     → { enabled?, basePath?, allowIps?, blockBots?, … }
  *   logs        → { console?, kinds?, file?, s3? }
@@ -107,6 +109,10 @@ const CONFIG_FILE = "jskelet.config.mjs";
  * @property {{ pattern: CompiledPattern, allow: true | string[] }[]} cacheQuery
  *   Yol deseni başına, HTML cache anahtarına girmesine izin verilen query
  *   parametreleri. Eşleşen kural yoksa query'li istek cache'lenmez.
+ * @property {{ host: boolean, headers: string[],
+ *   fn: ((req: import('express').Request) => string | null | undefined) | null }} cacheVary
+ *   Anahtara eklenen sabit parçalar (query allowlist'ten bağımsız). Host'tan
+ *   locale üreten sitelerde `host: true` zorunlu.
  * @property {number} htmlMaxEntries HTML önbelleğinin girdi sınırı.
  * @property {Record<string, unknown>} data Upstream veri önbelleği ayarları.
  * @property {boolean} trackUpstream `fetch` sarılıp geçici hatalar otomatik bildirilsin mi.
@@ -634,9 +640,41 @@ function normalizeQueryRules(raw) {
 }
 
 /**
+ * `cache().vary` → HTML anahtarına host / header / özel fn parçası.
+ *
+ * @param {unknown} raw
+ * @returns {ResolvedConfig["cacheVary"]}
+ */
+function normalizeVary(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return { host: false, headers: [], fn: null };
+  }
+
+  const source = /** @type {Record<string, unknown>} */ (raw);
+  const headers = asArray(source.headers, "cache().vary.headers")
+    .filter((name) => typeof name === "string" && name)
+    .map((name) => String(name).toLowerCase());
+
+  /** @type {ResolvedConfig["cacheVary"]["fn"]} */
+  let fn = null;
+  if (typeof source.fn === "function") {
+    fn = /** @type {ResolvedConfig["cacheVary"]["fn"]} */ (source.fn);
+  } else if (source.fn != null) {
+    console.warn("[config] cache().vary.fn must be a function, ignoring it");
+  }
+
+  return {
+    host: source.host === true,
+    headers,
+    fn,
+  };
+}
+
+/**
  * @param {unknown} raw
  * @returns {{ html: ResolvedConfig["html"],
- *   cacheQuery: ResolvedConfig["cacheQuery"], htmlMaxEntries: number,
+ *   cacheQuery: ResolvedConfig["cacheQuery"],
+ *   cacheVary: ResolvedConfig["cacheVary"], htmlMaxEntries: number,
  *   data: Record<string, unknown>, trackUpstream: boolean,
  *   trackDependencies: boolean,
  *   transientRetry: { attempts: number, delayMs: number },
@@ -664,6 +702,7 @@ function normalizeCache(raw) {
   return {
     html,
     cacheQuery: queryRules,
+    cacheVary: normalizeVary(raw?.vary),
     htmlMaxEntries:
       Number.isFinite(maxEntries) && maxEntries > 0
         ? Math.floor(maxEntries)
@@ -775,6 +814,12 @@ function normalizePrewarm(raw) {
   // birleşir. `onVisit` anahtarı çözülmüş nesnede her zaman durur.
   const classic = { ...source };
   delete classic.onVisit;
+
+  const origins = asArray(classic.origins, "cache().prewarm.origins")
+    .filter((value) => typeof value === "string" && /^https?:\/\//i.test(value))
+    .map(String);
+  classic.origins = origins;
+
   return {
     ...DEFAULT_PREWARM,
     ...classic,
@@ -1074,6 +1119,7 @@ export async function loadConfig(options = {}) {
   const {
     html,
     cacheQuery,
+    cacheVary,
     htmlMaxEntries,
     data,
     trackUpstream,
@@ -1097,6 +1143,7 @@ export async function loadConfig(options = {}) {
     rewrites: normalizeRewrites(rewrites),
     html,
     cacheQuery,
+    cacheVary,
     htmlMaxEntries,
     data,
     trackUpstream,

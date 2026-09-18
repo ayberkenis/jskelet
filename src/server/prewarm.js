@@ -24,6 +24,65 @@ import { getDataCacheStats } from "./data-cache.js";
 import { isTransientStatus } from "./upstream-tracking.js";
 import { upstreamCooldownMs } from "./upstream-limiter.js";
 
+/**
+ * `cache().prewarm.origins` yoksa loopback. Port'suz origin'lere dinleme
+ * portu eklenir — `http://tr.localhost` → `http://tr.localhost:3000`.
+ *
+ * @param {number} port
+ * @returns {string[]}
+ */
+function resolvePrewarmOrigins(port) {
+  const configured = getConfig().prewarm?.origins;
+  const list = Array.isArray(configured)
+    ? configured.filter((value) => typeof value === "string" && value)
+    : [];
+
+  if (!list.length) return [`http://127.0.0.1:${port}`];
+
+  return list.map((origin) => {
+    try {
+      const url = new URL(origin);
+      if (!url.port) url.port = String(port);
+      return url.origin;
+    } catch {
+      return origin;
+    }
+  });
+}
+
+/**
+ * Vary açıkken ısıtma isteği ziyaretçinin Host'unu taşısın — aksi halde
+ * loopback anahtarı ısınır, gerçek locale host soğuk kalır.
+ *
+ * @param {{ get?: (name: string) => string | undefined,
+ *   headers?: Record<string, unknown>, protocol?: string } | undefined} req
+ * @param {string} fallback
+ * @returns {string}
+ */
+function originFromRequest(req, fallback) {
+  if (!req) return fallback;
+
+  let vary;
+  try {
+    vary = getConfig().cacheVary;
+  } catch {
+    return fallback;
+  }
+  if (!vary?.host && !vary?.headers?.length && !vary?.fn) return fallback;
+
+  const host =
+    req.get?.("host") ||
+    (typeof req.headers?.host === "string" ? req.headers.host : "");
+  if (!host) return fallback;
+
+  const forwarded = req.headers?.["x-forwarded-proto"];
+  const protoRaw = Array.isArray(forwarded)
+    ? forwarded[0]
+    : forwarded || req.protocol || "http";
+  const proto = String(protoRaw).split(",")[0].trim() || "http";
+  return `${proto}://${host}`;
+}
+
 /** Klasik turu yöneten env'ler; `onVisit` ile birlikte yasak. */
 const CLASSIC_PREWARM_ENV = [
   "PREWARM_MAX",
@@ -715,6 +774,9 @@ export function noteVisitWarm(html, context) {
     /** @type {string | undefined} */ (context.req?.headers?.["user-agent"]);
   if (ua && ua === getConfig().brand.prewarmUserAgent) return;
 
+  // Vary açıksa bu ziyaretin Host'u üzerinden ısıt — loopback anahtarı değil.
+  visitOrigin = originFromRequest(context.req, visitOrigin);
+
   const perPage = Number(getConfig().prewarm?.onVisit?.perPage) || 20;
   const links = extractSameOriginLinks(html, {
     limit: perPage,
@@ -796,12 +858,13 @@ export function startPrewarm({ port }) {
   const config = getConfig();
   if (process.env.PREWARM === "0") return;
 
-  const origin = `http://127.0.0.1:${port}`;
+  const origins = resolvePrewarmOrigins(port);
+  const origin = origins[0];
 
   // Klasik `prewarmPaths` olmasa da TTL öncesi soft-bayatlayan girdiler
   // HTTP ile ısıtılsın. `PREWARM=0` yukarıda her şeyi keser.
   startEarlyExpirySweep();
-  startExpiryWarmDrain(origin);
+  startExpiryWarmDrain(origins);
 
   if (config.prewarm?.onVisit?.enabled) {
     const classicEnv = CLASSIC_PREWARM_ENV.filter((key) => process.env[key]);
@@ -833,7 +896,10 @@ export function startPrewarm({ port }) {
     if (running) return;
     running = true;
     try {
-      await prewarm({ origin });
+      // `vary.host` açıkken her origin ayrı anahtar ısıtır.
+      for (const next of origins) {
+        await prewarm({ origin: next });
+      }
     } catch (error) {
       console.error("[prewarm] failed", error);
     } finally {
@@ -856,8 +922,8 @@ export function startPrewarm({ port }) {
   if (interval > 0) setInterval(() => void run(), interval * 1000).unref();
 }
 
-/** @type {string | null} */
-let expiryOrigin = null;
+/** @type {string[]} */
+let expiryOrigins = [];
 
 /** @type {boolean} */
 let expiryDraining = false;
@@ -869,11 +935,11 @@ let expiryDrainTimer = null;
  * Soft-bayat / invalidate kuyruğunu periyodik boşaltır. Klasik tur ve onVisit
  * aynı kuyruğu da okur; bu drain `prewarmPaths` yokken de çalışır.
  *
- * @param {string} origin
+ * @param {string[]} origins
  * @returns {void}
  */
-function startExpiryWarmDrain(origin) {
-  expiryOrigin = origin;
+function startExpiryWarmDrain(origins) {
+  expiryOrigins = origins.length ? origins : [];
   if (expiryDrainTimer) return;
   expiryDrainTimer = setInterval(() => {
     void drainExpiryWarm();
@@ -885,7 +951,7 @@ function startExpiryWarmDrain(origin) {
  * @returns {Promise<void>}
  */
 async function drainExpiryWarm() {
-  if (expiryDraining || !expiryOrigin) return;
+  if (expiryDraining || !expiryOrigins.length) return;
 
   const paths = takeInvalidatedPaths();
   if (!paths.length) return;
@@ -895,7 +961,9 @@ async function drainExpiryWarm() {
     const cold = paths.filter((path) => !isHtmlCacheFresh(path));
     if (!cold.length) return;
 
-    await prewarm({ origin: expiryOrigin, paths: cold, quiet: true });
+    for (const origin of expiryOrigins) {
+      await prewarm({ origin, paths: cold, quiet: true });
+    }
   } catch (error) {
     console.error("[prewarm] expiry warm failed", error);
   } finally {
