@@ -8,123 +8,148 @@ one is listed under a **Breaking** heading.
 
 ## [Unreleased]
 
+### Removed
+
+- `examples/marketing` — the marketing site now lives as a standalone app
+  outside this repository (`jskelet-marketing`).
+
+## [0.6.0] - 2026-09-21
+
 ### Added
 
-- `jskelet dev --murder` / `jskelet start --murder`: if the listen port is
-  already taken, kill the listener and bind; without `--murder`, refuse to
-  start with a clear error (pid + hint) instead of a bare `EADDRINUSE`.
-- Layout built-ins for `.jsk`: `Stylesheets`, `BodyScripts`, and `JsonLd`
-  (asset / script / JSON-LD loops without expression-language calls).
-- Framework default layout as `src/templates/layout.jsk` with a checked-in
-  `layout.render.js` (`node scripts/compile-framework-layout.mjs`;
-  `--check` for drift). `jskelet/layout` points at the `.jsk` source;
-  legacy EJS copy remains at `jskelet/layout/ejs`.
-- VS Code / Cursor JSK extension diagnostics (Problems on open/save) and
-  PascalCase component completions from `views/components` (v0.2.0).
-- `<!DOCTYPE>` (and other `<!…>` declarations) parse correctly in `.jsk`
-  instead of hanging the compiler.
-
-- `jskelet migrate` codemod for Next.js App Router → JSkelet: `scan` inventory,
-  `apply` (JSX pages → controller + `.jsk`, presentational components → HTML
-  string helpers, `"use client"` → island stubs), and `config` draft from
-  `next.config`. Ships with `@babel/parser` / `@babel/types`.
-- Published TypeScript declaration files under `types/` for `jskelet`,
-  `jskelet/client`, `jskelet/html`, `jskelet/tags`, `jskelet/cookies` and
-  `jskelet/log` (`npm run types`).
-- Client build accepts `.ts` / `.mts` entries and islands (esbuild); manifest
-  keys stay `*.js`. Conflicting stems (`main.js` + `main.ts`) fail the build.
-  Icon usage scan includes `.ts` / `.mts`.
-
-- Local flat `icons/` directory as the exclusive SVG sprite source when present
-  (`icons.dir`, default `"icons"`): `house.svg` / `house-bold.svg` file names,
-  XOR with `@phosphor-icons/core` (Phosphor only when the directory is absent).
-  The hashed sprite still lands under `public/assets/` and is precompressed.
-- Auth handoff hardening: `allowedCookieNames` allowlist, pending-ticket and
-  per-IP mint limits, and RFC 6265 cookie-name validation on `serializeCookie`
-  (`isValidCookieName`).
+- Port reclaim with `--murder`
+  `jskelet dev --murder` and `jskelet start --murder` kill whatever already
+  holds the listen port and bind in its place. Without the flag the CLI still
+  refuses to start, but now with a clear error (pid + hint) instead of a bare
+  `EADDRINUSE`.
+- Layout built-ins for `.jsk`
+  `<Stylesheets />`, `<BodyScripts />`, and `<JsonLd />` emit the asset /
+  script / JSON-LD loops from layout without calling helpers in the expression
+  language.
+- Framework default layout as `.jsk`
+  Ships as `src/templates/layout.jsk` with a checked-in `layout.render.js`
+  (`node scripts/compile-framework-layout.mjs`, `--check` for drift).
+  `jskelet/layout` points at the `.jsk` source; the legacy EJS copy remains at
+  `jskelet/layout/ejs`.
+- JSK editor tooling
+  The VS Code / Cursor JSK extension (v0.2.0) reports diagnostics in Problems
+  on open/save and offers PascalCase component completions from
+  `views/components`.
+- `<!DOCTYPE>` parsing in `.jsk`
+  Doctype and other `<!…>` declarations parse correctly instead of hanging the
+  template compiler.
+- `jskelet migrate` for Next.js App Router
+  Codemod with `scan` inventory, `apply` (JSX pages → controller + `.jsk`,
+  presentational components → HTML string helpers, `"use client"` → island
+  stubs), and `config` draft from `next.config`. Ships with `@babel/parser` /
+  `@babel/types`.
+- Published TypeScript declarations
+  `.d.ts` files under `types/` for `jskelet`, `jskelet/client`, `jskelet/html`,
+  `jskelet/tags`, `jskelet/cookies`, and `jskelet/log` (`npm run types`).
+- TypeScript client entries and islands
+  The client build accepts `.ts` / `.mts` entries and islands via esbuild;
+  manifest keys stay `*.js`. Conflicting stems (`main.js` + `main.ts`) fail the
+  build. Icon usage scan includes `.ts` / `.mts`.
+- Local `icons/` sprite source
+  When a flat `icons/` directory is present (`icons.dir`, default `"icons"`),
+  it is the exclusive SVG sprite source (`house.svg` / `house-bold.svg`).
+  Phosphor is used only when that directory is absent. The hashed sprite still
+  lands under `public/assets/` and is precompressed.
+- Auth handoff hardening
+  `allowedCookieNames` allowlist, pending-ticket and per-IP mint limits, plus
+  RFC 6265 cookie-name validation on `serializeCookie` (`isValidCookieName`).
 
 ### Fixed
 
-- `jskelet dev` prints the real server failure (e.g. port already in use /
+- Clearer `jskelet dev` startup failures
+  The CLI prints the real server failure (for example port already in use /
   `--murder` hint) instead of only `server exited (code 1)` when the child
   dies during startup.
-- Marketing example icon sprite again includes trust-bar icons (`Package`,
-  `TextT`, `ShieldCheck`, …): `icons.scan` now covers `routes/` where those
-  names live after the `.jsk` migration (they were only declared in
-  controllers, not in scanned `lib`/`views`).
-
-- Open Graph routes with a `.png` suffix (`/og/…/:slug.png`) now escape the
-  dot for Express 5 / path-to-regexp, so the handler matches again instead of
-  falling through to the HTML 404.
-- Remote image optimizer no longer auto-follows redirects; each hop is
-  re-checked against `allowHosts`, blocked private addresses, and DNS
-  resolution (open-redirect SSRF).
+- Marketing trust-bar icons after `.jsk` migration
+  `icons.scan` now covers `routes/`, so names declared in controllers
+  (`Package`, `TextT`, `ShieldCheck`, …) land in the sprite again.
+- Open Graph routes with a `.png` suffix
+  Paths like `/og/…/:slug.png` escape the dot for Express 5 / path-to-regexp,
+  so the handler matches instead of falling through to the HTML 404.
+- Safer remote image optimizer redirects
+  Redirects are no longer followed blindly; each hop is re-checked against
+  `allowHosts`, blocked private addresses, and DNS resolution (open-redirect
+  SSRF).
 
 ### Breaking
 
-- `ejs` is an optional peer dependency. Apps that only use `.jsk` need not
-  install it; apps that still have `.ejs` views or layouts must
-  `npm i ejs`. Missing EJS when an `.ejs` file is rendered throws a clear
-  install/migrate hint.
-- `jskelet/layout` now resolves to `layout.jsk` (was `layout.ejs`). Use
+- `ejs` is an optional peer
+  Apps that only use `.jsk` need not install it; apps that still have `.ejs`
+  views or layouts must `npm i ejs`. Missing EJS when an `.ejs` file is
+  rendered throws a clear install/migrate hint.
+- Default layout export is `.jsk`
+  `jskelet/layout` now resolves to `layout.jsk` (was `layout.ejs`). Use
   `jskelet/layout/ejs` for the legacy file.
-
-- `auth.crossSubdomainHandoff` mint requires a non-empty
-  `allowedCookieNames` list; `true` alone no longer accepts arbitrary cookie
-  names.
-- Production client builds omit sourcemaps (development still emits them).
-- Secret-like `clientEnv` key names fail the build instead of being inlined.
+- Auth handoff requires cookie allowlist
+  `auth.crossSubdomainHandoff` mint needs a non-empty `allowedCookieNames`
+  list; `true` alone no longer accepts arbitrary cookie names.
+- Production builds omit client sourcemaps
+  Development still emits them; production client bundles do not.
+- Secret-like `clientEnv` keys fail the build
+  Names that look like secrets are rejected instead of being inlined into the
+  client bundle.
 
 ### Changed
 
-- Examples (`minimal`, `blog`, `dashboard`, `marketing`) use `.jsk` only
-  (layouts, pages, partials); EJS files removed from those trees.
-- Template compiler: unknown PascalCase components fail the build; clearer
-  errors for forbidden function calls, unknown includes (with location), and
-  unclosed `{#if}` / `{#each}` at EOF; icon scan recognizes `<Icon name="…" />`.
-- Docs / AGENTS / README present build-time `.jsk` as the default story; EJS
-  is documented as an optional legacy peer.
-
-- VS Code / Cursor extension (`extensions/vscode-jsk`) uses the new 3D `.jsk`
-  mark as both the marketplace extension icon and the explorer file icon for
-  `*.jsk`. Packages as a standalone VSIX (vendors `src/compile`) for
-  Marketplace publish.
-- `@babel/parser` and `@babel/types` are optional peers used only by migrate
-  (JSX/TSX parsing). They are no longer installed with every `jskelet`
-  install; missing peers throw an install hint (`npm i -D @babel/parser
-  @babel/types`). Unused `@babel/traverse` was dropped.
-
-- Auth handoff mint mounts **after** CSRF so origin checks apply to
+- Marketing changelog as release notes
+  `/changelog` hides Unreleased, lists every published release without
+  pagination, and shows each note as a titled card with a short headline plus
+  a longer explanation (Keep-a-Changelog sections: Added / Changed / Fixed /
+  …).
+- Examples are `.jsk` only
+  `minimal`, `blog`, `dashboard`, and `marketing` use `.jsk` for layouts,
+  pages, and partials; EJS files were removed from those trees.
+- Stricter, clearer template compiler
+  Unknown PascalCase components fail the build. Errors for forbidden function
+  calls, unknown includes (with location), and unclosed `{#if}` / `{#each}` at
+  EOF are clearer; icon scan recognizes `<Icon name="…" />`.
+- Docs present `.jsk` as the default
+  Docs / AGENTS / README tell the build-time `.jsk` story first; EJS is
+  documented as an optional legacy peer.
+- Standalone JSK VSIX packaging
+  The VS Code / Cursor extension (`extensions/vscode-jsk`) uses the new 3D
+  `.jsk` mark as marketplace and explorer icon, and packages as a standalone
+  VSIX (vendors `src/compile`) for Marketplace publish.
+- Migrate peers are optional
+  `@babel/parser` and `@babel/types` are optional peers used only by migrate.
+  They are no longer installed with every `jskelet` install; missing peers
+  throw an install hint. Unused `@babel/traverse` was dropped.
+- Auth handoff sits after CSRF
+  Mint mounts after CSRF so origin checks apply to
   `POST /_jskelet/auth/handoff`.
-- Docs (TR/EN): stronger `trustProxy` / `csrf.token` guidance and a fuller
-  security-headers example under `headers()`.
-- Marketing copy (EN/TR) and how-it-works examples present `.jsk` as the
-  default template surface instead of EJS; the compare column for hand-written
-  Express + EJS stays as a competitor. Scaffold and migrate mappings name
-  `.jsk` pages and layouts.
-- Framework and marketing brand mark: new geometric logo at `src/logo.png`
-  (admin / devtools) and `examples/marketing/public/logo.png`, replacing the
-  CDN-hosted mark. Marketing serves local favicons (`favicon.ico`, 16/32 PNG,
-  apple-touch-icon) via metadata `extraTags`.
-- In development (`NODE_ENV=development`), 5xx responses show a diagnostic
-  page with the error message and stack trace instead of the polished 500
-  status page / `hooks.error()`. Production still returns the minimal status
-  page with no internals.
-- Marketing fit copy (EN/TR) treats signed-in dashboards and per-visitor
-  panels as a supported path (`private: true`, fragments) instead of a
-  “wrong choice”; the poor-fit column now names SPA shells, collaborative
-  client trees, streaming/RSC, and built-in real-time transport.
-- Marketing example copy (EN/TR) reflects 0.5.x cache surfaces: host `vary`,
-  early refresh, classic vs `onVisit` prewarm, local `icons/`, shared cookies,
-  and `opengraph-image` → `ogHandler` on the migrate table. Pages now serve
-  per-locale dynamic OG cards at `/og/:locale/:page.png`.
-- Marketing changelog page restyled like a release-notes browser: measured
-  summary cards, search and newest/oldest sort, paginated open release cards
-  with Latest / Released badges and GitHub links (still driven by `CHANGELOG.md`).
-- Marketing example visual language tightened toward the dark cyan glass look:
-  shared `glass-panel` surfaces site-wide, numbered lit feature cards, a
-  3D stack illustration on the home hero, and rotating cyan border beams on
-  lit panels.
+- Stronger security docs
+  Docs (TR/EN) expand `trustProxy` / `csrf.token` guidance and include a
+  fuller security-headers example under `headers()`.
+- Marketing copy defaults to `.jsk`
+  EN/TR marketing and how-it-works examples present `.jsk` as the default
+  template surface; the compare column for hand-written Express + EJS stays as
+  a competitor. Scaffold and migrate mappings name `.jsk` pages and layouts.
+- New geometric brand mark
+  Framework and marketing logos live at `src/logo.png` (admin / devtools) and
+  `examples/marketing/public/logo.png`. Marketing serves local favicons via
+  metadata `extraTags`.
+- Development 5xx diagnostics
+  In `NODE_ENV=development`, 5xx responses show the error message and stack
+  instead of the polished 500 page / `hooks.error()`. Production still returns
+  the minimal status page with no internals.
+- Marketing fit copy for signed-in panels
+  EN/TR fit copy treats dashboards and per-visitor panels as a supported path
+  (`private: true`, fragments). The poor-fit column names SPA shells,
+  collaborative client trees, streaming/RSC, and built-in real-time transport.
+- Marketing copy for 0.5.x surfaces
+  EN/TR copy reflects host `vary`, early refresh, classic vs `onVisit`
+  prewarm, local `icons/`, shared cookies, and `opengraph-image` → `ogHandler`
+  on the migrate table. Pages serve per-locale OG cards at
+  `/og/:locale/:page.png`.
+- Marketing visual language
+  Dark cyan glass look with shared `glass-panel` surfaces, numbered lit feature
+  cards, a 3D stack illustration on the home hero, and rotating cyan border
+  beams on lit panels.
 
 ## [0.5.4] - 2026-09-18
 
@@ -503,7 +528,8 @@ Initial release.
 - Documentation under `docs/` and three examples: `minimal`, `blog`,
   `marketing`.
 
-[Unreleased]: https://github.com/ayberkenis/jskelet/compare/v0.5.4...HEAD
+[Unreleased]: https://github.com/ayberkenis/jskelet/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/ayberkenis/jskelet/compare/v0.5.4...v0.6.0
 [0.5.4]: https://github.com/ayberkenis/jskelet/compare/v0.5.3...v0.5.4
 [0.5.3]: https://github.com/ayberkenis/jskelet/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/ayberkenis/jskelet/compare/v0.5.1...v0.5.2

@@ -429,7 +429,9 @@ body > footer { view-transition-name: site-footer; }
 ::view-transition-new(root) { animation-duration: 180ms; }
 ```
 
-Çalışan hâli `examples/marketing/styles/globals.css` içinde.
+Çalışan bir örnek için Tailwind `@source` ve view-transition CSS'ini kendi
+uygulamanızın `styles/globals.css` dosyasına taşıyın; yukarıdaki bloklar
+başlangıç noktasıdır.
 
 **CSP kullanıyorsanız** kurallar satır içi bir `<script type="speculationrules">`
 olarak basılır; `script-src` politikanızın buna izin vermesi gerekir.

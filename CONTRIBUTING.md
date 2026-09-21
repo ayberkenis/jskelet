@@ -137,7 +137,7 @@ Documentation may only use specifiers from the `exports` map: `jskelet`,
 
 Changing a general surface (`route()` signature, hook names, config fields,
 client API) means updating `examples/minimal`, `examples/blog` and
-`examples/marketing` as well. The examples are the source of the snippets in the
+`examples/dashboard` as well. The examples are the source of the snippets in the
 docs and the fastest place to notice drift.
 
 ## Commits and pull requests

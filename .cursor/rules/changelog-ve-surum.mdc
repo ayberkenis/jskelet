@@ -34,8 +34,6 @@ tek seferde güncelle:
 - `package.json` → `version`
 - `CHANGELOG.md`: `[Unreleased]` maddelerini `## [x.y.z]` başlığı altına taşı,
   tarih ekle ve dosya sonundaki `[Unreleased]` / `[x.y.z]` bağlantılarını yenile
-- `examples/marketing/lib/content/en.js` ve `tr.js` → `entries` dizisinin başına
-  yeni sürüm girdisi; eski girdinin `status`'u `"current"` → `"previous"`
 - `.github/ISSUE_TEMPLATE/bug_report.yml` → sürüm alanının `placeholder`'ı
 
 `0.x` boyunca minor sürümler kırıcı olabilir; kırıcı değişiklik her zaman

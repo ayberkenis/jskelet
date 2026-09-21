@@ -50,7 +50,7 @@ change one, change the other.
 
 ## Runnable examples
 
-All four are in working order; most of the examples in the docs were taken from
+All three are in working order; most of the examples in the docs were taken from
 them.
 
 **`examples/minimal/`** — two routes, one component, one island, minimal config.
@@ -72,34 +72,7 @@ npm --prefix examples/blog install
 npm --prefix examples/blog run dev
 ```
 
-**`examples/marketing/`** — the framework's own marketing site: hero, comparison
-table, live latency measurement, FAQ, docs index, release notes and a download
-page. The byte counts on the page are read in `lib/payload.js` from the site's
-**own** build output, and the release info in `lib/release.js` from the
-installed package's `package.json`; the latency numbers are measured in the
-browser by the `latency` island. With a long TTL (one hour) and a prewarm that
-warms every page, it shows the profile in which the cache works most
-efficiently.
-
-It also serves **these documents**: `/docs/<chapter>` reads the markdown files
-in `node_modules/jskelet/docs/` and renders them with a sidebar, an "on this
-page" list and sequential navigation. The renderer is a small module in
-`lib/markdown.js` — no dependency — and the source of truth stays the package,
-so the site never drifts from the installed version.
-
-The site is also **bilingual**: English by default at the root, Turkish under
-`/tr`, with the same route names in both languages. There is no i18n in the
-framework; language resolution lives in `lib/i18n.js` as the application's own
-contract and is wired to a dictionary via `hooks.layoutContext`. This is the
-place to look if you want to see how to build a multilingual site with this
-surface.
-
-```bash
-npm --prefix examples/marketing install
-npm --prefix examples/marketing run dev
-```
-
-**`examples/dashboard/`** — the opposite axis from the other three: per-visitor
+**`examples/dashboard/`** — the opposite axis from the other two: per-visitor
 pages. Sign-in with a signed cookie session, a `private: true` protected panel,
 a paginated table fragment, a CSRF-protected mutation form and an island that
 returns a cleanup function. It also has a public landing page, so a cached
@@ -110,5 +83,5 @@ npm --prefix examples/dashboard install
 npm --prefix examples/dashboard run dev
 ```
 
-In all four examples, `node smoke.mjs` verifies that the endpoints respond as
+In all three examples, `node smoke.mjs` verifies that the endpoints respond as
 expected while the server is up.

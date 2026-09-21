@@ -441,7 +441,8 @@ body > footer { view-transition-name: site-footer; }
 ::view-transition-new(root) { animation-duration: 180ms; }
 ```
 
-A working version lives in `examples/marketing/styles/globals.css`.
+Copy the Tailwind `@source` directives and view-transition CSS into your own
+app's `styles/globals.css`; the blocks above are a starting point.
 
 **If you use CSP**, the rules are emitted as an inline
 `<script type="speculationrules">`; your `script-src` policy needs to allow it.

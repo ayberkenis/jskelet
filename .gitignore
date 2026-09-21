@@ -3,6 +3,8 @@ node_modules/
 public/assets/
 examples/*/public/assets/
 examples/*/.jskelet/
+examples/*/.data/
+examples/*/public/uploads/
 .env
 *.log
 .cursor/

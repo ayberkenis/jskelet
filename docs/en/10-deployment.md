@@ -157,16 +157,11 @@ The build stage produces these itself with `npx jskelet build`.
 
 The examples in this repo pull jskelet with `"jskelet": "file:../.."` rather
 than from npm. In tools like Coolify, Railway or Render, if you set the "base
-directory" to `examples/marketing`, the build context becomes only that
-directory, `../..` falls outside the context, and installation fails at
-`npm ci`. The correct setting: **base directory `/`**, Dockerfile location
-`/examples/marketing/Dockerfile`. The working example is in
-`examples/marketing/Dockerfile` and assumes the repo root as its context:
-
-```bash
-docker build -f examples/marketing/Dockerfile -t jskelet-marketing .
-docker run --rm -p 3000:3000 -e SITE_URL=https://example.com jskelet-marketing
-```
+directory" to `examples/blog`, the build context becomes only that directory,
+`../..` falls outside the context, and installation fails at `npm ci`. The
+correct setting: **base directory `/`** (the repo root) and adapt the
+multi-stage Dockerfile above to the app directory — or install jskelet as a
+normal npm dependency and use the app directory as the context.
 
 In your own application jskelet will be an ordinary dependency, so this
 constraint does not apply; the multi-stage image above is enough.

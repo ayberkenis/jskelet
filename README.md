@@ -307,12 +307,13 @@ Anything reachable by a deeper path is internal and may change without notice.
 ## Deployment
 
 The server is a plain Express 5 app, so anything that can run a Node process
-works: a `Dockerfile` (see `examples/marketing/Dockerfile`), a systemd unit, or
-a PaaS. Run `jskelet build` at image build time, put a reverse proxy in front
-for TLS, and expose a health endpoint (the default dev gate bypass list already
-includes `/api/healthcheck`, so a route there is reachable in every mode).
-Details, including cache sizing behind multiple instances and the optional
-Redis tier, are in [docs/10-dagitim.md](./docs/10-dagitim.md) /
+works: a multi-stage `Dockerfile` (see [docs/10-dagitim.md](./docs/10-dagitim.md)),
+a systemd unit, or a PaaS. Run `jskelet build` at image build time, put a
+reverse proxy in front for TLS, and expose a health endpoint (the default
+dev gate bypass list already includes `/api/healthcheck`, so a route there is
+reachable in every mode). Details, including cache sizing behind multiple
+instances and the optional Redis tier, are in
+[docs/10-dagitim.md](./docs/10-dagitim.md) /
 [docs/en/10-deployment.md](./docs/en/10-deployment.md).
 
 ## Documentation
@@ -343,7 +344,6 @@ apply to this repository.
 ```bash
 npm --prefix examples/minimal   install && npm --prefix examples/minimal   run dev
 npm --prefix examples/blog      install && npm --prefix examples/blog      run dev
-npm --prefix examples/marketing install && npm --prefix examples/marketing run dev
 npm --prefix examples/dashboard install && npm --prefix examples/dashboard run dev
 ```
 
@@ -352,13 +352,6 @@ npm --prefix examples/dashboard install && npm --prefix examples/dashboard run d
 - **`examples/blog`** — dynamic routes, tag pages, every config section,
   fragment-loaded tabs, a form, prewarm, RSS and sitemap, four islands. It
   intentionally touches every surface of the framework.
-- **`examples/marketing`** — the framework's own marketing site: comparison
-  table, changelog and download pages, long TTLs, prewarm covering every page.
-  The byte counts on the page are measured from that site's own build output, the
-  version details are read from the installed package, and the latency numbers
-  are measured in the browser; there are no invented benchmarks. It is also
-  bilingual — English at the root, Turkish under `/tr` — which shows how to build
-  a multi-language site on a framework that ships no i18n of its own.
 - **`examples/dashboard`** — the opposite axis: per-visitor pages. A signed
   cookie session, a `private: true` page that never enters the HTML cache, a
   paginated table fragment, a CSRF-protected form that still works without

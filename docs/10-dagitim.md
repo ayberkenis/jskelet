@@ -156,15 +156,11 @@ Build aşaması `npx jskelet build` ile bunları kendisi üretir.
 
 Bu depodaki örnekler jskelet'i npm'den değil `"jskelet": "file:../.."` ile
 alıyor. Coolify, Railway, Render gibi araçlarda "base directory" olarak
-`examples/marketing` verilirse build context yalnızca o dizin olur, `../..`
+`examples/blog` verilirse build context yalnızca o dizin olur, `../..`
 context'in dışında kalır ve kurulum `npm ci`de düşer. Doğru ayar: **base
-directory `/`**, Dockerfile konumu `/examples/marketing/Dockerfile`. Çalışan
-örnek `examples/marketing/Dockerfile` içinde ve context'i depo kökü kabul eder:
-
-```bash
-docker build -f examples/marketing/Dockerfile -t jskelet-marketing .
-docker run --rm -p 3000:3000 -e SITE_URL=https://example.com jskelet-marketing
-```
+directory `/`** (depo kökü) ve imajı yukarıdaki çok aşamalı Dockerfile ile
+uygulama dizinine göre uyarlamak — ya da jskelet'i npm bağımlılığı olarak
+kurup context'i uygulamanın kendi dizini yapmak.
 
 Kendi uygulamanızda jskelet normal bir bağımlılık olacağı için bu kısıt yoktur;
 yukarıdaki çok aşamalı imaj yeterli.

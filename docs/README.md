@@ -47,7 +47,7 @@ eşlenik tutuluyor; birini değiştiriyorsan diğerini de değiştir.
 
 ## Çalışan örnekler
 
-Dördü de çalışır durumda; belgelerdeki örneklerin çoğu buralardan alınmıştır.
+Üçü de çalışır durumda; belgelerdeki örneklerin çoğu buralardan alınmıştır.
 
 **`examples/minimal/`** — iki route, bir bileşen, bir island, minimal config.
 Framework'ün en küçük çalışan hâli.
@@ -68,32 +68,7 @@ npm --prefix examples/blog install
 npm --prefix examples/blog run dev
 ```
 
-**`examples/marketing/`** — framework'ün kendi tanıtım sitesi: hero, kıyaslama
-tablosu, canlı gecikme ölçümü, SSS, belgeler dizini, sürüm notları ve indirme
-sayfası. Sayfadaki bayt sayıları `lib/payload.js` içinde sitenin **kendi** build
-çıktısından, sürüm künyesi ise `lib/release.js` içinde kurulu paketin
-`package.json`'ından okunur; gecikme sayıları `latency` island'ında tarayıcıda
-ölçülür. Uzun TTL (bir saat) ve tüm sayfaları ısıtan prewarm ile, cache'in en
-verimli çalıştığı profili gösterir.
-
-Site aynı zamanda **bu belgeleri** servis ediyor: `/docs/<bölüm>` adresleri
-`node_modules/jskelet/docs/` altındaki markdown dosyalarını okuyup sol gezinme,
-"bu sayfada" listesi ve sıralı geçişle basıyor. Çevirici `lib/markdown.js`
-içinde küçük bir modül — bağımlılık yok — ve kaynak paketin kendisi olduğu için
-site kurulu sürümden hiç ayrışmıyor.
-
-Site aynı zamanda **iki dilli**: varsayılan İngilizce kökte, Türkçe `/tr`
-altında ve route adları iki dilde de aynı. Framework'te i18n yok; dil
-çözümlemesi `lib/i18n.js` içinde uygulamanın kendi sözleşmesi olarak duruyor ve
-`hooks.layoutContext` ile bir sözlüğe bağlanıyor. Çok dilli bir siteyi bu
-yüzeyle nasıl kurabileceğinizi görmek için bakılacak yer burası.
-
-```bash
-npm --prefix examples/marketing install
-npm --prefix examples/marketing run dev
-```
-
-**`examples/dashboard/`** — diğer üçünün tersi eksen: kişiye özel sayfalar.
+**`examples/dashboard/`** — diğer ikisinin tersi eksen: kişiye özel sayfalar.
 İmzalı cookie ile giriş, `private: true` korumalı panel, sayfalı tablo
 fragment'i, CSRF'li mutasyon formu ve temizlik fonksiyonu döndüren bir island.
 Public bir tanıtım sayfası da var, böylece aynı uygulamada önbelleklenen ve
@@ -104,5 +79,5 @@ npm --prefix examples/dashboard install
 npm --prefix examples/dashboard run dev
 ```
 
-Her dört örnekte `node smoke.mjs` sunucu ayaktayken uçların beklendiği gibi
+Her üç örnekte `node smoke.mjs` sunucu ayaktayken uçların beklendiği gibi
 yanıt verdiğini doğrular.
