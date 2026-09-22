@@ -50,6 +50,23 @@ export type HtmlEntry = {
  */
 export declare function earlyRefreshLeadMs(produceMs: number, ttlMs: number): number;
 /**
+ * Sıkıştırılmış gövde `install()`'dan sonra, ilk brotli/gzip yanıtında
+ * girdinin `encoded` haritasına eklenir. Sayacı delta ile büyütmek, o sıra
+ * LRU'dan düşmüş bir haritaya yazınca bir daha inmeyen bir artık bırakır;
+ * store'dan yeniden okumak o artığı taşımaz.
+ *
+ * @returns {void}
+ */
+export declare function noteHtmlCacheGrowth(): void;
+/**
+ * Bellek freninin bayt tavanını geçici olarak değiştirir. Testler LRU
+ * tahliyesini küçük bir değerle doğrular; `null` üretim tavanına döner.
+ *
+ * @param {number | null} bytes
+ * @returns {void}
+ */
+export declare function setHtmlCacheByteBudget(bytes: number | null): void;
+/**
  * @param {string} key
  * @param {number} ttlSeconds 0 → cache yok
  * @param {() => Promise<{ html: string, status: number }>} producer
@@ -121,12 +138,20 @@ export declare function invalidateHtmlByDependency(dataKeys: Iterable<string>): 
  */
 export declare function dropHtmlCacheKey(key: string): boolean;
 /**
- * Invalidate edilmiş ve henüz kimsenin istemediği yolları döner ve kuyruğu
- * boşaltır. Isıtma turu bunları başa alır; iki tur aynı yolu tekrar
- * ısıtmasın diye okuma yıkıcıdır.
+ * Invalidate edilmiş yollar. Okuma yıkıcıdır; iki tur aynı yolu tekrar
+ * ısıtmasın. `onlyHost` verilirse başka host'ların anahtarları kuyrukta
+ * kalır — süre dolumu onları kendi host'uyla ısıtır, `127.0.0.1` anahtarı
+ * açılmaz.
  *
- * Vary öneki (`h=…|`) düşülür — HTTP ısıtması yalnızca yolu ister; host
- * ayrımı `prewarm.origins` / istek Host'u ile yapılır.
+ * @param {string} [onlyHost]
+ * @returns {{ path: string, host: string }[]}
+ */
+export declare function takeInvalidatedTargets(onlyHost?: string): {
+    path: string;
+    host: string;
+}[];
+/**
+ * Yol listesi. Vary öneki düşülür; host ayrımı `takeInvalidatedTargets`.
  *
  * @returns {string[]}
  */
@@ -152,10 +177,19 @@ export declare function getHtmlCacheEntries(): {
  * Yol (query'siz) için taze bir HTML girdisi var mı? Ziyaret ısıtması yalnızca
  * soğuk / bayat hedefleri kuyruğa alır; HIT'leri yeniden çekmez.
  *
+ * Gerçek anahtar `h=host|/yol?` biçimindedir: düz `store.get(pathname)` hem
+ * vary önekini hem sondaki `?` işaretini kaçırır ve sıcak sayfayı yeniden
+ * ısıtır. `vary.host` açıkken yalnızca bu isteğin host'u sayılır; diğer
+ * locale'in kopyası bu yolu sıcak yapmaz.
+ *
  * @param {string} pathname
+ * @param {{ headers?: Record<string, unknown>, get?: (name: string) => string | undefined }} [req]
  * @returns {boolean}
  */
-export declare function isHtmlCacheFresh(pathname: string): boolean;
+export declare function isHtmlCacheFresh(pathname: string, req?: {
+    headers?: Record<string, unknown>;
+    get?: (name: string) => string | undefined;
+}): boolean;
 /**
  * Erken tazeleme penceresine girmiş (veya TTL'i dolmuş) trafiksiz girdileri
  * soft-bayatlatır ve ısıtma kuyruğuna alır. HTTP ısıtması producer'sız

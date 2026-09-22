@@ -17,9 +17,16 @@
  * middleware zinciri normal trafikle bire bir aynı olsun.
  */
 import process from "node:process";
+import { ON_VISIT_QUEUE_MAX } from "../config/defaults.js";
 import { getConfig, hook } from "../config/index.js";
 import { getRequestContext } from "../http/request-context.js";
-import { isHtmlCacheFresh, takeInvalidatedPaths, startEarlyExpirySweep } from "./html-cache.js";
+import { publicHost } from "./cache-vary.js";
+import {
+  isHtmlCacheFresh,
+  startEarlyExpirySweep,
+  takeInvalidatedPaths,
+  takeInvalidatedTargets,
+} from "./html-cache.js";
 import { getDataCacheStats } from "./data-cache.js";
 import { isTransientStatus } from "./upstream-tracking.js";
 import { upstreamCooldownMs } from "./upstream-limiter.js";
@@ -51,36 +58,39 @@ function resolvePrewarmOrigins(port) {
 }
 
 /**
- * Vary açıkken ısıtma isteği ziyaretçinin Host'unu taşısın — aksi halde
- * loopback anahtarı ısınır, gerçek locale host soğuk kalır.
+ * `vary.host` açıkken ısıtma isteğinin cache anahtarı ziyaretçinin public
+ * host'u olsun. Fetch'in kendi `Host` başlığı loopback'tir ve değiştirilemez;
+ * `x-forwarded-host` ise `publicHost` tarafından önce okunur. İsteği public
+ * origin'e yollamak ALB üzerinden döner ve `h=127.0.0.1` diye ikinci girdi açar.
  *
  * @param {{ get?: (name: string) => string | undefined,
- *   headers?: Record<string, unknown>, protocol?: string } | undefined} req
- * @param {string} fallback
+ *   headers?: Record<string, unknown> } | undefined} req
  * @returns {string}
  */
-function originFromRequest(req, fallback) {
-  if (!req) return fallback;
-
-  let vary;
+function forwardedHostFrom(req) {
+  if (!req) return "";
   try {
-    vary = getConfig().cacheVary;
+    if (!getConfig().cacheVary?.host) return "";
   } catch {
-    return fallback;
+    return "";
   }
-  if (!vary?.host && !vary?.headers?.length && !vary?.fn) return fallback;
+  return publicHost(req);
+}
 
-  const host =
-    req.get?.("host") ||
-    (typeof req.headers?.host === "string" ? req.headers.host : "");
-  if (!host) return fallback;
-
-  const forwarded = req.headers?.["x-forwarded-proto"];
-  const protoRaw = Array.isArray(forwarded)
-    ? forwarded[0]
-    : forwarded || req.protocol || "http";
-  const proto = String(protoRaw).split(",")[0].trim() || "http";
-  return `${proto}://${host}`;
+/**
+ * Tazelik kontrolü, ısıtma isteğinin göreceği host ile aynı öneki arasın.
+ *
+ * @param {string} host
+ * @returns {{ headers: Record<string, string>, get: (name: string) => string | undefined } | undefined}
+ */
+function requestForHost(host) {
+  if (!host) return undefined;
+  return {
+    headers: { host, "x-forwarded-host": host },
+    get(name) {
+      return this.headers[name];
+    },
+  };
 }
 
 /** Klasik turu yöneten env'ler; `onVisit` ile birlikte yasak. */
@@ -349,12 +359,20 @@ function devGateHeader() {
  *   Tur ilerlemesini `prewarmProgress`'e yazar. Tekrar turunda sayaçların
  *   anlamı değiştiği için çağıran taraf kendi formülünü verir.
  * @param {() => Promise<void>} [pace] İstek başına beklenen hız freni.
+ * @param {string} [forwardedHost] `vary.host` için `x-forwarded-host`.
  * @returns {Promise<{ ok: number, failed: number,
  *   failures: { path: string, status: number }[] }>}
  *   `failures` durum koduyla birlikte döner: tekrar turuna yalnızca geçici
  *   hatalar alınıyor, kalıcı olanı yeniden denemek boşa çağrı.
  */
-async function crawl(origin, paths, concurrency, report = undefined, pace = undefined) {
+async function crawl(
+  origin,
+  paths,
+  concurrency,
+  report = undefined,
+  pace = undefined,
+  forwardedHost = "",
+) {
   const { brand } = getConfig();
   const cacheHeader = brand.cacheHeader.toLowerCase();
 
@@ -379,6 +397,7 @@ async function crawl(origin, paths, concurrency, report = undefined, pace = unde
             // Sıkıştırılmış gövde de cache'lensin.
             "accept-encoding": "br, gzip",
             "user-agent": brand.prewarmUserAgent,
+            ...(forwardedHost ? { "x-forwarded-host": forwardedHost } : {}),
             ...devGateHeader(),
           },
         });
@@ -489,12 +508,14 @@ function upstreamUsage(before) {
 }
 
 /**
- * @param {{ origin: string, quiet?: boolean, paths?: string[] }} options
+ * @param {{ origin: string, quiet?: boolean, paths?: string[],
+ *   forwardedHost?: string }} options
  *   `paths` verilirse hook çağrılmaz, yalnızca o yollar ısıtılır (dev
- *   panelindeki "tekrar dene" bunu kullanır).
+ *   panelindeki "tekrar dene" bunu kullanır). `forwardedHost` loopback
+ *   isteğine public host'u taşır; cache anahtarı `h=127.0.0.1` olmasın.
  * @returns {Promise<{ ok: number, failed: number, total: number, elapsed: number }>}
  */
-export async function prewarm({ origin, quiet = false, paths: only }) {
+export async function prewarm({ origin, quiet = false, paths: only, forwardedHost = "" }) {
   const started = Date.now();
   const limit = setting("PREWARM_MAX", "max", 400);
   const isDev = process.env.NODE_ENV === "development";
@@ -560,6 +581,7 @@ export async function prewarm({ origin, quiet = false, paths: only }) {
       concurrency,
       undefined,
       pace,
+      forwardedHost,
     ));
 
     // Hatalar çoğunlukla upstream rate limit'i (429): ilk tur yüzlerce sayfayı
@@ -584,6 +606,7 @@ export async function prewarm({ origin, quiet = false, paths: only }) {
           prewarmProgress.failed = firstFailed - retriedOk;
         },
         pace,
+        forwardedHost,
       );
       recovered = retry.ok;
       ok += retry.ok;
@@ -736,6 +759,12 @@ function normalizeWarmPath(href, basePath = "/") {
 
 /** @type {string | null} */
 let visitOrigin = null;
+/**
+ * onVisit turunun `x-forwarded-host` değeri. Boşsa vary kapalıdır ve
+ * loopback anahtarı doğrudur.
+ * @type {string}
+ */
+let visitForwardedHost = "";
 /** @type {string[]} */
 const visitPending = [];
 /** @type {Set<string>} */
@@ -774,8 +803,9 @@ export function noteVisitWarm(html, context) {
     /** @type {string | undefined} */ (context.req?.headers?.["user-agent"]);
   if (ua && ua === getConfig().brand.prewarmUserAgent) return;
 
-  // Vary açıksa bu ziyaretin Host'u üzerinden ısıt — loopback anahtarı değil.
-  visitOrigin = originFromRequest(context.req, visitOrigin);
+  // Public origin'e çıkmak yerine loopback'te kal, host'u başlıkla taşı.
+  visitForwardedHost = forwardedHostFrom(context.req);
+  const freshReq = requestForHost(visitForwardedHost);
 
   const perPage = Number(getConfig().prewarm?.onVisit?.perPage) || 20;
   const links = extractSameOriginLinks(html, {
@@ -785,14 +815,27 @@ export function noteVisitWarm(html, context) {
 
   for (const path of links) {
     if (path === context.path) continue;
-    if (isHtmlCacheFresh(path)) continue;
-    if (visitQueued.has(path)) continue;
-    visitQueued.add(path);
-    visitPending.push(path);
+    if (isHtmlCacheFresh(path, freshReq)) continue;
+    if (!enqueueWarmPath(path)) break;
   }
 
   enqueueInvalidatedForVisit();
   if (visitPending.length) void drainVisitWarm();
+}
+
+/**
+ * Kuyruk tavanı dolunca yeni yol alınmaz. Birikmiş yüzlerce link, rps
+ * freni olsa bile task'ı uzun süre meşgul eder.
+ *
+ * @param {string} path
+ * @returns {boolean} Kuyruğa girdi mi.
+ */
+function enqueueWarmPath(path) {
+  if (visitPending.length >= ON_VISIT_QUEUE_MAX) return false;
+  if (visitQueued.has(path)) return false;
+  visitQueued.add(path);
+  visitPending.push(path);
+  return true;
 }
 
 /**
@@ -802,10 +845,13 @@ export function noteVisitWarm(html, context) {
  * @returns {void}
  */
 function enqueueInvalidatedForVisit() {
-  for (const path of takeInvalidatedPaths()) {
-    if (visitQueued.has(path)) continue;
-    visitQueued.add(path);
-    visitPending.push(path);
+  // Başka locale'in anahtarını bu ziyaretçinin host'uyla ısıtma; süre
+  // dolumu onları kendi `x-forwarded-host` değeriyle alır.
+  for (const target of takeInvalidatedTargets(visitForwardedHost || undefined)) {
+    if (isHtmlCacheFresh(target.path, requestForHost(target.host || visitForwardedHost))) {
+      continue;
+    }
+    if (!enqueueWarmPath(target.path)) break;
   }
 }
 
@@ -822,17 +868,23 @@ async function drainVisitWarm() {
       const batch = visitPending.splice(0, 32);
       for (const path of batch) visitQueued.delete(path);
 
-      const cold = batch.filter((path) => !isHtmlCacheFresh(path));
+      const cold = batch.filter(
+        (path) => !isHtmlCacheFresh(path, requestForHost(visitForwardedHost)),
+      );
       if (!cold.length) continue;
 
       // Klasik `prewarm()` turunu yeniden kullan: retry, progress, UA aynı.
-      // onVisit.concurrency / rps verilmişse `visitWarmSettings` ile iner;
-      // yoksa `prewarm()` kendi (env → config → isDev) zincirine düşer.
+      // onVisit.concurrency / rps config tavanına çekilmiş hâlde iner.
       visitWarmSettings.concurrency = onVisit.concurrency;
       visitWarmSettings.rps = onVisit.rps;
 
       try {
-        await prewarm({ origin: visitOrigin, paths: cold, quiet: true });
+        await prewarm({
+          origin: visitOrigin,
+          paths: cold,
+          quiet: true,
+          forwardedHost: visitForwardedHost,
+        });
       } catch (error) {
         console.error("[prewarm] onVisit warm failed", error);
       } finally {
@@ -953,16 +1005,44 @@ function startExpiryWarmDrain(origins) {
 async function drainExpiryWarm() {
   if (expiryDraining || !expiryOrigins.length) return;
 
-  const paths = takeInvalidatedPaths();
-  if (!paths.length) return;
+  const targets = takeInvalidatedTargets();
+  if (!targets.length) return;
 
   expiryDraining = true;
   try {
-    const cold = paths.filter((path) => !isHtmlCacheFresh(path));
-    if (!cold.length) return;
+    /** @type {Map<string, string[]>} */
+    const byHost = new Map();
+    for (const target of targets) {
+      if (isHtmlCacheFresh(target.path, requestForHost(target.host))) continue;
+      const host = target.host || "";
+      const list = byHost.get(host);
+      if (list) list.push(target.path);
+      else byHost.set(host, [target.path]);
+    }
+    if (!byHost.size) return;
 
-    for (const origin of expiryOrigins) {
-      await prewarm({ origin, paths: cold, quiet: true });
+    // Vary kapalı: anahtarda host yok, her yapılandırılmış origin ısınır.
+    const bare = byHost.get("") ?? [];
+    if (bare.length && byHost.size === 1) {
+      for (const origin of expiryOrigins) {
+        await prewarm({ origin, paths: bare, quiet: true });
+      }
+      return;
+    }
+
+    // Host'lu anahtar loopback'e gider. `x-forwarded-host` cache anahtarını
+    // public host yapar; aksi hâlde `h=127.0.0.1|/yol` diye ikinci girdi
+    // açılır ve `maxEntries` slotunu yer.
+    const origin = expiryOrigins[0];
+    for (const [host, paths] of byHost) {
+      if (!paths.length) continue;
+      if (!host) {
+        for (const next of expiryOrigins) {
+          await prewarm({ origin: next, paths, quiet: true });
+        }
+        continue;
+      }
+      await prewarm({ origin, paths, quiet: true, forwardedHost: host });
     }
   } catch (error) {
     console.error("[prewarm] expiry warm failed", error);

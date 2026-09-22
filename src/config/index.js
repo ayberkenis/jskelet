@@ -37,10 +37,15 @@ import {
   DEFAULT_AUTH,
   DEFAULT_BRAND,
   DEFAULT_CLOUDFLARE,
+  DATA_CACHE_MAX_ENTRIES_CEILING,
   DEFAULT_DATA_CACHE,
   DEFAULT_DEV_GATE_BYPASS,
   DEFAULT_DIRS,
   DEFAULT_HTML_CACHE_MAX_ENTRIES,
+  HTML_CACHE_MAX_ENTRIES_CEILING,
+  ON_VISIT_CONCURRENCY_CEILING,
+  ON_VISIT_PER_PAGE_CEILING,
+  ON_VISIT_RPS_CEILING,
   DEFAULT_IMAGES,
   DEFAULT_LOGS,
   DEFAULT_NAVIGATION,
@@ -701,16 +706,24 @@ function normalizeCache(raw) {
   const prewarm = normalizePrewarm(raw?.prewarm);
   const queryRules = normalizeQueryRules(raw?.query);
   const maxEntries = Number(raw?.maxEntries);
+  let htmlMaxEntries =
+    Number.isFinite(maxEntries) && maxEntries > 0
+      ? Math.floor(maxEntries)
+      : DEFAULT_HTML_CACHE_MAX_ENTRIES;
+  if (htmlMaxEntries > HTML_CACHE_MAX_ENTRIES_CEILING) {
+    console.warn(
+      `[config] cache().maxEntries ${htmlMaxEntries} exceeds the ceiling of ` +
+        `${HTML_CACHE_MAX_ENTRIES_CEILING}; using ${HTML_CACHE_MAX_ENTRIES_CEILING}`,
+    );
+    htmlMaxEntries = HTML_CACHE_MAX_ENTRIES_CEILING;
+  }
 
   return {
     html,
     cacheQuery: queryRules,
     cacheVary: normalizeVary(raw?.vary),
-    htmlMaxEntries:
-      Number.isFinite(maxEntries) && maxEntries > 0
-        ? Math.floor(maxEntries)
-        : DEFAULT_HTML_CACHE_MAX_ENTRIES,
-    data: { ...DEFAULT_DATA_CACHE, ...(raw?.data ?? {}) },
+    htmlMaxEntries,
+    data: normalizeDataCache(raw?.data),
     // Otomatik upstream izleme kapatılabilir olmalı: `fetch`i kendisi saran
     // bir uygulama (ölçüm, retry, circuit breaker) çakışma yaşayabilir.
     trackUpstream: raw?.trackUpstream !== false,
@@ -733,13 +746,109 @@ function normalizeCache(raw) {
 }
 
 /**
+ * İstenen pozitif tamsayı tavanı aşıyorsa uyarı basıp tavana çeker.
+ *
+ * @param {string} field
+ * @param {number} requested
+ * @param {number} ceiling
+ * @returns {number}
+ */
+function clampCeiling(field, requested, ceiling) {
+  if (requested <= ceiling) return requested;
+  console.warn(
+    `[config] ${field} ${requested} exceeds the ceiling of ${ceiling}; using ${ceiling}`,
+  );
+  return ceiling;
+}
+
+/**
+ * Veri önbelleği JSON tutar; sınır HTML'den yüksek olabilir ama sonsuz değil.
+ *
+ * @param {unknown} raw
+ * @returns {{ maxEntries: number, staleFactor: number }}
+ */
+function normalizeDataCache(raw) {
+  const source =
+    raw && typeof raw === "object" && !Array.isArray(raw)
+      ? /** @type {Record<string, unknown>} */ (raw)
+      : {};
+  const requested = Number(source.maxEntries);
+  let maxEntries =
+    Number.isFinite(requested) && requested > 0
+      ? Math.floor(requested)
+      : DEFAULT_DATA_CACHE.maxEntries;
+  maxEntries = clampCeiling(
+    "cache().data.maxEntries",
+    maxEntries,
+    DATA_CACHE_MAX_ENTRIES_CEILING,
+  );
+
+  const stale = Number(source.staleFactor);
+  return {
+    maxEntries,
+    staleFactor:
+      Number.isFinite(stale) && stale >= 0 ? stale : DEFAULT_DATA_CACHE.staleFactor,
+  };
+}
+
+/**
+ * onVisit sürekli çalışır. Klasik turdaki `rps: 0` (sınırsız) burada her
+ * ziyaretçide yeniden crawl demek; boş, `0` ve tavanın üstü 2'ye çekilir.
+ *
+ * @param {Record<string, unknown>} source
+ * @returns {{ enabled: boolean } & typeof DEFAULT_PREWARM_ON_VISIT}
+ */
+function resolveOnVisitLimits(source) {
+  const perPageRaw = Number(source.perPage);
+  const perPage = clampCeiling(
+    "cache().prewarm.onVisit.perPage",
+    Number.isFinite(perPageRaw) && perPageRaw > 0
+      ? Math.floor(perPageRaw)
+      : DEFAULT_PREWARM_ON_VISIT.perPage,
+    ON_VISIT_PER_PAGE_CEILING,
+  );
+
+  const concurrencyRaw = Number(source.concurrency);
+  const concurrency = clampCeiling(
+    "cache().prewarm.onVisit.concurrency",
+    Number.isFinite(concurrencyRaw) && concurrencyRaw > 0
+      ? Math.floor(concurrencyRaw)
+      : ON_VISIT_CONCURRENCY_CEILING,
+    ON_VISIT_CONCURRENCY_CEILING,
+  );
+
+  const rpsRaw = Number(source.rps);
+  let rps = ON_VISIT_RPS_CEILING;
+  if (source.rps != null && source.rps !== "") {
+    if (!Number.isFinite(rpsRaw) || rpsRaw <= 0) {
+      console.warn(
+        `[config] cache().prewarm.onVisit.rps ${source.rps} is not a positive rate; ` +
+          `using ${ON_VISIT_RPS_CEILING}`,
+      );
+    } else {
+      rps = clampCeiling(
+        "cache().prewarm.onVisit.rps",
+        rpsRaw,
+        ON_VISIT_RPS_CEILING,
+      );
+    }
+  }
+
+  return {
+    ...DEFAULT_PREWARM_ON_VISIT,
+    enabled: source.enabled !== false,
+    perPage,
+    concurrency,
+    rps,
+  };
+}
+
+/**
  * @param {unknown} raw
  * @returns {{ enabled: boolean } & typeof DEFAULT_PREWARM_ON_VISIT}
  */
 function normalizeOnVisit(raw) {
-  if (raw === true) {
-    return { ...DEFAULT_PREWARM_ON_VISIT, enabled: true };
-  }
+  if (raw === true) return resolveOnVisitLimits({});
 
   if (raw == null || raw === false) {
     return { ...DEFAULT_PREWARM_ON_VISIT, enabled: false };
@@ -751,24 +860,7 @@ function normalizeOnVisit(raw) {
     );
   }
 
-  const source = /** @type {Record<string, unknown>} */ (raw);
-  const perPage = Number(source.perPage);
-  const concurrency = Number(source.concurrency);
-  const rps = Number(source.rps);
-
-  return {
-    ...DEFAULT_PREWARM_ON_VISIT,
-    enabled: source.enabled !== false,
-    perPage:
-      Number.isFinite(perPage) && perPage > 0
-        ? Math.floor(perPage)
-        : DEFAULT_PREWARM_ON_VISIT.perPage,
-    concurrency:
-      Number.isFinite(concurrency) && concurrency > 0
-        ? Math.floor(concurrency)
-        : null,
-    rps: Number.isFinite(rps) && rps >= 0 ? rps : null,
-  };
+  return resolveOnVisitLimits(/** @type {Record<string, unknown>} */ (raw));
 }
 
 /**

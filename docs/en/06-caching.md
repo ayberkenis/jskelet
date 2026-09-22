@@ -231,7 +231,12 @@ price is acceptable, because live fields such as prices are updated on the
 client over WebSocket.
 
 The store is an LRU: an accessed entry is moved to the end, and once the limit
-(`cache().maxEntries`, 500 by default) is exceeded the oldest is evicted.
+(`cache().maxEntries`, 500 by default) is exceeded the oldest is evicted. Config
+may ask for more than 500; it **cannot exceed 800** — a higher value is clamped
+to 800 with a warning. Separately, in-process HTML strings plus compressed
+bodies **cannot exceed 256 MB**. A fat page or a `vary.host` copy that is still
+under the count limit is evicted by this budget too. A single page larger than
+256 MB is not stored; that response is still sent.
 
 ## What gets written to the cache
 
@@ -1145,9 +1150,9 @@ export default {
       html: { "/": 60, "/news/:slug": 300 },
       prewarm: {
         onVisit: {
-          perPage: 20,      // at most this many links per page
-          concurrency: 2,   // optional
-          rps: 4,           // optional; 0 = unlimited
+          perPage: 20,      // at most this many links per page; ceiling 20
+          concurrency: 2,   // ceiling 2
+          rps: 2,           // ceiling 2; 0 is clamped to 2 as well
         },
       },
     };
@@ -1163,7 +1168,15 @@ Rules:
   degraded or `no-store` responses do not extract links.
 - The warmer's own UA (`brand.prewarmUserAgent`) does not trigger — no crawl
   loop.
-- Paths that are already fresh are not enqueued.
+- Paths that are already fresh are not enqueued. Real keys look like
+  `h=host|/path?`; the check sees the vary prefix and the trailing `?`.
+  With `vary.host`, only this request's host counts as fresh.
+- The pending queue holds at most 64 paths; links beyond that are left for a
+  later response.
+- `perPage` 20, `rps` 2 and `concurrency` 2 are ceilings. A higher value (and
+  `rps: 0`) is clamped with a warning. Warm requests stay on loopback; when
+  `vary.host` is on, the public host is sent as `x-forwarded-host`, so a second
+  `h=127.0.0.1` entry is not created.
 - `nofollow`, `target="_blank"`, `data-no-prefetch`, `prewarmSkip` and
   `navigation.exclude` share the same exemptions as Speculation Rules.
 - Query strings are not warmed (default cache policy treats query as dynamic).

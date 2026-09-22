@@ -8,6 +8,23 @@ one is listed under a **Breaking** heading.
 
 ## [Unreleased]
 
+### Breaking
+
+- Cache ceilings
+  `cache().maxEntries` above 800, `cache().data.maxEntries` above 20,000, and
+  `prewarm.onVisit` above `perPage` 20, `rps` 2, or `concurrency` 2 are clamped
+  at load with a warning. `onVisit` `rps: 0` is no longer unlimited. The HTML
+  cache also stops growing past 256 MB of stored HTML plus compressed bodies;
+  a single page larger than that is not stored.
+
+### Fixed
+
+- Visit warming skips pages that are already fresh when the cache key has a
+  vary prefix or a trailing `?`. With `vary.host`, warm requests stay on
+  loopback and send the public host as `x-forwarded-host`, so a second
+  `127.0.0.1` HTML entry is not created. The onVisit queue holds at most 64
+  paths.
+
 ### Removed
 
 - `examples/marketing` — the marketing site now lives as a standalone app

@@ -65,15 +65,18 @@ export declare function notePrewarmError(status: number, error: unknown): void;
  */
 export declare function selectPrewarmPaths(all: string[], limit: number, rotate?: boolean): string[];
 /**
- * @param {{ origin: string, quiet?: boolean, paths?: string[] }} options
+ * @param {{ origin: string, quiet?: boolean, paths?: string[],
+ *   forwardedHost?: string }} options
  *   `paths` verilirse hook çağrılmaz, yalnızca o yollar ısıtılır (dev
- *   panelindeki "tekrar dene" bunu kullanır).
+ *   panelindeki "tekrar dene" bunu kullanır). `forwardedHost` loopback
+ *   isteğine public host'u taşır; cache anahtarı `h=127.0.0.1` olmasın.
  * @returns {Promise<{ ok: number, failed: number, total: number, elapsed: number }>}
  */
-export declare function prewarm({ origin, quiet, paths: only }: {
+export declare function prewarm({ origin, quiet, paths: only, forwardedHost }: {
     origin: string;
     quiet?: boolean;
     paths?: string[];
+    forwardedHost?: string;
 }): Promise<{
     ok: number;
     failed: number;

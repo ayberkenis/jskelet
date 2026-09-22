@@ -772,6 +772,10 @@ raising this number burns through memory quickly; trying to solve a site with
 tens of thousands of paths from here is the wrong layer — the right place is
 `cache().data`.
 
+**Ceiling 800.** A higher value is clamped to 800 with a warning at load.
+In-process HTML plus compressed bodies also cannot exceed 256 MB; config
+cannot raise that budget.
+
 ### `cache().data`
 
 The upstream data cache (`withDataCache`). Details:
@@ -779,7 +783,7 @@ The upstream data cache (`withDataCache`). Details:
 
 | Field | Type | Default | Meaning |
 | --- | --- | --- | --- |
-| `maxEntries` | `number` | `10000` | The LRU entry limit. The limit is high because JSON is tens of times smaller than HTML. |
+| `maxEntries` | `number` | `10000` | The LRU entry limit. The limit is high because JSON is tens of times smaller than HTML. **Ceiling 20,000**; a higher value is clamped with a warning. |
 | `staleFactor` | `number` | `10` | For how many TTLs an entry stays usable after the TTL expired. `0` → no stale serving. |
 
 ### `cache().trackUpstream`
@@ -1024,13 +1028,13 @@ prewarm: {
 | Field | Type | Default | Meaning |
 | --- | --- | --- | --- |
 | `onVisit` | `true \| false \| object` | off | Visit-driven warming |
-| `onVisit.perPage` | `number` | `20` | At most how many links per page (top to bottom) |
-| `onVisit.concurrency` | `number` | same as classic | Parallel workers |
-| `onVisit.rps` | `number` | same as classic | Requests per second cap; `0` unlimited |
+| `onVisit.perPage` | `number` | `20` | At most how many links per page (top to bottom). **Ceiling 20** |
+| `onVisit.concurrency` | `number` | `2` | Parallel workers. **Ceiling 2** |
+| `onVisit.rps` | `number` | `2` | Requests per second cap. **Ceiling 2**; `0` is clamped to 2 as well |
 
 ```js
 prewarm: {
-  onVisit: { perPage: 20, rps: 4 },
+  onVisit: { perPage: 20, rps: 2 },
 }
 ```
 

@@ -94,25 +94,53 @@ export declare const DEFAULT_PREWARM_ON_VISIT: {
     /** Sayfa başına üstten alta en fazla kaç link kuyruğa alınır. */
     perPage: number;
     /**
-     * Paralel işçi; `null` → klasik prewarm ile aynı varsayılan
-     * (prod 4 / dev 1) `startPrewarm` içinde çözülür.
+     * Paralel işçi. `null` yalnızca kapalı modda durur; açıkken tavan
+     * (`ON_VISIT_CONCURRENCY_CEILING`) uygulanır. Klasik prewarm'daki
+     * prod 4 burada geçerli değil — onVisit sürekli çalışır.
      * @type {number | null}
      */
     concurrency: number | null;
     /**
-     * Saniyedeki istek tavanı; `null` → klasik ile aynı (prod 0 / dev 4).
+     * Saniyedeki istek tavanı. `null` yalnızca kapalı modda durur; açıkken
+     * `0` (sınırsız) dahil her şey `ON_VISIT_RPS_CEILING` ile kesilir.
      * @type {number | null}
      */
     rps: number | null;
 };
+/**
+ * onVisit sürekli tur olduğu için klasik prewarm'daki "sınırsız" burada yok.
+ * Config daha yükseğini yazsa da çözümlenen değer bu tavanları geçemez.
+ */
+export declare const ON_VISIT_PER_PAGE_CEILING = 20;
+export declare const ON_VISIT_RPS_CEILING = 2;
+export declare const ON_VISIT_CONCURRENCY_CEILING = 2;
+/**
+ * Bekleyen onVisit yolları. Bir sayfa düzinelerce link basınca kuyruk
+ * birikmesin; taşan link bu turda alınmaz.
+ */
+export declare const ON_VISIT_QUEUE_MAX = 64;
 /** `onVisit` açıkken `cache().prewarm` kökünde yasak olan klasik alanlar. */
 export declare const CLASSIC_PREWARM_KEYS: string[];
 /**
  * HTML önbelleğinin girdi sınırı. 500 girdi ortalama bir sayfa boyutunda
  * yaklaşık 100-200 MB tutar; uzun kuyruklu siteler bunu yükseltmek yerine
  * veri önbelleğine yaslanmalı (bkz. `DEFAULT_DATA_CACHE`).
+ *
+ * Config daha yükseğini istese de girdi sayısı `HTML_CACHE_MAX_ENTRIES_CEILING`
+ * değerini geçemez. Asıl bellek freni bayt bütçesidir: şişman sayfa ve
+ * `vary.host` kopyası sayı tavanının altında da RSS'i şişirir.
  */
 export declare const DEFAULT_HTML_CACHE_MAX_ENTRIES = 500;
+/** `cache().maxEntries` için sert tavan. Üstü uyarıyla bu değere çekilir. */
+export declare const HTML_CACHE_MAX_ENTRIES_CEILING = 800;
+/**
+ * Süreç içi HTML string + sıkıştırılmış gövde tavanı (256 MB).
+ * `install()` bunu uygular; config yükseltemez. Tek sayfa bütçeden büyükse
+ * saklanmaz, yanıt yine gider.
+ */
+export declare const HTML_CACHE_BYTE_BUDGET: number;
+/** `cache().data.maxEntries` için sert tavan. Uzun kuyruk burada durur, HTML'de değil. */
+export declare const DATA_CACHE_MAX_ENTRIES_CEILING = 20000;
 /**
  * `notFound()` geçici bir upstream hatasına denk geldiğinde sayfanın kaç kez
  * daha denenmesi gerektiği.

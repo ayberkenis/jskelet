@@ -757,13 +757,16 @@ HTML önbelleğinin girdi sınırı. Girdi başına yüz kilobayt düştüğü i
 yükseltmek belleği hızla tüketir; on binlerce yollu bir siteyi buradan çözmeye
 çalışmak yanlış katman, doğru yer `cache().data`.
 
+**Tavan 800.** Daha yükseği yüklemede uyarıyla 800'e çekilir. Süreç içi HTML +
+sıkıştırılmış gövde ayrıca 256 MB'yi geçemez; bu bütçe config'den yükseltilmez.
+
 ### `cache().data`
 
 Upstream veri önbelleği (`withDataCache`). Ayrıntı: [06-cache.md](./06-cache.md).
 
 | Alan | Tip | Varsayılan | Anlamı |
 | --- | --- | --- | --- |
-| `maxEntries` | `number` | `10000` | LRU girdi sınırı. JSON, HTML'e göre onlarca kat küçük olduğu için sınır yüksek. |
+| `maxEntries` | `number` | `10000` | LRU girdi sınırı. JSON, HTML'e göre onlarca kat küçük olduğu için sınır yüksek. **Tavan 20000**; üstü uyarıyla kesilir. |
 | `staleFactor` | `number` | `10` | TTL dolduktan sonra girdinin kaç TTL boyunca daha kullanılabileceği. `0` → bayat servis yok. |
 
 ### `cache().trackUpstream`
@@ -1003,13 +1006,13 @@ prewarm: {
 | Alan | Tip | Varsayılan | Anlamı |
 | --- | --- | --- | --- |
 | `onVisit` | `true \| false \| object` | kapalı | Ziyaret tabanlı ısıtma |
-| `onVisit.perPage` | `number` | `20` | Sayfa başına üstten alta en fazla link |
-| `onVisit.concurrency` | `number` | klasik ile aynı | Paralel işçi |
-| `onVisit.rps` | `number` | klasik ile aynı | Saniyedeki tavan; `0` sınırsız |
+| `onVisit.perPage` | `number` | `20` | Sayfa başına üstten alta en fazla link. **Tavan 20** |
+| `onVisit.concurrency` | `number` | `2` | Paralel işçi. **Tavan 2** |
+| `onVisit.rps` | `number` | `2` | Saniyedeki tavan. **Tavan 2**; `0` da 2'ye çekilir |
 
 ```js
 prewarm: {
-  onVisit: { perPage: 20, rps: 4 },
+  onVisit: { perPage: 20, rps: 2 },
 }
 ```
 

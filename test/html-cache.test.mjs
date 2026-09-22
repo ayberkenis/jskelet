@@ -3,14 +3,19 @@ import { afterEach, test } from "node:test";
 import {
   clearHtmlCache,
   earlyRefreshLeadMs,
+  getHtmlCacheEntries,
   getHtmlCacheSize,
   invalidateHtmlCache,
+  isHtmlCacheFresh,
+  noteHtmlCacheGrowth,
+  setHtmlCacheByteBudget,
   sweepEarlyExpiry,
   takeInvalidatedPaths,
   withHtmlCache,
 } from "../src/server/html-cache.js";
 
 afterEach(() => {
+  setHtmlCacheByteBudget(null);
   clearHtmlCache();
 });
 
@@ -284,4 +289,51 @@ test("sweepEarlyExpiry soft-stales early entries for the warm queue", async () =
   const hit = await withHtmlCache("/a?", ttl, producer);
   assert.equal(hit.cached, true);
   assert.equal(hit.stale, true, "soft-bayat: ziyaretçi MISS ödemez");
+});
+
+test("freshness matches a real cache key, including the trailing question mark", async () => {
+  await withHtmlCache("/plain?", 60, async () => ({ html: "y", status: 200 }));
+  await withHtmlCache("h=investvio.com|/instruments?", 60, async () => ({
+    html: "x",
+    status: 200,
+  }));
+
+  assert.equal(isHtmlCacheFresh("/plain"), true);
+  assert.equal(isHtmlCacheFresh("/instruments"), true);
+  assert.equal(isHtmlCacheFresh("/missing"), false);
+});
+
+test("a query variant does not count as the bare page being fresh", async () => {
+  await withHtmlCache("/list?page=2", 60, async () => ({ html: "q", status: 200 }));
+  assert.equal(isHtmlCacheFresh("/list"), false);
+});
+
+test("the byte budget evicts the oldest entry and skips an oversized page", async () => {
+  setHtmlCacheByteBudget(30);
+  const page = (html) => async () => ({ html, status: 200 });
+
+  await withHtmlCache("/a", 60, page("a".repeat(20)));
+  await withHtmlCache("/b", 60, page("b".repeat(20)));
+
+  assert.equal(getHtmlCacheSize(), 1);
+  assert.deepEqual(
+    getHtmlCacheEntries().map((entry) => entry.key),
+    ["/b"],
+  );
+
+  await withHtmlCache("/huge", 60, page("h".repeat(40)));
+  assert.equal(getHtmlCacheSize(), 1, "bütçeden büyük sayfa saklanmaz");
+  assert.equal(getHtmlCacheEntries()[0].key, "/b");
+});
+
+test("compressed bodies count toward the byte budget", async () => {
+  setHtmlCacheByteBudget(30);
+  const result = await withHtmlCache("/a", 60, async () => ({
+    html: "a".repeat(20),
+    status: 200,
+  }));
+
+  result.encoded.set("br", Buffer.alloc(20));
+  noteHtmlCacheGrowth();
+  assert.equal(getHtmlCacheSize(), 0);
 });

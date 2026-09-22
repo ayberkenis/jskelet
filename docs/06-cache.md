@@ -223,7 +223,11 @@ kabul edilebilir, çünkü fiyat gibi canlı alanlar istemcide WebSocket'ten
 güncelleniyor.
 
 Store LRU'dur: erişilen girdi sona taşınır, sınır (`cache().maxEntries`,
-varsayılan 500) aşılınca en eski düşürülür.
+varsayılan 500) aşılınca en eski düşürülür. Config 500'ün üstünü isteyebilir;
+**800'ü geçemez** — daha yükseği uyarıyla 800'e çekilir. Bunun yanında süreç
+içi HTML string + sıkıştırılmış gövde **256 MB**'yi geçemez. Sayı tavanının
+altında kalan şişman sayfa veya `vary.host` kopyası da bu bütçede LRU ile
+düşer. Tek sayfa 256 MB'den büyükse saklanmaz; yanıt o istekte yine gider.
 
 ## Ne önbelleğe yazılır
 
@@ -1145,9 +1149,9 @@ export default {
       html: { "/": 60, "/haber/:slug": 300 },
       prewarm: {
         onVisit: {
-          perPage: 20,      // sayfa başına en fazla link
-          concurrency: 2,   // opsiyonel
-          rps: 4,           // opsiyonel; 0 = sınırsız
+          perPage: 20,      // sayfa başına en fazla link; tavan 20
+          concurrency: 2,   // tavan 2
+          rps: 2,           // tavan 2; 0 da 2'ye çekilir
         },
       },
     };
@@ -1163,7 +1167,14 @@ Kurallar:
   `private`, degraded veya `no-store` yanıtlar link çıkarmaz.
 - Isıtma isteğinin kendi UA'sı (`brand.prewarmUserAgent`) tetiklemez — sonsuz
   crawl olmaz.
-- Zaten taze olan yollar kuyruğa girmez.
+- Zaten taze olan yollar kuyruğa girmez. Anahtar `h=host|/yol?` biçimindedir;
+  kontrol vary önekini ve sondaki `?` işaretini de görür. `vary.host` açıkken
+  yalnızca bu isteğin host'u sıcak sayılır.
+- Bekleyen kuyruk en fazla 64 yoldur; taşan link bu turda alınmaz.
+- `perPage` 20, `rps` 2, `concurrency` 2 tavanıdır. Daha yükseği (ve `rps: 0`)
+  uyarıyla tavana çekilir. Isıtma isteği loopback'e gider; `vary.host` açıkken
+  public host `x-forwarded-host` ile taşınır, `h=127.0.0.1` diye ikinci girdi
+  açılmaz.
 - `nofollow`, `target="_blank"`, `data-no-prefetch`, `prewarmSkip` ve
   `navigation.exclude` Speculation Rules ile aynı muafiyetleri paylaşır.
 - Query string ısıtılmaz (varsayılan cache politikası query'yi dinamik sayar).

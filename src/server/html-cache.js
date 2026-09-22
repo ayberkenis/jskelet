@@ -31,10 +31,13 @@
  */
 
 import { getConfig } from "../config/index.js";
-import { DEFAULT_HTML_CACHE_MAX_ENTRIES } from "../config/defaults.js";
+import {
+  DEFAULT_HTML_CACHE_MAX_ENTRIES,
+  HTML_CACHE_BYTE_BUDGET,
+} from "../config/defaults.js";
 import { collectDependencies } from "./cache-deps.js";
 import { compilePattern, matchPattern } from "../config/pattern.js";
-import { pathOfCacheKey } from "./cache-vary.js";
+import { pathOfCacheKey, publicHost } from "./cache-vary.js";
 import {
   cacheKey,
   onCacheEvent,
@@ -117,6 +120,19 @@ const EARLY_SWEEP_INTERVAL_MS = 1000;
 
 /** @type {Map<string, HtmlEntry>} */
 const store = new Map();
+
+/**
+ * `store` içindeki HTML string + sıkıştırılmış gövdelerin toplamı.
+ * Her `drop` / `install` bunu günceller; sıkıştırma sonradan eklendiğinde
+ * `noteHtmlCacheGrowth` artışı yazar. Tam tarama yapmamak için tutulur.
+ */
+let storedBytes = 0;
+
+/**
+ * Testler tahliyeyi küçük bir bütçeyle doğrular. `null` → üretim tavanı.
+ * @type {number | null}
+ */
+let byteBudgetOverride = null;
 
 /** @type {Map<string, Promise<{ html: string, status: number }>>} */
 const inflight = new Map();
@@ -237,8 +253,45 @@ function unlink(key, entry) {
 }
 
 /**
- * Store'dan silmenin **tek** yolu. Ters indeks bakımı buraya bağlı olduğu için
- * hiçbir yerde doğrudan `store.delete()` çağrılmaz.
+ * Ham HTML + sıkıştırılmış gövdeler. Bayt bütçesi girdi sayısından bağımsız
+ * bu ağırlığa bakar.
+ *
+ * @param {HtmlEntry} entry
+ * @returns {number}
+ */
+function entryBytes(entry) {
+  let bytes = Buffer.byteLength(entry.html);
+  for (const buffer of entry.encoded.values()) bytes += buffer.length;
+  return bytes;
+}
+
+/**
+ * @returns {number}
+ */
+function activeByteBudget() {
+  return byteBudgetOverride ?? HTML_CACHE_BYTE_BUDGET;
+}
+
+/**
+ * Sayı tavanı veya bayt bütçesi aşılınca en eski girdiden düşer. Tek başına
+ * bütçeyi aşan girdi de gider: yanıt o istekte zaten üretilmiştir, L1'de
+ * durması süreci şişirir.
+ */
+function evictOverflow() {
+  const limit = maxEntries();
+  const budget = activeByteBudget();
+
+  while (store.size > 0 && (store.size > limit || storedBytes > budget)) {
+    const oldest = store.keys().next().value;
+    if (oldest === undefined) break;
+    if (!drop(oldest)) break;
+  }
+}
+
+/**
+ * Store'dan silmenin **tek** yolu. Ters indeks ve bayt sayacı buraya bağlı;
+ * hiçbir yerde doğrudan `store.delete()` çağrılmaz. `read()` içindeki
+ * sil-yaz yalnızca LRU sırası içindir, sayacı değiştirmez.
  *
  * @param {string} key
  * @returns {boolean} Girdi var mıydı.
@@ -248,6 +301,7 @@ function drop(key) {
   if (!entry) return false;
 
   unlink(key, entry);
+  storedBytes = Math.max(0, storedBytes - entryBytes(entry));
   store.delete(key);
   return true;
 }
@@ -406,8 +460,9 @@ function write(key, value, ttlSeconds, deps = null, produceMs = DEFAULT_PRODUCE_
     produceMs: normalizeProduceMs(produceMs),
   };
 
-  install(key, entry);
-  share(key, entry);
+  // Bütçeye sığmayan sayfa Redis'e de yazılmaz: bir sonraki istek onu
+  // geri alıp yine reddeder, stringify ise o anki RSS'i şişirir.
+  if (install(key, entry)) share(key, entry);
 }
 
 /**
@@ -416,13 +471,20 @@ function write(key, value, ttlSeconds, deps = null, produceMs = DEFAULT_PRODUCE_
  *
  * @param {string} key
  * @param {HtmlEntry} entry
+ * @returns {boolean} Girdi L1'e girdi mi.
  */
 function install(key, entry) {
   // Aynı anahtarın eski girdisi ters indekste kalmasın: bağımlılıklar
   // tazelemeden tazelemeye değişebilir.
   drop(key);
 
+  const weight = entryBytes(entry);
+  // Tek sayfa bütçeden büyükse saklama. Eski kopya da düştü; bu yanıt
+  // üreticinin döndürdüğü HTML ile gider, L1'e girmez.
+  if (weight > activeByteBudget()) return false;
+
   store.set(key, entry);
+  storedBytes += weight;
 
   for (const dep of entry.deps) {
     let set = dependents.get(dep);
@@ -430,12 +492,35 @@ function install(key, entry) {
     set.add(key);
   }
 
-  const limit = maxEntries();
-  while (store.size > limit) {
-    const oldest = store.keys().next().value;
-    if (oldest === undefined) break;
-    drop(oldest);
-  }
+  evictOverflow();
+  return store.has(key);
+}
+
+/**
+ * Sıkıştırılmış gövde `install()`'dan sonra, ilk brotli/gzip yanıtında
+ * girdinin `encoded` haritasına eklenir. Sayacı delta ile büyütmek, o sıra
+ * LRU'dan düşmüş bir haritaya yazınca bir daha inmeyen bir artık bırakır;
+ * store'dan yeniden okumak o artığı taşımaz.
+ *
+ * @returns {void}
+ */
+export function noteHtmlCacheGrowth() {
+  let bytes = 0;
+  for (const entry of store.values()) bytes += entryBytes(entry);
+  storedBytes = bytes;
+  evictOverflow();
+}
+
+/**
+ * Bellek freninin bayt tavanını geçici olarak değiştirir. Testler LRU
+ * tahliyesini küçük bir değerle doğrular; `null` üretim tavanına döner.
+ *
+ * @param {number | null} bytes
+ * @returns {void}
+ */
+export function setHtmlCacheByteBudget(bytes) {
+  byteBudgetOverride = bytes == null ? null : bytes;
+  evictOverflow();
 }
 
 /**
@@ -589,6 +674,7 @@ export function clearHtmlCache() {
  */
 function clearLocal() {
   store.clear();
+  storedBytes = 0;
   dependents.clear();
   tokens.clear();
   invalidated.clear();
@@ -877,27 +963,65 @@ function dropLocalKey(key) {
 }
 
 /**
- * Invalidate edilmiş ve henüz kimsenin istemediği yolları döner ve kuyruğu
- * boşaltır. Isıtma turu bunları başa alır; iki tur aynı yolu tekrar
- * ısıtmasın diye okuma yıkıcıdır.
+ * Vary önekinden `h=` parçasını okur. Önek yoksa boş string.
  *
- * Vary öneki (`h=…|`) düşülür — HTTP ısıtması yalnızca yolu ister; host
- * ayrımı `prewarm.origins` / istek Host'u ile yapılır.
+ * @param {string} key
+ * @returns {string}
+ */
+function hostOfCacheKey(key) {
+  const sep = key.indexOf("|/");
+  if (sep === -1) return "";
+  const prefix = key.slice(0, sep);
+  for (const part of prefix.split("&")) {
+    if (part.startsWith("h=")) return part.slice(2);
+  }
+  return "";
+}
+
+/**
+ * @param {string} key
+ * @returns {string}
+ */
+function pathWithQuery(key) {
+  const pathname = pathOfCacheKey(key);
+  const q = key.indexOf("?");
+  if (q === -1) return pathname;
+  const query = key.slice(q + 1);
+  return query ? `${pathname}?${query}` : pathname;
+}
+
+/**
+ * Invalidate edilmiş yollar. Okuma yıkıcıdır; iki tur aynı yolu tekrar
+ * ısıtmasın. `onlyHost` verilirse başka host'ların anahtarları kuyrukta
+ * kalır — süre dolumu onları kendi host'uyla ısıtır, `127.0.0.1` anahtarı
+ * açılmaz.
+ *
+ * @param {string} [onlyHost]
+ * @returns {{ path: string, host: string }[]}
+ */
+export function takeInvalidatedTargets(onlyHost) {
+  if (!invalidated.size) return [];
+
+  /** @type {{ path: string, host: string }[]} */
+  const taken = [];
+
+  for (const key of [...invalidated]) {
+    const host = hostOfCacheKey(key);
+    if (onlyHost && host && host !== onlyHost) continue;
+    invalidated.delete(key);
+    taken.push({ path: pathWithQuery(key), host });
+  }
+
+  return taken;
+}
+
+/**
+ * Yol listesi. Vary öneki düşülür; host ayrımı `takeInvalidatedTargets`.
  *
  * @returns {string[]}
  */
 export function takeInvalidatedPaths() {
-  if (!invalidated.size) return [];
-
-  const paths = [...invalidated];
-  invalidated.clear();
-  return paths.map((key) => {
-    const pathname = pathOfCacheKey(key);
-    const q = key.indexOf("?");
-    if (q === -1) return pathname;
-    const query = key.slice(q + 1);
-    return query ? `${pathname}?${query}` : pathname;
-  });
+  return takeInvalidatedTargets().map((target) => target.path);
 }
 
 /**
@@ -926,14 +1050,36 @@ export function getHtmlCacheEntries() {
  * Yol (query'siz) için taze bir HTML girdisi var mı? Ziyaret ısıtması yalnızca
  * soğuk / bayat hedefleri kuyruğa alır; HIT'leri yeniden çekmez.
  *
+ * Gerçek anahtar `h=host|/yol?` biçimindedir: düz `store.get(pathname)` hem
+ * vary önekini hem sondaki `?` işaretini kaçırır ve sıcak sayfayı yeniden
+ * ısıtır. `vary.host` açıkken yalnızca bu isteğin host'u sayılır; diğer
+ * locale'in kopyası bu yolu sıcak yapmaz.
+ *
  * @param {string} pathname
+ * @param {{ headers?: Record<string, unknown>, get?: (name: string) => string | undefined }} [req]
  * @returns {boolean}
  */
-export function isHtmlCacheFresh(pathname) {
+export function isHtmlCacheFresh(pathname, req) {
   if (typeof pathname !== "string" || !pathname.startsWith("/")) return false;
-  const entry = store.get(pathname);
-  if (!entry) return false;
-  return Date.now() < entry.expiresAt;
+
+  let host = "";
+  try {
+    if (getConfig().cacheVary?.host && req) host = publicHost(req);
+  } catch {
+    // Config yokken (testler) önek aranmaz; yol eşleşmesi yeter.
+  }
+
+  const now = Date.now();
+  for (const [key, entry] of store) {
+    if (now >= entry.expiresAt) continue;
+    if (pathOfCacheKey(key) !== pathname) continue;
+    const q = key.indexOf("?");
+    if (q !== -1 && key.slice(q + 1)) continue;
+    if (host && hostOfCacheKey(key) !== host) continue;
+    return true;
+  }
+
+  return false;
 }
 
 /**

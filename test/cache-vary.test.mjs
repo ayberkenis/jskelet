@@ -13,6 +13,7 @@ import {
   getHtmlCacheEntries,
   getHtmlCacheSize,
   invalidateHtmlCache,
+  isHtmlCacheFresh,
 } from "../src/server/html-cache.js";
 import { pathOfCacheKey, publicHost } from "../src/server/cache-vary.js";
 import { route } from "../src/server/render.js";
@@ -186,5 +187,18 @@ test("vary.fn contributes a custom segment", async () => {
   assert.ok(
     keys.some((key) => key.startsWith("h=tr.example.com&l=tr|/hello")),
     `expected fn segment in ${keys.join(", ")}`,
+  );
+});
+
+test("isHtmlCacheFresh follows the request host, not a bare path", async () => {
+  await run(handler, createRequest("/hello", { host: "tr.example.com" }));
+
+  assert.equal(
+    isHtmlCacheFresh("/hello", createRequest("/hello", { host: "tr.example.com" })),
+    true,
+  );
+  assert.equal(
+    isHtmlCacheFresh("/hello", createRequest("/hello", { host: "en.example.com" })),
+    false,
   );
 });

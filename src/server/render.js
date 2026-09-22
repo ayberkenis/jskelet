@@ -17,7 +17,7 @@ import path from "node:path";
 import process from "node:process";
 import fs from "node:fs";
 import { pathToFileURL } from "node:url";
-import { withHtmlCache } from "./html-cache.js";
+import { noteHtmlCacheGrowth, withHtmlCache } from "./html-cache.js";
 import { buildVaryPrefix } from "./cache-vary.js";
 import { getConfig, hook, FRAMEWORK_ROOT } from "../config/index.js";
 import { matchPattern } from "../config/pattern.js";
@@ -700,6 +700,8 @@ async function sendHtml(req, res, body, encoded, options = {}) {
   if (!buffer) {
     buffer = await encodeText(body, encoding);
     encoded.set(encoding, buffer);
+    // Gövde L1 girdisine sonradan eklenir; bayt bütçesi ham HTML'i aşmasın.
+    noteHtmlCacheGrowth();
   }
 
   res.setHeader("Content-Encoding", encoding);
