@@ -158,7 +158,9 @@ stored), but the flag is the right place. Details in
 ## `fragment()` — a partial without the layout
 
 For endpoints that refresh a region. No layout is printed, the response is sent
-with `private, no-store` and no ETag, and it never touches the HTML cache.
+with `private, no-store` and no ETag, and it never touches the HTML cache. The
+`/_fragment/` prefix is appended to `robots.txt`, so partial endpoints are not
+indexed ([04](./04-rendering.md#robotstxt)).
 
 ```js
 app.get(

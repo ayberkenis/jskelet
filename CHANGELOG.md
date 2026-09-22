@@ -8,8 +8,20 @@ one is listed under a **Breaking** heading.
 
 ## [Unreleased]
 
+### Added
+
+- `robots.txt` responses gain a trailing JSkelet note that disallows framework
+  endpoints (`/_jskelet/`, `/__jskelet/`, `/_fragment/`, plus a custom admin,
+  image, handoff, or dev path when it sits outside those prefixes). Every
+  user-agent already named in the file is repeated in that block, so a
+  crawler-specific group still sees the rules.
+
 ### Breaking
 
+- Dev gate is opt-in
+  `DEV_TOKEN` in the environment no longer locks the site. Require the token
+  only with `devGate: true` or `DEV_GATE=1`. `DEV_GATE=0` turns the gate off
+  even when config enabled it.
 - Cache ceilings
   `cache().maxEntries` above 800, `cache().data.maxEntries` above 20,000, and
   `prewarm.onVisit` above `perPage` 20, `rps` 2, or `concurrency` 2 are clamped

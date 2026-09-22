@@ -36,9 +36,10 @@ JSkelet bu gözlemi mimarinin merkezine alır:
  ├─ rewrites(beforeFiles)          config → proxy ya da req.url değişimi
  ├─ compression                    brotli/gzip pazarlığı (kalite 5)
  ├─ headers                        statik cache + config headers()
- ├─ devGate                        DEV_TOKEN varsa token yoksa 404
+ ├─ devGate                        gate açıksa ve token yoksa 404
  ├─ redirects                      config redirects(), ilk eşleşen kazanır
  ├─ trailingSlash                  config trailingSlash: true ise 308
+ ├─ robots.txt                     kullanıcının gövdesine framework Disallow'u ekler
  ├─ staticPrecompressed            build'de üretilmiş .br/.gz kopyalar (kalite 11)
  ├─ express.static                 public/ altındaki dosyalar
  ├─ (dev) devtools                 yalnızca NODE_ENV=development
@@ -71,6 +72,10 @@ sebebi var ve yer değiştirmek sessiz bozulmalara yol açıyor.
   bile dışarıya sızdırmamalı. `trailingSlash` config redirects'ten sonra durur,
   böylece açık kurallar istenen yolu önce görür; kanonik slash biçimi ikinci
   adımda dayatılır.
+- **`robots.txt`, statikten önce ve sıkıştırmanın içinde.** Uygulamanın
+  yazdığı gövde değişmez; framework kendi uçlarının `Disallow` kurallarını
+  sona ekler. Sıkıştırılmış bir kopyanın (`Content-Encoding`) üzerine
+  yazılmaz — ek düz metne konur, sıkıştırma dışarıda kalır.
 - **`staticPrecompressed`, `express.static`ten önce.** Build'de üretilmiş
   `.br`/`.gz` kopyalar varsa onlar servis edilir (brotli kalite 11); yoksa
   istek altındaki `static`e düşer ve middleware anında sıkıştırır (kalite 5).

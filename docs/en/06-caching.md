@@ -1321,8 +1321,9 @@ The requests go out with the headers `user-agent: jskelet-prewarm`
 (`brand.prewarmUserAgent`) and `accept-encoding: br, gzip`; the second one so
 that the compressed body enters the cache too.
 
-If `DEV_TOKEN` is set, the warm-up carries the token as a cookie; otherwise the
-dev gate returns 404 for all pages and the cache never fills.
+If the dev gate is on, the warm-up carries the token as a cookie; otherwise the
+gate returns 404 for all pages and the cache never fills. `DEV_TOKEN` alone
+does not turn the gate on.
 
 The request list in the dev panel and the terminal filter out requests carrying
 `prewarmUserAgent`: so that hundreds of warm-up requests do not flood the view.

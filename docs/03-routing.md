@@ -156,7 +156,9 @@ okuduğunda render önbelleğe yazılmaz), ama doğru yer bayrak. Ayrıntılar
 ## `fragment()` — layout'suz parça
 
 Bir bölgeyi tazeleyen uçlar için. Layout basılmaz, yanıt `private, no-store` ve
-ETag'siz gider, HTML önbelleğine hiç uğramaz.
+ETag'siz gider, HTML önbelleğine hiç uğramaz. `/_fragment/` öneki
+`robots.txt`'in altına eklenir; parça uçları dizine girmez
+([04](./04-render-ve-sablonlar.md#robotstxt)).
 
 ```js
 app.get(

@@ -36,9 +36,10 @@ Request
  ├─ rewrites(beforeFiles)          config → proxy or a change to req.url
  ├─ compression                    brotli/gzip negotiation (quality 5)
  ├─ headers                        static cache + config headers()
- ├─ devGate                        if DEV_TOKEN is set, 404 without a token
+ ├─ devGate                        if the gate is on, 404 without a token
  ├─ redirects                      config redirects(), first match wins
  ├─ trailingSlash                  308 when config trailingSlash is true
+ ├─ robots.txt                     appends framework Disallow rules to the user's body
  ├─ staticPrecompressed            .br/.gz copies produced at build (quality 11)
  ├─ express.static                 files under public/
  ├─ (dev) devtools                 only when NODE_ENV=development
@@ -71,6 +72,11 @@ position has a reason, and moving things around leads to silent breakage.
   leak even its redirect rules to the outside. `trailingSlash` sits after config
   redirects so explicit rules see the requested path first; the canonical slash
   form is enforced as a second step.
+- **`robots.txt` before static, and inside compression.** The body the
+  application wrote is left intact; the framework appends `Disallow` rules
+  for its own endpoints. A response that already has `Content-Encoding` is
+  not rewritten — the block is added to plain text, and compression stays
+  outside.
 - **`staticPrecompressed` before `express.static`.** If there are `.br`/`.gz`
   copies produced at build time, those are served (brotli quality 11);
   otherwise the request falls through to the `static` below it and the

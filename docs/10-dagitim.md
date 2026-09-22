@@ -50,7 +50,7 @@ ayarlamayı düşünmeniz gerekenler:
 | `HOST` | `0.0.0.0` | Yalnızca IPv4 dinlemek gerekiyorsa. Varsayılan `::` zaten çift yığın dinler |
 | `PREWARM_MAX` | Site boyutuna göre | Açılışta ısıtılacak sayfa sayısı |
 | `PREWARM_INTERVAL_SECONDS` | `0` ya da uzun bir değer | Hiç ziyaret edilmeyen sayfaları sıcak tutmak isterseniz |
-| `DEV_TOKEN` | Yalnızca staging'de | Yayına açılmamış ortamı gizler |
+| `DEV_GATE` + `DEV_TOKEN` | Yalnızca staging'de | Yayına açılmamış ortamı gizler. Token tek başına siteyi kilitlemez |
 | `JSKELET_S3_*` | Access log'u S3'e yazıyorsanız | Bucket + credential; ayrıntı [07](./07-yapilandirma.md) |
 
 Production'da dosya veya S3 sink açıldığında HTTP access log middleware
@@ -169,8 +169,8 @@ yukarıdaki çok aşamalı imaj yeterli.
 
 Framework hazır bir sağlık kontrolü ucu **eklemez**; kendi route'unuza koymanız
 gerekir. Varsayılan `devGateBypass` listesi `/api/healthcheck` yolunu içerdiği
-için bu adı kullanmak en az sürprizli seçenektir: `DEV_TOKEN` ayarlı bir ortamda
-bile erişilebilir kalır.
+için bu adı kullanmak en az sürprizli seçenektir: dev gate açıkken bile
+erişilebilir kalır.
 
 ```js
 // routes/00-health.mjs
@@ -327,7 +327,7 @@ istek başına iş neredeyse sıfıra iner.
 - [ ] `hooks.prewarmPaths()` en önemli sayfaları başa koyuyor
 - [ ] `headers()` içinde CSP ve güvenlik başlıkları tanımlı
 - [ ] Sağlık kontrolü ucu var ve `devGateBypass` listesinde
-- [ ] Staging'de `DEV_TOKEN` ayarlı, prod'da **ayarlı değil**
+- [ ] Staging'de `DEV_GATE=1` ve `DEV_TOKEN` ayarlı, prod'da gate **kapalı**
 - [ ] Ters proxy `Accept-Encoding`i iletiyor ve kendi sıkıştırmasını yapmıyor
 - [ ] `clientEnv` listesinde gizli anahtar yok
 

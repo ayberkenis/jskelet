@@ -298,6 +298,21 @@ static: {
 }
 ```
 
+## `devGate`
+
+**Type:** `boolean` — **Default:** `false`
+
+Hides an environment that is not public yet. **`DEV_TOKEN` alone does not lock
+the site.** A shared task definition can carry the same variable into
+production; visitors are not required to present a token, and the site stays
+open.
+
+Turn the gate on with `devGate: true` or `DEV_GATE=1`. Then a request without
+the token gets a 404. `DEV_GATE=0` also turns off a gate the config enabled.
+If the token is empty, requests still pass even when the gate is on.
+
+Details: [09-dev-tools.md](./09-dev-tools.md).
+
 ## `devGateBypass`
 
 **Type:** `string[]` — **Default:**
@@ -305,8 +320,7 @@ static: {
 
 **Exact** paths the dev gate never closes off under any circumstances (not a
 prefix, an exact match). This is so that the health check and the robots files
-stay reachable in an environment where `DEV_TOKEN` is set. If provided, it
-replaces the default.
+stay reachable while the gate is on. If provided, it replaces the default.
 
 Details: [09-dev-tools.md](./09-dev-tools.md).
 
@@ -1134,7 +1148,8 @@ and no warning is printed.
 | `PORT` | `startServer` | `3000` | Port to listen on. If busy, the process refuses to start; `jskelet start|dev --murder` kills the listener |
 | `HOST` | `startServer` | `::` | Interface to bind to. The default listens dual-stack (IPv6 + IPv4); it falls back to `0.0.0.0` where IPv6 is unavailable |
 | `JSKELET_SECRET` | `jskelet/cookies` | — | The signed cookie secret. Read when `security.cookieSecret` is not set; if neither exists, the signed cookie API throws. [12](./12-dashboards-and-sessions.md) |
-| `DEV_TOKEN` | `devGate`, `prewarm` | — | If set, every request without a token gets a 404. Prewarming carries the token as a cookie. [09](./09-dev-tools.md) |
+| `DEV_GATE` | `devGate` | off | `1` turns the gate on, `0` turns it off even when config enabled it. `DEV_TOKEN` alone does not turn it on. [09](./09-dev-tools.md) |
+| `DEV_TOKEN` | `devGate`, `prewarm` | — | The secret expected while the gate is on. If it is missing, or the gate is off, the site stays public. Prewarming carries the token as a cookie only while the gate is on. [09](./09-dev-tools.md) |
 | `JSKELET_ADMIN` | `createApp` | — | When set, turns the admin panel on; `0` turns off a panel enabled in the config. The env wins because the panel is usually opened once during an incident. [06](./06-caching.md) |
 | `JSKELET_LOG_BUCKET` | `logs.s3` | — | Log target: bucket or `bucket/prefix` path. With credentials, the sink turns on automatically |
 | `JSKELET_S3_BUCKET` | `logs.s3` | — | Bucket when `JSKELET_LOG_BUCKET` is unset; joins with `JSKELET_S3_KEY_PREFIX` |

@@ -178,6 +178,11 @@ export type ResolvedConfig = {
         extensions: Set<string>;
         prefixes: string[];
     };
+    /**
+     * `DEV_TOKEN` tek başına siteyi kilitlemez; gate
+     * ancak bu bayrak veya `DEV_GATE=1` ile açılır.
+     */
+    devGate: boolean;
     devGateBypass: string[];
     preconnect: string[];
     navigation: NavigationConfig;

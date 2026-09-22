@@ -51,7 +51,7 @@ considering in production:
 | `HOST` | `0.0.0.0` | Only if you need to listen on IPv4 alone; the `::` default already listens dual-stack |
 | `PREWARM_MAX` | Depends on site size | Number of pages warmed at startup |
 | `PREWARM_INTERVAL_SECONDS` | `0` or a long value | If you want to keep never-visited pages warm |
-| `DEV_TOKEN` | Staging only | Hides an environment that is not public yet |
+| `DEV_GATE` + `DEV_TOKEN` | Staging only | Hides an environment that is not public yet. The token alone does not lock the site |
 | `JSKELET_S3_*` | If you write access logs to S3 | Bucket + credentials; details in [07](./07-configuration.md) |
 
 When a file or S3 sink is enabled in production, the HTTP access log middleware
@@ -171,7 +171,7 @@ constraint does not apply; the multi-stage image above is enough.
 The framework does **not** add a ready-made health check endpoint; you have to
 put it in your own route. Since the default `devGateBypass` list contains
 `/api/healthcheck`, using that name is the least surprising option: it stays
-reachable even in an environment with `DEV_TOKEN` set.
+reachable even while the dev gate is on.
 
 ```js
 // routes/00-health.mjs
@@ -328,7 +328,7 @@ goes up, the work per request drops to almost zero.
 - [ ] `hooks.prewarmPaths()` puts the most important pages first
 - [ ] CSP and security headers are defined in `headers()`
 - [ ] A health check endpoint exists and is in the `devGateBypass` list
-- [ ] `DEV_TOKEN` is set on staging and **not set** in production
+- [ ] Staging has `DEV_GATE=1` and `DEV_TOKEN`; production leaves the gate **off**
 - [ ] The reverse proxy forwards `Accept-Encoding` and does not do its own
       compression
 - [ ] There are no secret keys in the `clientEnv` list

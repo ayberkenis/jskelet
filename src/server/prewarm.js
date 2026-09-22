@@ -337,13 +337,19 @@ function createPacer(rps) {
 }
 
 /**
- * `DEV_TOKEN` ayarlıyken `devGate` token taşımayan her isteğe 404 döner.
- * Isıtma kendi sunucusuna istek attığı için token'ı çerez olarak taşımalı;
- * yoksa tüm sayfalar 404 alır ve önbellek hiç dolmaz.
+ * Gate açıkken token taşımayan her isteğe 404 döner. Isıtma kendi sunucusuna
+ * istek attığı için token'ı çerez olarak taşımalı; yoksa tüm sayfalar 404
+ * alır ve önbellek hiç dolmaz. Gate kapalıyken çerez gönderilmez.
  *
  * @returns {Record<string, string>}
  */
 function devGateHeader() {
+  try {
+    if (!getConfig().devGate) return {};
+  } catch {
+    return {};
+  }
+
   const token = process.env.DEV_TOKEN;
   if (!token) return {};
 

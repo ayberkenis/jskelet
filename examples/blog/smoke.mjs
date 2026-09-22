@@ -17,6 +17,8 @@ const CASES = [
   ["/rss.xml", 200, /<rss/],
   ["/sitemap.xml", 200, /<urlset/],
   ["/robots.txt", 200, /Sitemap:/],
+  ["/robots.txt", 200, /framework endpoints, not for indexing/],
+  ["/robots.txt", 200, /Disallow: \/_fragment\//],
   ["/og/blog/html-cache-ve-swr.png", 200],
   ["/api/healthcheck", 200, /ok/],
   ["/feed", 200, /<rss/],

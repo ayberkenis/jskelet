@@ -503,6 +503,31 @@ return {
 `renderHeadMeta(metadata)` fonksiyonu dışa açıktır; layout dışında (ör. bir
 fragment ya da e-posta) aynı etiketleri üretmek gerekirse kullanılabilir.
 
+## robots.txt
+
+`robots.txt`'i uygulama yazar: `public/robots.txt` ya da düz bir route.
+Framework bu gövdeyi değiştirmez; başarılı metin yanıtının **altına** bir
+JSkelet notu ve `Disallow` kuralları ekler. Dosya ya da route yoksa framework
+bir `robots.txt` uydurmaz.
+
+Eklenen yollar:
+
+- `/_jskelet/` — yönetim paneli, uzak görsel proxy, auth handoff
+- `/__jskelet/` — geliştirme araçları
+- `/_fragment/` — layout'suz parça yanıtları
+
+Bu öneklerin dışına taşınmış bir uç da eklenir, ama yalnızca gerçekten
+mount edildiyse: `admin.basePath`, `images.remote.path`,
+`auth.crossSubdomainHandoff.path`. `brand.devBasePath` yalnızca
+development'ta yazılır; production'da o yol uygulamanın kendi sayfası
+olabilir.
+
+Not, config'teki marka adıyla başlar (`brand.name`, varsayılan `JSkelet`).
+Alttaki grup `User-agent: *` ile birlikte dosyada adı geçen diğer ajanları
+da tekrarlar. Google, belirli bir ajana ait grubu `*` ile birleştirmez;
+aynı ajanın ikinci grubunu birleştirir. Not dosyada zaten varsa ikinci kez
+eklenmez.
+
 ## Dinamik OG görselleri
 
 Next.js `ImageResponse` / `opengraph-image.tsx` karşılığı. JSX yok: kart

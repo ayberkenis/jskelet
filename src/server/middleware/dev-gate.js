@@ -1,11 +1,12 @@
 /**
- * Yayına açılmamış bir ortamı gizler: `DEV_TOKEN` ayarlıyken token taşımayan
- * her isteğe 404 döner. 403 değil 404 — 403 ortamın var olduğunu doğrular,
- * 404 hiç yokmuş gibi davranır.
+ * Yayına açılmamış bir ortamı gizler. Gate kapalıyken (varsayılan) `DEV_TOKEN`
+ * olsa bile istekler geçer: değişkenin task ortamında unutulması production'u
+ * kilitlemesin. Açmak için `devGate: true` ya da `DEV_GATE=1` gerekir; o zaman
+ * token taşımayan her isteğe 404 döner. 403 değil 404 — 403 ortamın var
+ * olduğunu doğrular, 404 hiç yokmuş gibi davranır.
  *
  * Token bir kez `?dev_token=…` ile gelirse çereze yazılır, böylece link
- * paylaşımı yeterli olur. `DEV_TOKEN` yoksa middleware tamamen devre dışıdır
- * ve üretimde hiçbir maliyeti olmaz.
+ * paylaşımı yeterli olur. Token boşsa gate açık olsa da kimse kilitlenmez.
  */
 import process from "node:process";
 import { getConfig } from "../../config/index.js";
@@ -32,13 +33,25 @@ function readCookie(req, name) {
 
 /** @returns {import('express').RequestHandler} */
 export function devGate() {
-  const { devGateBypass, brand } = getConfig();
+  const { devGate: enabled, devGateBypass, brand } = getConfig();
   const bypass = new Set(devGateBypass);
   const cookieName = brand.devTokenCookie;
+  const devToken = process.env.DEV_TOKEN;
+
+  // Unutulmuş bir değişken sessizce herkese 404 kesmesin; operatör görsün.
+  if (!enabled && devToken) {
+    console.warn(
+      "[dev-gate] DEV_TOKEN is set but the gate is off, so the site stays public. " +
+        "Set devGate: true or DEV_GATE=1 to require the token.",
+    );
+  } else if (enabled && !devToken) {
+    console.warn(
+      "[dev-gate] the gate is on but DEV_TOKEN is empty; requests are not blocked.",
+    );
+  }
 
   return (req, res, next) => {
-    const devToken = process.env.DEV_TOKEN;
-    if (!devToken) return next();
+    if (!enabled || !devToken) return next();
     if (bypass.has(req.path)) return next();
 
     const fromQuery = req.query?.[cookieName];

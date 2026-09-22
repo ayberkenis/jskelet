@@ -12,6 +12,9 @@
  *      açık kurallar istenen yolu önce görür.
  *   3b. access log (açıksa) — tamamlanan yanıtların süresi; admin/prewarm
  *      içeride elenir.
+ *   3c. robots.txt — statikten önce, compression'ın içinde: kullanıcının
+ *      gövdesine framework Disallow bloğu eklenir. Sıkıştırılmış kopyanın
+ *      (Content-Encoding dolu) üzerine yazılmaz.
  *   4. staticPrecompressed → express.static — build'de üretilmiş `.br`/`.gz`
  *      kopyalar varsa onlar servis edilir (kalite 11), yoksa istek altındaki
  *      static'e düşer ve middleware anında sıkıştırır (kalite 5).
@@ -32,6 +35,7 @@ import path from "node:path";
 import process from "node:process";
 import express from "express";
 import { compression } from "./middleware/compression.js";
+import { robotsTxtMiddleware } from "./middleware/robots-txt.js";
 import { headersMiddleware } from "./middleware/headers.js";
 import { csrf } from "./middleware/csrf.js";
 import { staticPrecompressed } from "./middleware/static-precompressed.js";
@@ -108,6 +112,11 @@ export async function createApp(options = {}) {
     const { accessLogMiddleware } = await import("./logs/access-middleware.js");
     app.use(accessLogMiddleware());
   }
+
+  // Kullanıcının robots.txt'i statik dosya da olabilir, route da. İkisi de
+  // bu sarmalayıcıdan geçer. compression'dan sonra durur: ek, sıkıştırılmış
+  // baytların değil düz metnin sonuna yazılır.
+  app.use(robotsTxtMiddleware());
 
   app.use(staticPrecompressed(config.dirs.public));
   app.use(

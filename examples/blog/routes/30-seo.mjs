@@ -16,6 +16,8 @@ function cacheFor(seconds) {
 
 export default function register(app) {
   app.get("/robots.txt", (req, res) => {
+    // Framework kendi uçlarını (`/_jskelet/`, `/__jskelet/`, `/_fragment/`)
+    // bu gövdenin altına ekler. Burada yalnızca sitenin kuralları durur.
     res.type("text/plain");
     res.setHeader("Cache-Control", cacheFor(3600));
     res.send(

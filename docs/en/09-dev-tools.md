@@ -303,11 +303,20 @@ production process.
 
 ## Dev gate — `DEV_TOKEN`
 
-To hide an environment that is not public yet: while `DEV_TOKEN` is set,
-**every** request without the token gets a 404.
+To hide an environment that is not public yet. **The framework does not require
+the token:** a `DEV_TOKEN` sitting in the environment does not lock the site.
+You turn the gate on.
 
 ```bash
-DEV_TOKEN=a-long-random-string npm start
+DEV_GATE=1 DEV_TOKEN=a-long-random-string npm start
+```
+
+The same thing from config:
+
+```js
+export default {
+  devGate: true,
+};
 ```
 
 Access:
@@ -328,10 +337,12 @@ Behavior:
   `/site.webmanifest`, `/favicon.ico`. If your health check lives at a different
   path, remember to add it to this list, otherwise your orchestrator will see a
   404.
-- Without `DEV_TOKEN` the middleware is entirely disabled and costs nothing in
-  production.
-- Since warming makes requests to its own server, it carries the token as a
-  cookie; without it every page gets a 404 and the cache never fills up
+- While `devGate` is off (the default) or `DEV_TOKEN` is empty, the middleware
+  passes the request through. A `DEV_TOKEN` that leaked into a production task
+  does not ask visitors for a token; startup prints a warning.
+- `DEV_GATE=0` turns the gate off even when config says `devGate: true`.
+- While the gate is on, warming carries the token as a cookie; without it every
+  page gets a 404 and the cache never fills up
   ([06-caching.md](./06-caching.md)).
 
 In the middleware chain the gate sits after `headers` and **before**

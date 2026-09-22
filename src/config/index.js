@@ -139,6 +139,8 @@ const CONFIG_FILE = "jskelet.config.mjs";
  * @property {string[] | null} routes Açık route modülü listesi.
  * @property {boolean} trailingSlash URL'ler `/` ile bitsin mi (Next `trailingSlash`).
  * @property {{ extensions: Set<string>, prefixes: string[] }} static
+ * @property {boolean} devGate `DEV_TOKEN` tek başına siteyi kilitlemez; gate
+ *   ancak bu bayrak veya `DEV_GATE=1` ile açılır.
  * @property {string[]} devGateBypass
  * @property {string[]} preconnect
  * @property {NavigationConfig} navigation
@@ -351,6 +353,22 @@ function normalizeUpstream(raw) {
     breakerCooldownMs: positive("breakerCooldownMs"),
     hosts,
   };
+}
+
+/**
+ * Dev gate. `DEV_TOKEN` ortamda durması siteyi kilitlemez: paylaşılan bir
+ * task tanımı production'a da aynı değişkeni taşır ve herkese 404 olur.
+ * Gate ancak `devGate: true` ya da `DEV_GATE=1` ile açılır. `DEV_GATE=0`
+ * config'teki açığı da kapatır.
+ *
+ * @param {Record<string, any>} source
+ * @returns {boolean}
+ */
+function normalizeDevGate(source) {
+  const env = process.env.DEV_GATE;
+  if (env === "0" || env === "false") return false;
+  if (env === "1" || env === "true") return true;
+  return source.devGate === true;
 }
 
 /**
@@ -1347,6 +1365,7 @@ export async function loadConfig(options = {}) {
       extensions: new Set(source.static?.extensions ?? DEFAULT_STATIC.extensions),
       prefixes: source.static?.prefixes ?? DEFAULT_STATIC.prefixes,
     },
+    devGate: normalizeDevGate(source),
     devGateBypass: source.devGateBypass ?? DEFAULT_DEV_GATE_BYPASS,
     preconnect: source.preconnect ?? [],
     navigation: normalizeNavigation(source.navigation, brand),

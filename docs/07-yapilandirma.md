@@ -293,14 +293,28 @@ static: {
 }
 ```
 
+## `devGate`
+
+**Tip:** `boolean` — **Varsayılan:** `false`
+
+Yayına açılmamış ortamı gizler. **`DEV_TOKEN` tek başına siteyi kilitlemez.**
+Paylaşılan bir task tanımı production'a da aynı değişkeni taşıyabilir; o
+durumda ziyaretçi token vermek zorunda kalmaz, site açık kalır.
+
+Gate'i açmak için `devGate: true` ya da `DEV_GATE=1`. İkisi de varken token
+taşımayan isteğe 404 döner. `DEV_GATE=0` config'teki açığı da kapatır. Token
+boşsa gate açık olsa da istekler geçer.
+
+Ayrıntı: [09-dev-araclari.md](./09-dev-araclari.md).
+
 ## `devGateBypass`
 
 **Tip:** `string[]` — **Varsayılan:**
 `["/api/healthcheck", "/robots.txt", "/sitemap.xml", "/site.webmanifest", "/favicon.ico"]`
 
 Dev gate'in hiçbir koşulda kapatmadığı **tam** yollar (önek değil, birebir
-eşleşme). `DEV_TOKEN` ayarlı bir ortamda sağlık kontrolünün ve robots
-dosyalarının erişilebilir kalması için. Verilirse varsayılanın yerine geçer.
+eşleşme). Gate açıkken sağlık kontrolünün ve robots dosyalarının erişilebilir
+kalması için. Verilirse varsayılanın yerine geçer.
 
 Ayrıntı: [09-dev-araclari.md](./09-dev-araclari.md).
 
@@ -1111,7 +1125,8 @@ basılmaz.
 | `PORT` | `startServer` | `3000` | Dinlenecek port. Doluysa süreç başlamaz; `jskelet start|dev --murder` dinleyiciyi öldürür |
 | `HOST` | `startServer` | `::` | Bağlanılacak arayüz. Varsayılan çift yığın dinler (IPv6 + IPv4); IPv6 yoksa `0.0.0.0`'a düşer |
 | `JSKELET_SECRET` | `jskelet/cookies` | — | İmzalı cookie sırrı. `security.cookieSecret` verilmediğinde buradan okunur; ikisi de yoksa imzalı cookie API'si hata verir. [12](./12-panel-ve-oturum.md) |
-| `DEV_TOKEN` | `devGate`, `prewarm` | — | Ayarlıysa token taşımayan her isteğe 404 döner. Isıtma token'ı çerez olarak taşır. [09](./09-dev-araclari.md) |
+| `DEV_GATE` | `devGate` | kapalı | `1` gate'i açar, `0` config'te açık olsa da kapatır. `DEV_TOKEN` tek başına açmaz. [09](./09-dev-araclari.md) |
+| `DEV_TOKEN` | `devGate`, `prewarm` | — | Gate açıkken beklenen sır. Yoksa veya gate kapalıysa site açık kalır. Isıtma, gate açıkken token'ı çerez olarak taşır. [09](./09-dev-araclari.md) |
 | `JSKELET_ADMIN` | `createApp` | — | Ayarlıysa yönetim panelini açar; `0` config'te açık olan paneli kapatır. Env config'i ezer, çünkü panel genelde bir arıza sırasında tek seferlik açılır. [06](./06-cache.md) |
 | `JSKELET_LOG_BUCKET` | `logs.s3` | — | Log hedefi: bucket ya da `bucket/prefix` yolu. Credential ile birlikte varsa sink otomatik açılır |
 | `JSKELET_S3_BUCKET` | `logs.s3` | — | `JSKELET_LOG_BUCKET` yoksa bucket; `JSKELET_S3_KEY_PREFIX` ile birleşir |

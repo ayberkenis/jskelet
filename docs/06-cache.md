@@ -1317,8 +1317,8 @@ turlar upstream'e iki kat yük bindirirdi.
 `accept-encoding: br, gzip` başlıklarıyla gider; ikincisi sıkıştırılmış gövdenin
 de önbelleğe girmesi için.
 
-`DEV_TOKEN` ayarlıysa ısıtma token'ı çerez olarak taşır; yoksa dev gate tüm
-sayfalara 404 döner ve önbellek hiç dolmaz.
+Dev gate açıksa ısıtma token'ı çerez olarak taşır; yoksa gate tüm sayfalara
+404 döner ve önbellek hiç dolmaz. `DEV_TOKEN` tek başına gate'i açmaz.
 
 Dev panelindeki istek listesi ve terminal, `prewarmUserAgent` taşıyan istekleri
 filtreler: yüzlerce ısıtma isteği görünümü doldurmasın. İlerleme baloncuğun

@@ -298,11 +298,19 @@ hiçbir şey yüklenmez.
 
 ## Dev gate — `DEV_TOKEN`
 
-Yayına açılmamış bir ortamı gizlemek için: `DEV_TOKEN` ayarlıyken token
-taşımayan **her** isteğe 404 döner.
+Yayına açılmamış bir ortamı gizlemek için. **Framework token'ı zorunlu tutmaz:**
+`DEV_TOKEN` ortamda durması siteyi kilitlemez. Gate'i siz açarsınız.
 
 ```bash
-DEV_TOKEN=uzun-rastgele-bir-dize npm start
+DEV_GATE=1 DEV_TOKEN=uzun-rastgele-bir-dize npm start
+```
+
+Aynı şey config ile:
+
+```js
+export default {
+  devGate: true,
+};
 ```
 
 Erişim:
@@ -322,10 +330,12 @@ Davranış:
   `/api/healthcheck`, `/robots.txt`, `/sitemap.xml`, `/site.webmanifest`,
   `/favicon.ico`. Sağlık kontrolünüz farklı bir yolda ise bu listeye eklemeyi
   unutmayın, aksi hâlde orkestratör 404 görür.
-- `DEV_TOKEN` yoksa middleware tamamen devre dışıdır ve üretimde hiçbir maliyeti
-  olmaz.
-- Isıtma kendi sunucusuna istek attığı için token'ı çerez olarak taşır; yoksa tüm
-  sayfalar 404 alır ve önbellek hiç dolmaz ([06-cache.md](./06-cache.md)).
+- `devGate` kapalıyken (varsayılan) veya `DEV_TOKEN` boşken middleware isteği
+  olduğu gibi geçirir. Production task'ına sızmış bir `DEV_TOKEN` ziyaretçiden
+  token istemez; açılışta bir uyarı basılır.
+- `DEV_GATE=0` config'te `devGate: true` olsa da gate'i kapatır.
+- Isıtma, gate açıkken token'ı çerez olarak taşır; yoksa tüm sayfalar 404 alır
+  ve önbellek hiç dolmaz ([06-cache.md](./06-cache.md)).
 
 Gate middleware zincirinde `headers`tan sonra, `redirects`ten **önce** durur:
 yayına açılmamış bir ortam yönlendirme kurallarını bile dışarıya sızdırmamalı.

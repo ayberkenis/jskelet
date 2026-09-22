@@ -510,6 +510,30 @@ The `renderHeadMeta(metadata)` function is exported; it can be used when you
 need to produce the same tags outside the layout (for example in a fragment or
 an email).
 
+## robots.txt
+
+The application writes `robots.txt`: `public/robots.txt` or a plain route.
+The framework does not change that body; it appends a JSkelet note and
+`Disallow` rules **under** a successful text response. If there is no file
+and no route, the framework does not invent a `robots.txt`.
+
+Paths added:
+
+- `/_jskelet/` — admin panel, remote image proxy, auth handoff
+- `/__jskelet/` — development tools
+- `/_fragment/` — partial responses without a layout
+
+An endpoint moved off those prefixes is added too, but only when it is
+actually mounted: `admin.basePath`, `images.remote.path`,
+`auth.crossSubdomainHandoff.path`. `brand.devBasePath` is written only in
+development; in production that path may be the application's own page.
+
+The note starts with the configured brand name (`brand.name`, default
+`JSkelet`). The trailing group repeats `User-agent: *` together with every
+other agent already named in the file. Google does not merge a
+crawler-specific group with `*`; it does merge a second group for the same
+agent. If the note is already in the file, it is not appended again.
+
 ## Dynamic OG images
 
 Counterpart to Next.js `ImageResponse` / `opengraph-image.tsx`. There is no JSX:
