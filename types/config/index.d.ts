@@ -45,14 +45,17 @@ export type LogsConfig = {
      * Sink'lere giden kayıt türleri.
      */
     kinds: LogKind[];
+    /**
+     *   `rotate` durur; dosya parçaları en fazla 5 dakika tutulur.
+     */
     file: {
         enabled: boolean;
         dir: string;
         rotate: "daily";
     };
     /**
-     * Mühürlenen zstd parçasını uygulamanın seçtiği yere aktarır. Hata
-     * siteyi düşürmez.
+     *   Mühürlenen zstd parçasını uygulamanın seçtiği yere aktarır. Hata
+     *   siteyi düşürmez.
      */
     drainLog: import('../server/logs/file-sink.js').DrainLog | null;
     s3: {

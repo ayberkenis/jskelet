@@ -26,8 +26,8 @@
  * (L1) **birincil kalır**: `read()` senkron, sıkıştırılmış gövdeler girdiyle
  * birlikte ve tutarlılık makinesi (`tokens`, `purgedDeps`) tek proseste. Redis
  * yalnızca L1'de bulunmayan bir yol için render'ı atlatır ve invalidation'ı
- * diğer node'lara duyurur. Redis erişilemez olduğunda bu modül birebir eskisi
- * gibi çalışır.
+ * diğer node'lara duyurur. Redis yoksa aynı kayıt `.jskelet/cache/<buildId>/`
+ * altına yazılır; bu tek makinenin yeniden açılışını karşılar, kümeyi değil.
  */
 export type HtmlEntry = {
     html: string;

@@ -273,7 +273,10 @@ export declare const DEFAULT_LOGS: {
         enabled: boolean;
         /** Proje köküne göre relative. */
         dir: string;
-        /** Yalnızca günlük rotasyon. */
+        /**
+         * Artık kullanılmıyor. Parçalar en fazla 5 dakika durur; alan çözülen
+         * config'te durur ki eski okuyucular kırılmasın.
+         */
         rotate: "daily";
     };
     s3: {

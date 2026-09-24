@@ -5,20 +5,14 @@ export type LogChunk = {
     lines: number;
     at: number;
 };
-export type DrainLog = (chunk: LogChunk) => void | Promise<void>;
-/**
- * Diskteki parçaların ömrü. Config yükseltemez.
- */
-export declare const FILE_LOG_RETENTION_MS: number;
 export type LogSink = {
     write: (entry: Record<string, unknown>) => Promise<void>;
     flush: () => Promise<void>;
     close: () => Promise<void>;
 };
-/**
- * @typedef {{ write: (entry: Record<string, unknown>) => Promise<void>,
- *   flush: () => Promise<void>, close: () => Promise<void> }} LogSink
- */
+export type DrainLog = (chunk: LogChunk) => void | Promise<void>;
+/** Diskteki parçaların ömrü. Config yükseltemez. */
+export declare const FILE_LOG_RETENTION_MS: number;
 /**
  * @param {{ root: string, dir: string, persist?: boolean,
  *   retentionMs?: number, drainLog?: DrainLog | null }} options
