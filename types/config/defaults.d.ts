@@ -139,6 +139,17 @@ export declare const HTML_CACHE_MAX_ENTRIES_CEILING = 800;
  * saklanmaz, yanıt yine gider.
  */
 export declare const HTML_CACHE_BYTE_BUDGET: number;
+/**
+ * Süreç içi veri önbelleğinin JSON bayt tavanı (64 MB). Sayı tavanı
+ * şişman gövdeleri tutmaz; config yükseltemez. Tek değer bütçeden büyükse
+ * saklanmaz, çağıran sonucu yine alır.
+ */
+export declare const DATA_CACHE_BYTE_BUDGET: number;
+/**
+ * Uzak görsel disk önbelleğinin tavanı (256 MB). `.jskelet/image-cache/`
+ * bu boyutu aşınca en eski dosya düşer. Config yükseltemez.
+ */
+export declare const IMAGE_CACHE_BYTE_BUDGET: number;
 /** `cache().data.maxEntries` için sert tavan. Uzun kuyruk burada durur, HTML'de değil. */
 export declare const DATA_CACHE_MAX_ENTRIES_CEILING = 20000;
 /**

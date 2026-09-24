@@ -359,7 +359,8 @@ and `image()` falls back to the original file. It never runs on a watch pass.
 When `images.remote.allowHosts` is set, `createApp` mounts `/_jskelet/image`.
 CMS / CDN covers never enter the build, so `image()` rewrites those host URLs to
 `?url=&w=`; the endpoint encodes webp with sharp and stores files under
-`.jskelet/image-cache/`. Upstream fetch follows redirects manually: every hop is
+`.jskelet/image-cache/`. When the directory passes 256 MB the oldest file is
+deleted. Upstream fetch follows redirects manually: every hop is
 re-checked against the allowlist and private IP / DNS rules (open-redirect SSRF
 is closed). Details: [07-configuration.md](./07-configuration.md).
 

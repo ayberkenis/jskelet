@@ -169,6 +169,19 @@ export const HTML_CACHE_MAX_ENTRIES_CEILING = 800;
  */
 export const HTML_CACHE_BYTE_BUDGET = 256 * 1024 * 1024;
 
+/**
+ * Süreç içi veri önbelleğinin JSON bayt tavanı (64 MB). Sayı tavanı
+ * şişman gövdeleri tutmaz; config yükseltemez. Tek değer bütçeden büyükse
+ * saklanmaz, çağıran sonucu yine alır.
+ */
+export const DATA_CACHE_BYTE_BUDGET = 64 * 1024 * 1024;
+
+/**
+ * Uzak görsel disk önbelleğinin tavanı (256 MB). `.jskelet/image-cache/`
+ * bu boyutu aşınca en eski dosya düşer. Config yükseltemez.
+ */
+export const IMAGE_CACHE_BYTE_BUDGET = 256 * 1024 * 1024;
+
 /** `cache().data.maxEntries` için sert tavan. Uzun kuyruk burada durur, HTML'de değil. */
 export const DATA_CACHE_MAX_ENTRIES_CEILING = 20_000;
 
@@ -297,7 +310,10 @@ export const DEFAULT_LOGS = {
     enabled: false,
     /** Proje köküne göre relative. */
     dir: "logs",
-    /** Yalnızca günlük rotasyon. */
+    /**
+     * Artık kullanılmıyor. Parçalar en fazla 5 dakika durur; alan çözülen
+     * config'te durur ki eski okuyucular kırılmasın.
+     */
     rotate: /** @type {"daily"} */ ("daily"),
   },
   s3: {

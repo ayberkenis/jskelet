@@ -572,7 +572,7 @@ When `remote.allowHosts` is set, also proxies remote images at runtime
 | `allowHosts` | `string[]` | `[]` | Hosts that may be fetched. Supports a `*.cdn.example.com` suffix wildcard. |
 | `path` | `string` | `/_jskelet/image` | Optimizer GET path. |
 | `maxWidth` | `number` | `1920` | Cap for `w`. |
-| `cacheMaxAge` | `number` | `2592000` (30 days) | Response `Cache-Control` max-age (seconds). Disk cache under `.jskelet/image-cache/`. |
+| `cacheMaxAge` | `number` | `2592000` (30 days) | Response `Cache-Control` max-age (seconds). Disk cache under `.jskelet/image-cache/`; past 256 MB the oldest file is deleted. |
 | `fetchTimeoutMs` | `number` | `10000` | Upstream fetch timeout. |
 | `maxBytes` | `number` | `10485760` (10 MiB) | Upstream body size limit. |
 
@@ -788,7 +788,7 @@ tens of thousands of paths from here is the wrong layer — the right place is
 
 **Ceiling 800.** A higher value is clamped to 800 with a warning at load.
 In-process HTML plus compressed bodies also cannot exceed 256 MB; config
-cannot raise that budget.
+cannot raise that budget. Only one compressed copy is kept (brotli or gzip).
 
 ### `cache().data`
 
@@ -797,7 +797,7 @@ The upstream data cache (`withDataCache`). Details:
 
 | Field | Type | Default | Meaning |
 | --- | --- | --- | --- |
-| `maxEntries` | `number` | `10000` | The LRU entry limit. The limit is high because JSON is tens of times smaller than HTML. **Ceiling 20,000**; a higher value is clamped with a warning. |
+| `maxEntries` | `number` | `10000` | The LRU entry limit. The limit is high because JSON is tens of times smaller than HTML. **Ceiling 20,000**; a higher value is clamped with a warning. In-process JSON also cannot exceed **64 MB**; config cannot raise that budget. |
 | `staleFactor` | `number` | `10` | For how many TTLs an entry stays usable after the TTL expired. `0` → no stale serving. |
 
 ### `cache().trackUpstream`
@@ -901,15 +901,17 @@ redis: {
 
 Persistent log sinks. Everything is off by default: stdout and the admin panel
 ring keep their current behaviour. When enabled, HTTP access logs and framework
-events (`event` / `error`) are written as NDJSON lines to a file and/or S3.
+events (`event` / `error`) go out as NDJSON to a file, `drainLog`, and/or S3.
+File chunks are zstd and stay at most 5 minutes; the oldest expired chunk is
+deleted.
 
 | Field | Type | Default | Meaning |
 | --- | --- | --- | --- |
 | `console` | `boolean` | `true` | Whether runtime `http` / `event` / `error` lines go to stdout (banner/build lines are unaffected) |
 | `kinds` | `("http" \| "event" \| "error")[]` | all | Which kinds reach the sinks |
-| `file.enabled` | `boolean` | `false` | Daily file sink |
-| `file.dir` | `string` | `"logs"` | Directory relative to the project root; `jskelet-YYYY-MM-DD.log` |
-| `file.rotate` | `"daily"` | `"daily"` | Daily rotation only |
+| `file.enabled` | `boolean` | `false` | File spool. Lines become `jskelet-<time>-<n>.ndjson.zst` about every 1s or 32 lines. Kept at most 5 minutes; the oldest chunk is deleted. |
+| `file.dir` | `string` | `"logs"` | Directory relative to the project root |
+| `drainLog` | `(chunk) => void \| Promise<void>` | `null` | Forwards each sealed zstd chunk (`{ body, encoding, bytes, lines, at }`) wherever the app wants. A throw warns and does not take the site down. With the file sink off, nothing is written to disk. |
 | `s3.enabled` | `boolean` | `false` | S3 batch PutObject sink |
 | `s3.bucket` | `string \| null` | `null` | Bucket or a `bucket/prefix/…` path; `JSKELET_LOG_BUCKET` overrides |
 | `s3.prefix` | `string` | `"jskelet/logs/"` | Object key prefix (when not given in the path) |
@@ -928,6 +930,9 @@ logs: {
   console: true,
   kinds: ["http", "error"],
   file: { enabled: true, dir: "logs" },
+  async drainLog(chunk) {
+    // chunk.body is zstd NDJSON. The file is deleted after 5 minutes; keep a copy here.
+  },
   s3: {
     enabled: process.env.NODE_ENV === "production",
     bucket: process.env.JSKELET_LOG_BUCKET,

@@ -50,6 +50,11 @@ export type LogsConfig = {
         dir: string;
         rotate: "daily";
     };
+    /**
+     * Mühürlenen zstd parçasını uygulamanın seçtiği yere aktarır. Hata
+     * siteyi düşürmez.
+     */
+    drainLog: import('../server/logs/file-sink.js').DrainLog | null;
     s3: {
         enabled: boolean;
         bucket: string | null;

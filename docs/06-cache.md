@@ -206,9 +206,11 @@ leadMs = min(max(produceMs * 2, 250ms), ttl / 2)
 
 Böylece yavaş bir sayfa TTL dolduğu anda hâlâ soğuk render'a düşmez: taze
 HTML çoğu zaman `expiresAt` gelmeden yazılmış olur. Trafik yoksa bir sweeper
-aynı pencerede girdiyi soft-bayatlatır ve ısıtma kuyruğuna alır; `startPrewarm`
-( `PREWARM=0` değilse) kuyruğu HTTP ile boşaltır — klasik `prewarmPaths`
-olmasa da.
+aynı pencerede girdiyi soft-bayatlatır ve ısıtma kuyruğuna alır. Bir tur en
+fazla dört girdi işaretler (süresi en yakın dolacak olan önce); kalanlar
+sonraki saniyelere kalır. `startPrewarm` (`PREWARM=0` değilse) kuyruğu HTTP
+ile boşaltır — klasik `prewarmPaths` olmasa da — ama bu boşaltma klasik turun
+`rps: 0` ayarını kullanmaz: aynı anda tek istek, saniyede en fazla iki.
 
 Stale penceresinde tazelemenin hatası isteği etkilemez: eski HTML pencere
 boyunca geçerli kalır ve hata yalnızca loglanır
@@ -225,7 +227,9 @@ güncelleniyor.
 Store LRU'dur: erişilen girdi sona taşınır, sınır (`cache().maxEntries`,
 varsayılan 500) aşılınca en eski düşürülür. Config 500'ün üstünü isteyebilir;
 **800'ü geçemez** — daha yükseği uyarıyla 800'e çekilir. Bunun yanında süreç
-içi HTML string + sıkıştırılmış gövde **256 MB**'yi geçemez. Sayı tavanının
+içi HTML string + sıkıştırılmış gövde **256 MB**'yi geçemez. Sıkıştırılmış
+kopya tektir: brotli veya gzip, hangisi son istendiyse. Ham HTML durur.
+Sayı tavanının
 altında kalan şişman sayfa veya `vary.host` kopyası da bu bütçede LRU ile
 düşer. Tek sayfa 256 MB'den büyükse saklanmaz; yanıt o istekte yine gider.
 
@@ -369,6 +373,9 @@ Ayrıntılar:
   yazılır (`haber:tr:v2:${slug}`).
 - TTL `0` verildiğinde önbellek devre dışı kalır ve `producer` her çağrıda
   çalışır — bir ayarı geçici olarak kapatmak için yeterli.
+- **Bayt tavanı 64 MB.** Sayı sınırı şişman JSON'u tutmaz; süreç içi gövdeler
+  bu tavanı geçemez ve config yükseltemez. Tek değer tavanı aşıyorsa saklanmaz,
+  çağıran sonucu yine alır. Tahliye en eski girdiden olur.
 
 Yönetim yüzeyi:
 
@@ -834,6 +841,19 @@ anahtarlar TTL ile ölür — elle temizlik ya da `FLUSHDB` gerekmez. Build
 `namespace` aynı Redis'i paylaşan birden fazla uygulamayı ayırır. Olay kanalı
 bilinçli olarak `buildId` **taşımaz**: deploy sırasında eski ve yeni sürüm yan
 yana koşuyor ve bir purge ikisine de ulaşmalı.
+
+1 KB ve üstü HTML ve veri girdileri düz JSON olarak durmaz: `JSK\x01` önekli
+brotli gövde yazılır (kalite 5, metin modu — yanıt sıkıştırmasıyla aynı ayar).
+L1 yine çözülmüş nesne tutar; sıkıştırma yalnızca L1 miss'ten sonraki
+paylaşımda, yanıtı bekletmeden çalışır. Daha küçük kayıtlar düz JSON kalır,
+eski düz JSON kayıtlar da okunur. zstd kullanılmaz: `node:zlib` içindeki zstd
+22.15'ten itibaren var, motor ise `>=22`.
+
+Redis kapalıyken (ya da bağlanamadığında) aynı gövde `.jskelet/cache/<buildId>/`
+altına dosya olarak yazılır. Süreç yeniden açılınca L1 boştur ama diskteki
+taze kopya render'ı atlatır. Bu tek makine içindir: birden fazla instance aynı
+dizini paylaşmaz, küme için Redis durur. Yeni bir `buildId` eskisinin dizinini
+bir sonraki yazışta siler. `clearHtmlCache()` ve invalidation dosyayı da düşürür.
 
 ### Bilmeniz gereken takaslar
 

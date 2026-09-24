@@ -26,8 +26,8 @@
  * (L1) **birincil kalır**: `read()` senkron, sıkıştırılmış gövdeler girdiyle
  * birlikte ve tutarlılık makinesi (`tokens`, `purgedDeps`) tek proseste. Redis
  * yalnızca L1'de bulunmayan bir yol için render'ı atlatır ve invalidation'ı
- * diğer node'lara duyurur. Redis erişilemez olduğunda bu modül birebir eskisi
- * gibi çalışır.
+ * diğer node'lara duyurur. Redis yoksa aynı kayıt `.jskelet/cache/<buildId>/`
+ * altına yazılır; bu tek makinenin yeniden açılışını karşılar, kümeyi değil.
  */
 
 import { getConfig } from "../config/index.js";
@@ -38,6 +38,7 @@ import {
 import { collectDependencies } from "./cache-deps.js";
 import { compilePattern, matchPattern } from "../config/pattern.js";
 import { pathOfCacheKey, publicHost } from "./cache-vary.js";
+import { diskDrop, diskDropMatching, diskGetJson, diskSetJson, diskShares } from "./disk-cache.js";
 import {
   cacheKey,
   onCacheEvent,
@@ -117,6 +118,13 @@ const EARLY_REFRESH_MIN_MS = 250;
 
 /** Trafiksiz girdileri erken pencerede soft-bayatlatma aralığı. */
 const EARLY_SWEEP_INTERVAL_MS = 1000;
+
+/**
+ * Bir sweep turunda soft-bayatlatılan girdi tavanı. Aynı TTL'i paylaşan
+ * yüzlerce sayfa tek saniyede kuyruğa girip render dalgası yaratmasın;
+ * kalanlar sonraki turlara kalır. Öncelik `expiresAt`'i en yakın olan.
+ */
+const EARLY_SWEEP_MARK_BUDGET = 4;
 
 /** @type {Map<string, HtmlEntry>} */
 const store = new Map();
@@ -354,7 +362,9 @@ function read(key) {
  * @param {HtmlEntry} entry
  */
 function share(key, entry) {
-  if (!redisShares("html")) return;
+  const onRedis = redisShares("html");
+  const onDisk = diskShares("html");
+  if (!onRedis && !onDisk) return;
 
   const ttlMs = entry.staleUntil - Date.now();
   if (ttlMs <= 0) return;
@@ -370,7 +380,7 @@ function share(key, entry) {
     deps: [...entry.deps],
   };
 
-  if (redisSharesEncoded() && entry.encoded.size) {
+  if (onRedis && redisSharesEncoded() && entry.encoded.size) {
     /** @type {Record<string, string>} */
     const encoded = {};
     for (const [encoding, buffer] of entry.encoded) {
@@ -380,7 +390,8 @@ function share(key, entry) {
     entry.sharedEncodings = entry.encoded.size;
   }
 
-  redisSetJson(cacheKey("html", key), payload, ttlMs);
+  if (onRedis) redisSetJson(cacheKey("html", key), payload, ttlMs);
+  else diskSetJson("html", key, payload);
 }
 
 /**
@@ -394,11 +405,17 @@ function share(key, entry) {
  * @returns {Promise<HtmlEntry | null>}
  */
 async function readShared(key) {
-  if (!redisShares("html")) return null;
+  const onRedis = redisShares("html");
+  const onDisk = diskShares("html");
+  if (!onRedis && !onDisk) return null;
 
-  const payload = await redisGetJson(cacheKey("html", key));
+  const payload = onRedis
+    ? await redisGetJson(cacheKey("html", key))
+    : await diskGetJson("html", key);
   if (!payload || typeof payload.html !== "string") return null;
   if (typeof payload.expiresAt !== "number" || Date.now() >= payload.expiresAt) {
+    // Dosyanın TTL'i yok; süresi dolmuş kopya okununca silinir.
+    if (onDisk) diskDrop("html", [key]);
     return null;
   }
 
@@ -417,6 +434,14 @@ async function readShared(key) {
       if (typeof base64 === "string") {
         encoded.set(encoding, Buffer.from(base64, "base64"));
       }
+    }
+    // Eski bir replica iki kodlama yazmış olabilir. L1 tek kopya tutar;
+    // brotli varsa o kalır.
+    if (encoded.size > 1) {
+      const keep = encoded.has("br") ? "br" : encoded.keys().next().value;
+      const buffer = keep ? encoded.get(keep) : undefined;
+      encoded.clear();
+      if (keep && buffer) encoded.set(keep, buffer);
     }
   }
 
@@ -665,6 +690,7 @@ export function clearHtmlCache() {
   clearLocal();
 
   if (redisShares("html")) void redisDropMatching("html");
+  else if (diskShares("html")) void diskDropMatching("html");
   publishCacheEvent({ type: "html:clear" });
 }
 
@@ -767,12 +793,12 @@ export function invalidateHtmlCache(target, options = {}) {
   // webhook binlerce anahtarı birden düşürüyor. Silmenin bedeli, o yolu hiç
   // görmemiş bir node'un bir kez render etmesi; L1'i sıcak olan node'lar eski
   // HTML'i bayat pencerede servis etmeye devam ediyor.
-  if (redisShares("html")) {
+  if (redisShares("html") || diskShares("html")) {
     const matchers = compileMatchers(targets);
     if (matchers.length) {
-      void redisDropMatching("html", (key) =>
-        matchers.some((matcher) => matcher(pathOf(key))),
-      );
+      const match = (key) => matchers.some((matcher) => matcher(pathOf(key)));
+      if (redisShares("html")) void redisDropMatching("html", match);
+      else void diskDropMatching("html", match);
     }
   }
 
@@ -926,6 +952,8 @@ export function invalidateHtmlByDependency(dataKeys) {
   // kopyası TTL'ini bekler.
   if (keys.size && redisShares("html")) {
     redisDrop([...keys].map((key) => cacheKey("html", key)));
+  } else if (keys.size && diskShares("html")) {
+    diskDrop("html", [...keys]);
   }
 
   return keys.size;
@@ -946,6 +974,7 @@ export function dropHtmlCacheKey(key) {
   const existed = dropLocalKey(key);
 
   if (redisShares("html")) redisDrop([cacheKey("html", key)]);
+  else if (diskShares("html")) diskDrop("html", [key]);
   publishCacheEvent({ type: "html:drop", key });
 
   return existed;
@@ -997,19 +1026,19 @@ function pathWithQuery(key) {
  * açılmaz.
  *
  * @param {string} [onlyHost]
- * @returns {{ path: string, host: string }[]}
+ * @returns {{ key: string, path: string, host: string }[]}
  */
 export function takeInvalidatedTargets(onlyHost) {
   if (!invalidated.size) return [];
 
-  /** @type {{ path: string, host: string }[]} */
+  /** @type {{ key: string, path: string, host: string }[]} */
   const taken = [];
 
   for (const key of [...invalidated]) {
     const host = hostOfCacheKey(key);
     if (onlyHost && host && host !== onlyHost) continue;
     invalidated.delete(key);
-    taken.push({ path: pathWithQuery(key), host });
+    taken.push({ key, path: pathWithQuery(key), host });
   }
 
   return taken;
@@ -1083,24 +1112,69 @@ export function isHtmlCacheFresh(pathname, req) {
 }
 
 /**
+ * Bu anahtarın girdisi hâlâ taze mi? Süre dolumu ısıtması anahtarı bildiği
+ * için yol taraması yapmaz. Soft-bayat (`expiresAt === 0`) taze sayılmaz:
+ * ziyaretçi arada yenilediyse yeni `expiresAt` taze döner ve HTTP atlanır.
+ *
+ * @param {string} key
+ * @returns {boolean}
+ */
+export function isHtmlCacheKeyFresh(key) {
+  const entry = store.get(key);
+  if (!entry) return false;
+  return Date.now() < entry.expiresAt;
+}
+
+/**
+ * Girdide en fazla bir sıkıştırılmış gövde durur. Yeni kodlama eskisinin
+ * yerini alır; ham HTML kalır. Bayt sayacı `noteHtmlCacheGrowth` ile işlenir.
+ *
+ * @param {Map<string, Buffer>} encoded
+ * @param {string} encoding
+ * @param {Buffer} buffer
+ * @returns {void}
+ */
+export function rememberHtmlEncoding(encoded, encoding, buffer) {
+  for (const key of [...encoded.keys()]) {
+    if (key !== encoding) encoded.delete(key);
+  }
+  encoded.set(encoding, buffer);
+  noteHtmlCacheGrowth();
+}
+
+/**
  * Erken tazeleme penceresine girmiş (veya TTL'i dolmuş) trafiksiz girdileri
  * soft-bayatlatır ve ısıtma kuyruğuna alır. HTTP ısıtması producer'sız
  * çalıştığı için soft-bayat şart: taze HIT yenileme tetiklemez.
+ *
+ * Tur başına en fazla `EARLY_SWEEP_MARK_BUDGET` girdi. Önce süresi en yakın
+ * dolacak olan; kota dolunca kalanlar bir sonraki tura kalır.
  *
  * @returns {number} İşaretlenen girdi sayısı.
  */
 export function sweepEarlyExpiry() {
   const now = Date.now();
-  let marked = 0;
+  /** @type {{ key: string, expiresAt: number }[]} */
+  const due = [];
 
   for (const [key, entry] of store) {
     if (inflight.has(key)) continue;
     // Zaten soft-bayat / kuyrukta — her saniye yeniden ekleme.
     if (entry.expiresAt === 0) continue;
     if (now < entry.expiresAt && !isEarly(entry, now)) continue;
+    due.push({ key, expiresAt: entry.expiresAt });
+  }
+
+  due.sort((a, b) => a.expiresAt - b.expiresAt);
+
+  let marked = 0;
+  for (const item of due) {
+    if (marked >= EARLY_SWEEP_MARK_BUDGET) break;
+    const entry = store.get(item.key);
+    if (!entry || inflight.has(item.key) || entry.expiresAt === 0) continue;
 
     entry.expiresAt = 0;
-    if (invalidated.size < MAX_INVALIDATED) invalidated.add(key);
+    if (invalidated.size < MAX_INVALIDATED) invalidated.add(item.key);
     marked += 1;
   }
 

@@ -19,6 +19,7 @@ import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { tryImportFromApp } from "../build/resolve-peer.mjs";
+import { IMAGE_CACHE_BYTE_BUDGET } from "../config/defaults.js";
 import { getConfig } from "../config/index.js";
 
 /** @type {typeof import('sharp') | null | undefined} */
@@ -27,7 +28,95 @@ let sharpModule;
 /** @type {string | null} */
 let cacheDir = null;
 
+/**
+ * Bilinen dosyalar. HIT `existsSync` yerine bu kümeye bakar; açılışta dizin
+ * bir kez okunur. Değer yazım zamanı ve bayttır — tahliye en eskiden.
+ *
+ * @type {Map<string, { bytes: number, mtimeMs: number }>}
+ */
+const imageCacheIndex = new Map();
+
+/** @type {number} */
+let imageCacheBytes = 0;
+
 const MAX_REDIRECTS = 5;
+
+/**
+ * @param {string} dir
+ * @returns {void}
+ */
+function loadImageCacheIndex(dir) {
+  imageCacheIndex.clear();
+  imageCacheBytes = 0;
+
+  let names;
+  try {
+    names = fs.readdirSync(dir);
+  } catch {
+    return;
+  }
+
+  for (const name of names) {
+    if (!name.endsWith(".webp")) continue;
+    const filePath = path.join(dir, name);
+    try {
+      const stat = fs.statSync(filePath);
+      if (!stat.isFile()) continue;
+      imageCacheIndex.set(filePath, { bytes: stat.size, mtimeMs: stat.mtimeMs });
+      imageCacheBytes += stat.size;
+    } catch {
+      // Yarım tmp veya silinmiş dosya indeksi bozmasın.
+    }
+  }
+
+  evictImageCache("");
+}
+
+/**
+ * @param {string} filePath
+ * @param {number} bytes
+ * @returns {void}
+ */
+function noteImageCacheFile(filePath, bytes) {
+  const prev = imageCacheIndex.get(filePath);
+  if (prev) imageCacheBytes -= prev.bytes;
+  imageCacheIndex.set(filePath, { bytes, mtimeMs: Date.now() });
+  imageCacheBytes += bytes;
+  evictImageCache(filePath);
+}
+
+/**
+ * Tavan aşılınca en eski dosyayı siler. `protect` az önce yazılan yoldur:
+ * bu yanıt onu hâlâ okuyacak, bu turda düşmez.
+ *
+ * @param {string} protect
+ * @returns {void}
+ */
+function evictImageCache(protect) {
+  while (imageCacheBytes > IMAGE_CACHE_BYTE_BUDGET && imageCacheIndex.size > 1) {
+    let oldestPath = "";
+    let oldestMtime = Infinity;
+    let oldestBytes = 0;
+
+    for (const [filePath, meta] of imageCacheIndex) {
+      if (filePath === protect) continue;
+      if (meta.mtimeMs < oldestMtime) {
+        oldestMtime = meta.mtimeMs;
+        oldestPath = filePath;
+        oldestBytes = meta.bytes;
+      }
+    }
+
+    if (!oldestPath) break;
+    imageCacheIndex.delete(oldestPath);
+    imageCacheBytes = Math.max(0, imageCacheBytes - oldestBytes);
+    try {
+      fs.rmSync(oldestPath, { force: true });
+    } catch {
+      // Dosya yoksa indeks yine de düşmüş olsun.
+    }
+  }
+}
 
 /**
  * @returns {import('../config/index.js').ImagesRemoteConfig | null}
@@ -214,6 +303,7 @@ export async function mountImageOptimizer(app) {
   const config = getConfig();
   cacheDir = path.join(config.dirs.generated, "image-cache");
   fs.mkdirSync(cacheDir, { recursive: true });
+  loadImageCacheIndex(cacheDir);
 
   sharpModule = await tryImportFromApp(config.root, "sharp");
   if (!sharpModule) {
@@ -260,7 +350,7 @@ async function handleOptimize(req, res, remote) {
   const filePath = path.join(/** @type {string} */ (cacheDir), `${key}.webp`);
 
   try {
-    if (fs.existsSync(filePath)) {
+    if (imageCacheIndex.has(filePath)) {
       sendCached(res, filePath, remote.cacheMaxAge);
       return;
     }
@@ -286,7 +376,10 @@ async function handleOptimize(req, res, remote) {
     const tmp = `${filePath}.${process.pid}.tmp`;
     await fs.promises.writeFile(tmp, buffer);
     await fs.promises.rename(tmp, filePath);
-
+    // Yeni dosya için yer aç: en eski düşer. Az önce yazılan, tek başına
+    // tavanı aşıyorsa kalır; bir sonraki yazım onu düşürür. Silme, bu
+    // yanıtın `sendFile`'ından önce olmasın.
+    noteImageCacheFile(filePath, buffer.length);
     sendCached(res, filePath, remote.cacheMaxAge);
   } catch (error) {
     console.warn("[images.remote] optimize failed:", error);

@@ -20,12 +20,13 @@
  * `cache.redis` açıkken bu önbellek ikinci bir kademeye (L2) yaslanır. Redis'e
  * en uygun katman burası: JSON küçük, sıkıştırılmış varyant sorunu yok ve
  * kazanç doğrudan API kotasına yazılıyor — bir node'un çektiği veri hepsine
- * yeter. Redis kapalı ya da erişilemez olduğunda bu modül birebir eskisi gibi
- * çalışır.
+ * yeter. Redis yoksa aynı kayıt diske yazılır; süreç yeniden açılınca upstream
+ * yeniden çağrılmaz.
  */
 import { getConfig } from "../config/index.js";
-import { DEFAULT_DATA_CACHE } from "../config/defaults.js";
+import { DATA_CACHE_BYTE_BUDGET, DEFAULT_DATA_CACHE } from "../config/defaults.js";
 import { recordDependency } from "./cache-deps.js";
+import { diskDrop, diskDropMatching, diskGetJson, diskSetJson, diskShares } from "./disk-cache.js";
 import { invalidateHtmlByDependency } from "./html-cache.js";
 import {
   cacheKey,
@@ -38,11 +39,23 @@ import {
 } from "./redis.js";
 
 /**
- * @typedef {{ value: unknown, expiresAt: number, staleUntil: number }} DataEntry
+ * @typedef {{ value: unknown, expiresAt: number, staleUntil: number, bytes: number }} DataEntry
  */
 
 /** @type {Map<string, DataEntry>} */
 const store = new Map();
+
+/**
+ * `store` içindeki JSON gövdelerin toplamı. Tam tarama yapmamak için tutulur.
+ * Her silme `forget` üzerinden geçer; LRU sırası değişimi sayacı oynatmaz.
+ */
+let storedBytes = 0;
+
+/**
+ * Testler tahliyeyi küçük bir bütçeyle doğrular. `null` → üretim tavanı.
+ * @type {number | null}
+ */
+let byteBudgetOverride = null;
 
 /** @type {Map<string, Promise<unknown>>} */
 const inflight = new Map();
@@ -103,25 +116,83 @@ function read(key) {
 
   const now = Date.now();
   if (now >= entry.staleUntil) {
-    store.delete(key);
+    forget(key);
     return null;
   }
 
-  // LRU: erişilen girdiyi sona taşı.
+  // LRU: erişilen girdiyi sona taşı. Bayt sayacı değişmez.
   store.delete(key);
   store.set(key, entry);
 
   return { value: entry.value, stale: now >= entry.expiresAt };
 }
 
-/** Girdi sınırını aşan en eski kayıtları düşürür. */
+/**
+ * @param {unknown} value
+ * @returns {number}
+ */
+function valueBytes(value) {
+  try {
+    const json = JSON.stringify(value);
+    if (typeof json !== "string") return 0;
+    return Buffer.byteLength(json);
+  } catch {
+    // Serileşmeyen değer yine saklanır; ölçülemediği için küçük bir pay.
+    return 1024;
+  }
+}
+
+/** @returns {number} */
+function activeByteBudget() {
+  return byteBudgetOverride ?? DATA_CACHE_BYTE_BUDGET;
+}
+
+/**
+ * Store'dan silmenin tek yolu. Bayt sayacı buraya bağlı.
+ *
+ * @param {string} key
+ * @returns {boolean}
+ */
+function forget(key) {
+  const entry = store.get(key);
+  if (!entry) return false;
+  storedBytes = Math.max(0, storedBytes - (entry.bytes || 0));
+  store.delete(key);
+  return true;
+}
+
+/**
+ * Sayı tavanı veya bayt bütçesi aşılınca en eski girdiden düşer.
+ * @returns {void}
+ */
 function evict() {
   const { maxEntries } = settings();
-  while (store.size > maxEntries) {
+  const budget = activeByteBudget();
+
+  while (store.size > 0 && (store.size > maxEntries || storedBytes > budget)) {
     const oldest = store.keys().next().value;
     if (oldest === undefined) break;
-    store.delete(oldest);
+    if (!forget(oldest)) break;
   }
+}
+
+/**
+ * L1'e yazar. Bütçeden büyük tek değer saklanmaz.
+ *
+ * @param {string} key
+ * @param {DataEntry} entry
+ * @returns {boolean}
+ */
+function install(key, entry) {
+  const bytes = entry.bytes || valueBytes(entry.value);
+  entry.bytes = bytes;
+  forget(key);
+  if (bytes > activeByteBudget()) return false;
+
+  store.set(key, entry);
+  storedBytes += bytes;
+  evict();
+  return store.has(key);
 }
 
 /**
@@ -139,17 +210,20 @@ function write(key, value, ttlSeconds, staleFactor) {
     value,
     expiresAt: now + ttl,
     staleUntil: now + ttl + ttl * staleFactor,
+    bytes: valueBytes(value),
   };
 
-  store.set(key, entry);
+  // Bütçeye sığmayan değer Redis'e de yazılmaz: bir sonraki istek onu geri
+  // alıp yine reddeder. Çağıran sonuç yine `producer`'ın döndürdüğüdür.
+  if (!install(key, entry)) return;
 
   // Redis kopyası ateşle-unut: çağıran taraf beklemez. Anahtarın Redis ömrü
   // bayat penceresinin sonuna kadar, çünkü bayat veri de işe yarıyor.
   if (redisShares("data")) {
     redisSetJson(cacheKey("data", key), entry, entry.staleUntil - now);
+  } else if (diskShares("data")) {
+    diskSetJson("data", key, entry);
   }
-
-  evict();
 }
 
 /**
@@ -161,8 +235,8 @@ function write(key, value, ttlSeconds, staleFactor) {
  * @param {DataEntry} entry
  */
 function promote(key, entry) {
-  store.set(key, entry);
-  evict();
+  if (!entry.bytes) entry.bytes = valueBytes(entry.value);
+  install(key, entry);
 }
 
 /**
@@ -176,11 +250,16 @@ function promote(key, entry) {
  * @returns {Promise<DataEntry | null>}
  */
 async function readShared(key) {
-  if (!redisShares("data")) return null;
+  const onRedis = redisShares("data");
+  const onDisk = diskShares("data");
+  if (!onRedis && !onDisk) return null;
 
-  const entry = await redisGetJson(cacheKey("data", key));
+  const entry = onRedis ? await redisGetJson(cacheKey("data", key)) : await diskGetJson("data", key);
   if (!entry || typeof entry.expiresAt !== "number") return null;
-  if (Date.now() >= entry.expiresAt) return null;
+  if (Date.now() >= entry.expiresAt) {
+    if (onDisk) diskDrop("data", [key]);
+    return null;
+  }
 
   return /** @type {DataEntry} */ (entry);
 }
@@ -340,12 +419,9 @@ export function dataCache(fn, options) {
 export function clearDataCache(prefix) {
   const removed = clearLocal(prefix);
 
-  if (redisShares("data")) {
-    void redisDropMatching(
-      "data",
-      prefix === undefined ? undefined : (key) => key.startsWith(prefix),
-    );
-  }
+  const match = prefix === undefined ? undefined : (key) => key.startsWith(prefix);
+  if (redisShares("data")) void redisDropMatching("data", match);
+  else if (diskShares("data")) void diskDropMatching("data", match);
 
   // Yayın yerel silmeden **sonra** yapılır; diğer node'lar kendi anahtarlarını
   // kendileri tarar, çünkü hangi anahtarın nerede sıcak olduğu node'a bağlı.
@@ -368,10 +444,11 @@ function clearLocal(prefix) {
   if (prefix === undefined) {
     removed.push(...store.keys());
     store.clear();
+    storedBytes = 0;
   } else {
-    for (const key of store.keys()) {
+    for (const key of [...store.keys()]) {
       if (key.startsWith(prefix)) {
-        store.delete(key);
+        forget(key);
         removed.push(key);
       }
     }
@@ -386,7 +463,7 @@ function clearLocal(prefix) {
 onCacheEvent((event) => {
   if (event.type === "data:drop") {
     if (typeof event.key !== "string") return;
-    store.delete(event.key);
+    forget(event.key);
     invalidateHtmlByDependency([event.key]);
     return;
   }
@@ -406,7 +483,7 @@ onCacheEvent((event) => {
  * @returns {boolean} Girdi var mıydı.
  */
 export function dropDataCacheKey(key) {
-  const existed = store.delete(key);
+  const existed = forget(key);
 
   // Silme, girdi bu node'da olmasa da yayılır: anahtar başka bir node'da ya da
   // yalnızca Redis'te sıcak olabilir.
@@ -414,6 +491,8 @@ export function dropDataCacheKey(key) {
 
   if (redisShares("data")) {
     void redisDropMatching("data", (candidate) => candidate === key);
+  } else if (diskShares("data")) {
+    diskDrop("data", [key]);
   }
 
   publishCacheEvent({ type: "data:drop", key });
@@ -424,6 +503,18 @@ export function dropDataCacheKey(key) {
 /** @returns {number} */
 export function getDataCacheSize() {
   return store.size;
+}
+
+/**
+ * Bellek freninin bayt tavanını geçici olarak değiştirir. Testler LRU
+ * tahliyesini küçük bir değerle doğrular; `null` üretim tavanına döner.
+ *
+ * @param {number | null} bytes
+ * @returns {void}
+ */
+export function setDataCacheByteBudget(bytes) {
+  byteBudgetOverride = bytes == null ? null : bytes;
+  evict();
 }
 
 /**

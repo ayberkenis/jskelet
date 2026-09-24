@@ -10,6 +10,7 @@
  */
 import fs from "node:fs";
 import path from "node:path";
+import process from "node:process";
 import { negotiateEncoding } from "./compression.js";
 import { IMMUTABLE_CACHE } from "../../config/defaults.js";
 
@@ -31,6 +32,33 @@ const CONTENT_TYPES = {
  */
 export function staticPrecompressed(publicDir) {
   const root = path.resolve(publicDir);
+  // Hash'li `/assets/` süreç ömründe değişmez. Üretimde olumlu ve olumsuz
+  // `stat` sonucu bellekte kalır; dev'de watch hash değiştirdiği için yok.
+  const cacheStats = process.env.NODE_ENV !== "development";
+  /** @type {Map<string, number | null>} yol → bayt, `null` → dosya yok */
+  const statCache = new Map();
+
+  /**
+   * @param {string} file
+   * @returns {number | null}
+   */
+  function fileSize(file) {
+    if (cacheStats && statCache.has(file)) {
+      return /** @type {number | null} */ (statCache.get(file));
+    }
+
+    /** @type {number | null} */
+    let size = null;
+    try {
+      const stat = fs.statSync(file);
+      if (stat.isFile()) size = stat.size;
+    } catch {
+      size = null;
+    }
+
+    if (cacheStats) statCache.set(file, size);
+    return size;
+  }
 
   return (req, res, next) => {
     if (req.method !== "GET" && req.method !== "HEAD") {
@@ -67,23 +95,16 @@ export function staticPrecompressed(publicDir) {
     }
 
     const file = `${target}${encoding === "br" ? ".br" : ".gz"}`;
+    const size = fileSize(file);
 
-    let stat;
-    try {
-      stat = fs.statSync(file);
-    } catch {
-      next();
-      return;
-    }
-
-    if (!stat.isFile()) {
+    if (size == null) {
       next();
       return;
     }
 
     res.setHeader("Content-Type", type);
     res.setHeader("Content-Encoding", encoding);
-    res.setHeader("Content-Length", String(stat.size));
+    res.setHeader("Content-Length", String(size));
     res.setHeader("Vary", "Accept-Encoding");
 
     if (req.path.startsWith("/assets/")) {

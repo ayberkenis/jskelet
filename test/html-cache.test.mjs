@@ -7,7 +7,9 @@ import {
   getHtmlCacheSize,
   invalidateHtmlCache,
   isHtmlCacheFresh,
+  isHtmlCacheKeyFresh,
   noteHtmlCacheGrowth,
+  rememberHtmlEncoding,
   setHtmlCacheByteBudget,
   sweepEarlyExpiry,
   takeInvalidatedPaths,
@@ -291,6 +293,25 @@ test("sweepEarlyExpiry soft-stales early entries for the warm queue", async () =
   assert.equal(hit.stale, true, "soft-bayat: ziyaretçi MISS ödemez");
 });
 
+test("sweepEarlyExpiry marks at most four entries, soonest expiry first", async () => {
+  const producer = async () => ({ html: "x", status: 200 });
+  const paths = ["/s0", "/s1", "/s2", "/s3", "/s4", "/s5"];
+
+  for (const pathname of paths) {
+    await withHtmlCache(pathname, 1, producer);
+  }
+
+  // lead 250 ms, TTL 1 s → erken pencere ~750 ms'de açılır.
+  await sleep(800);
+  assert.equal(sweepEarlyExpiry(), 4);
+  assert.deepEqual(takeInvalidatedPaths(), ["/s0", "/s1", "/s2", "/s3"]);
+  assert.equal(isHtmlCacheKeyFresh("/s0"), false);
+  assert.equal(isHtmlCacheKeyFresh("/s4"), true);
+
+  assert.equal(sweepEarlyExpiry(), 2);
+  assert.deepEqual(takeInvalidatedPaths(), ["/s4", "/s5"]);
+});
+
 test("freshness matches a real cache key, including the trailing question mark", async () => {
   await withHtmlCache("/plain?", 60, async () => ({ html: "y", status: 200 }));
   await withHtmlCache("h=investvio.com|/instruments?", 60, async () => ({
@@ -336,4 +357,18 @@ test("compressed bodies count toward the byte budget", async () => {
   result.encoded.set("br", Buffer.alloc(20));
   noteHtmlCacheGrowth();
   assert.equal(getHtmlCacheSize(), 0);
+});
+
+test("only one compressed encoding is retained", async () => {
+  setHtmlCacheByteBudget(25);
+  const result = await withHtmlCache("/a", 60, async () => ({
+    html: "a".repeat(10),
+    status: 200,
+  }));
+
+  rememberHtmlEncoding(result.encoded, "br", Buffer.alloc(10));
+  rememberHtmlEncoding(result.encoded, "gzip", Buffer.alloc(10));
+
+  assert.deepEqual([...result.encoded.keys()], ["gzip"]);
+  assert.equal(getHtmlCacheSize(), 1);
 });

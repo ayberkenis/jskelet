@@ -559,7 +559,7 @@ icons: {
 | `allowHosts` | `string[]` | `[]` | Çekilebilecek host'lar. `*.cdn.example.com` sonek jokerini destekler. |
 | `path` | `string` | `/_jskelet/image` | Optimizer GET yolu. |
 | `maxWidth` | `number` | `1920` | `w` üst sınırı. |
-| `cacheMaxAge` | `number` | `2592000` (30 gün) | Yanıt `Cache-Control` max-age (saniye). Disk önbelleği `.jskelet/image-cache/`. |
+| `cacheMaxAge` | `number` | `2592000` (30 gün) | Yanıt `Cache-Control` max-age (saniye). Disk önbelleği `.jskelet/image-cache/`; 256 MB'yi geçince en eski dosya düşer. |
 | `fetchTimeoutMs` | `number` | `10000` | Upstream fetch zaman aşımı. |
 | `maxBytes` | `number` | `10485760` (10 MiB) | Upstream gövde üst sınırı. |
 
@@ -773,6 +773,7 @@ yükseltmek belleği hızla tüketir; on binlerce yollu bir siteyi buradan çöz
 
 **Tavan 800.** Daha yükseği yüklemede uyarıyla 800'e çekilir. Süreç içi HTML +
 sıkıştırılmış gövde ayrıca 256 MB'yi geçemez; bu bütçe config'den yükseltilmez.
+Sıkıştırılmış kopya tektir (brotli veya gzip).
 
 ### `cache().data`
 
@@ -780,7 +781,7 @@ Upstream veri önbelleği (`withDataCache`). Ayrıntı: [06-cache.md](./06-cache
 
 | Alan | Tip | Varsayılan | Anlamı |
 | --- | --- | --- | --- |
-| `maxEntries` | `number` | `10000` | LRU girdi sınırı. JSON, HTML'e göre onlarca kat küçük olduğu için sınır yüksek. **Tavan 20000**; üstü uyarıyla kesilir. |
+| `maxEntries` | `number` | `10000` | LRU girdi sınırı. JSON, HTML'e göre onlarca kat küçük olduğu için sınır yüksek. **Tavan 20000**; üstü uyarıyla kesilir. Süreç içi JSON ayrıca **64 MB**'yi geçemez; bu bütçe config'den yükseltilmez. |
 | `staleFactor` | `number` | `10` | TTL dolduktan sonra girdinin kaç TTL boyunca daha kullanılabileceği. `0` → bayat servis yok. |
 
 ### `cache().trackUpstream`
@@ -882,15 +883,17 @@ redis: {
 
 Kalıcı log sink'leri. Varsayılan her şey kapalı: stdout ve admin paneli ring'i
 mevcut davranışını korur. Açıldığında HTTP access log ile framework olayları
-(`event` / `error`) NDJSON satırları olarak dosyaya ve/veya S3'e yazılır.
+(`event` / `error`) NDJSON olarak dosyaya, `drainLog`'a ve/veya S3'e gider.
+Dosya parçaları zstd'dir ve en fazla 5 dakika durur; süresi dolan en eski
+parça silinir.
 
 | Alan | Tip | Varsayılan | Anlamı |
 | --- | --- | --- | --- |
 | `console` | `boolean` | `true` | Runtime `http` / `event` / `error` satırları stdout'a basılsın mı (banner/build satırları etkilenmez) |
 | `kinds` | `("http" \| "event" \| "error")[]` | hepsi | Sink'lere giden kayıt türleri |
-| `file.enabled` | `boolean` | `false` | Günlük dosya sink'i |
-| `file.dir` | `string` | `"logs"` | Proje köküne göre dizin; `jskelet-YYYY-MM-DD.log` |
-| `file.rotate` | `"daily"` | `"daily"` | Yalnızca günlük rotasyon |
+| `file.enabled` | `boolean` | `false` | Dosya spool'u. Satırlar ~1 sn veya 32 satırda bir `jskelet-<zaman>-<n>.ndjson.zst` olur. En fazla 5 dakika tutulur; en eski parça silinir. |
+| `file.dir` | `string` | `"logs"` | Proje köküne göre dizin |
+| `drainLog` | `(chunk) => void \| Promise<void>` | `null` | Mühürlenen zstd parçasını (`{ body, encoding, bytes, lines, at }`) istenen yere aktarır. Hata uyarı basar, siteyi düşürmez. Dosya kapalıysa diske yazılmaz. |
 | `s3.enabled` | `boolean` | `false` | S3 batch PutObject sink'i |
 | `s3.bucket` | `string \| null` | `null` | Bucket ya da `bucket/prefix/…` yolu; `JSKELET_LOG_BUCKET` ezer |
 | `s3.prefix` | `string` | `"jskelet/logs/"` | Nesne anahtarı öneki (yolda verilmediyse) |
@@ -910,6 +913,9 @@ logs: {
   console: true,
   kinds: ["http", "error"],
   file: { enabled: true, dir: "logs" },
+  async drainLog(chunk) {
+    // chunk.body zstd NDJSON. Dosya 5 dakika sonra silinir; kalıcı kopya burada.
+  },
   s3: {
     enabled: process.env.NODE_ENV === "production",
     bucket: process.env.JSKELET_LOG_BUCKET,

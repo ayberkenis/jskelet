@@ -8,6 +8,24 @@ one is listed under a **Breaking** heading.
 
 ## [Unreleased]
 
+### Changed
+
+- Shared cache entries of 1 KB or more are stored as brotli (`JSK\x01`
+  prefix) instead of plain JSON. With Redis off, the same body is written
+  under `.jskelet/cache/<buildId>/` so a restart can skip the render. The
+  in-process cache is unchanged, smaller records stay JSON, and existing
+  plain JSON values are still read.
+- Early HTML refresh no longer marks every due page in one second. A pass
+  soft-stales at most four entries (soonest expiry first), and the expiry
+  warmer refetches them at one request at a time, two per second, instead of
+  the classic prewarm rate.
+- The data cache stops growing past 64 MB of stored JSON. A single value
+  larger than that is not stored; the caller still receives it. HTML cache
+  entries keep the raw body plus only the compressed encoding last requested.
+- In production, precompressed asset `stat` results (hit or miss) stay in
+  memory for the process lifetime. The remote image disk cache drops the
+  oldest file once `.jskelet/image-cache/` passes 256 MB.
+
 ### Added
 
 - `robots.txt` responses gain a trailing JSkelet note that disallows framework
@@ -18,6 +36,12 @@ one is listed under a **Breaking** heading.
 
 ### Breaking
 
+- File logs are no longer daily plain-text files. With `logs.file.enabled`,
+  lines are sealed as zstd chunks (`jskelet-<time>-<n>.ndjson.zst`) and kept
+  for at most 5 minutes; the oldest expired chunk is deleted. `logs.drainLog`
+  receives each sealed chunk (`{ body, encoding: "zstd", bytes, lines, at }`)
+  so the app can forward it. A throwing hook warns and leaves the site up.
+  With the file sink off, `drainLog` still runs and nothing is written to disk.
 - Dev gate is opt-in
   `DEV_TOKEN` in the environment no longer locks the site. Require the token
   only with `devGate: true` or `DEV_GATE=1`. `DEV_GATE=0` turns the gate off

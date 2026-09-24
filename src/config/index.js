@@ -97,6 +97,10 @@ const CONFIG_FILE = "jskelet.config.mjs";
  *   basılsın mı (banner/build satırları etkilenmez).
  * @property {LogKind[]} kinds Sink'lere giden kayıt türleri.
  * @property {{ enabled: boolean, dir: string, rotate: "daily" }} file
+ *   `rotate` durur; dosya parçaları en fazla 5 dakika tutulur.
+ * @property {import('../server/logs/file-sink.js').DrainLog | null} drainLog
+ *   Mühürlenen zstd parçasını uygulamanın seçtiği yere aktarır. Hata
+ *   siteyi düşürmez.
  * @property {{ enabled: boolean, bucket: string | null, prefix: string,
  *   region: string | null, endpoint: string | null, flushIntervalMs: number,
  *   maxBatch: number }} s3
@@ -578,6 +582,14 @@ export function normalizeLogs(raw) {
     envText(process.env.JSKELET_S3_REGION) ??
     "auto";
 
+  /** @type {import('../server/logs/file-sink.js').DrainLog | null} */
+  let drainLog = null;
+  if (typeof source.drainLog === "function") {
+    drainLog = source.drainLog;
+  } else if (source.drainLog != null) {
+    console.warn("[config] logs.drainLog must be a function, ignoring it");
+  }
+
   const credentials = readS3CredentialsFromEnv();
   // `JSKELET_LOG_BUCKET` (veya S3 bucket) + credential varsa config'te
   // `enabled: true` unutulmuş olsa bile aç. Açık `enabled: false` ezer.
@@ -603,6 +615,7 @@ export function normalizeLogs(raw) {
           : DEFAULT_LOGS.file.dir,
       rotate: "daily",
     },
+    drainLog,
     s3: {
       enabled,
       bucket: bucketPath.bucket,

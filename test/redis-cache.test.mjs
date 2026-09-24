@@ -5,6 +5,7 @@
  * davranışın hiç değişmemesi.
  */
 import assert from "node:assert/strict";
+import zlib from "node:zlib";
 import { afterEach, test } from "node:test";
 import {
   clearHtmlCache,
@@ -36,7 +37,7 @@ const PREFIX = "_jskelet:default:test";
  * Bellek içi sahte istemci. Yalnızca bu katmanın kullandığı komutlar var.
  */
 function createFakeRedis() {
-  /** @type {Map<string, string>} */
+  /** @type {Map<string, string | Buffer>} */
   const store = new Map();
   /** @type {any[]} */
   const published = [];
@@ -47,6 +48,12 @@ function createFakeRedis() {
     /** @param {string} key */
     async get(key) {
       return store.has(key) ? store.get(key) : null;
+    },
+    /** @param {string} key */
+    async getBuffer(key) {
+      const value = store.get(key);
+      if (value == null) return null;
+      return Buffer.isBuffer(value) ? value : Buffer.from(value);
     },
     /** @param {string} key @param {string} value */
     async set(key, value) {
@@ -103,6 +110,39 @@ test("a cached page is written to the shared tier", async () => {
   assert.deepEqual(payload.deps, []);
   assert.ok(payload.expiresAt > Date.now(), "mutlak zamanlar taşınmalı");
   assert.ok(payload.staleUntil > payload.expiresAt);
+});
+
+test("a page larger than 1 KB is stored as brotli and still promotes", async () => {
+  const fake = createFakeRedis();
+  setRedisClientForTests(fake);
+
+  const html = `<p>${"merhaba ".repeat(400)}</p>`;
+  await withHtmlCache("/buyuk?", 60, async () => ({ html, status: 200 }));
+
+  const key = `${PREFIX}:html:/buyuk?`;
+  let raw = fake.store.get(key);
+  for (let i = 0; raw === undefined && i < 50; i += 1) {
+    await sleep(10);
+    raw = fake.store.get(key);
+  }
+
+  assert.ok(Buffer.isBuffer(raw));
+  assert.equal(raw[0], 0x4a);
+  assert.equal(raw[1], 0x53);
+  assert.equal(raw[2], 0x4b);
+  assert.equal(raw[3], 0x01);
+  const payload = JSON.parse(zlib.brotliDecompressSync(raw.subarray(4)).toString("utf8"));
+  assert.equal(payload.html, html);
+  assert.ok(raw.length < Buffer.byteLength(JSON.stringify(payload)));
+
+  setRedisClientForTests(null);
+  clearHtmlCache();
+  setRedisClientForTests(fake);
+
+  const hit = await withHtmlCache("/buyuk?", 60, async () => {
+    throw new Error("render çalışmamalıydı");
+  });
+  assert.equal(hit.html, html);
 });
 
 test("compressed bodies stay local unless storeEncoded is on", async () => {

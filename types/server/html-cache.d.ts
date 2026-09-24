@@ -144,9 +144,10 @@ export declare function dropHtmlCacheKey(key: string): boolean;
  * açılmaz.
  *
  * @param {string} [onlyHost]
- * @returns {{ path: string, host: string }[]}
+ * @returns {{ key: string, path: string, host: string }[]}
  */
 export declare function takeInvalidatedTargets(onlyHost?: string): {
+    key: string;
     path: string;
     host: string;
 }[];
@@ -191,9 +192,31 @@ export declare function isHtmlCacheFresh(pathname: string, req?: {
     get?: (name: string) => string | undefined;
 }): boolean;
 /**
+ * Bu anahtarın girdisi hâlâ taze mi? Süre dolumu ısıtması anahtarı bildiği
+ * için yol taraması yapmaz. Soft-bayat (`expiresAt === 0`) taze sayılmaz:
+ * ziyaretçi arada yenilediyse yeni `expiresAt` taze döner ve HTTP atlanır.
+ *
+ * @param {string} key
+ * @returns {boolean}
+ */
+export declare function isHtmlCacheKeyFresh(key: string): boolean;
+/**
+ * Girdide en fazla bir sıkıştırılmış gövde durur. Yeni kodlama eskisinin
+ * yerini alır; ham HTML kalır. Bayt sayacı `noteHtmlCacheGrowth` ile işlenir.
+ *
+ * @param {Map<string, Buffer>} encoded
+ * @param {string} encoding
+ * @param {Buffer} buffer
+ * @returns {void}
+ */
+export declare function rememberHtmlEncoding(encoded: Map<string, Buffer>, encoding: string, buffer: Buffer): void;
+/**
  * Erken tazeleme penceresine girmiş (veya TTL'i dolmuş) trafiksiz girdileri
  * soft-bayatlatır ve ısıtma kuyruğuna alır. HTTP ısıtması producer'sız
  * çalıştığı için soft-bayat şart: taze HIT yenileme tetiklemez.
+ *
+ * Tur başına en fazla `EARLY_SWEEP_MARK_BUDGET` girdi. Önce süresi en yakın
+ * dolacak olan; kota dolunca kalanlar bir sonraki tura kalır.
  *
  * @returns {number} İşaretlenen girdi sayısı.
  */

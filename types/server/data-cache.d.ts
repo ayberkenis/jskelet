@@ -91,6 +91,14 @@ export declare function dropDataCacheKey(key: string): boolean;
 /** @returns {number} */
 export declare function getDataCacheSize(): number;
 /**
+ * Bellek freninin bayt tavanını geçici olarak değiştirir. Testler LRU
+ * tahliyesini küçük bir değerle doğrular; `null` üretim tavanına döner.
+ *
+ * @param {number | null} bytes
+ * @returns {void}
+ */
+export declare function setDataCacheByteBudget(bytes: number | null): void;
+/**
  * Süreç başından beri biriken sayaçlar. `produced` kotaya yazılan tek sayıdır:
  * geri kalan her şey upstream'e hiç gitmemiş bir okuma.
  *

@@ -36,7 +36,7 @@ let accessMounted = false;
  */
 export function shouldMountAccessLog(logs) {
   if (!logs.kinds.includes("http")) return false;
-  if (logs.file.enabled || logs.s3.enabled) return true;
+  if (logs.file.enabled || logs.s3.enabled || logs.drainLog) return true;
   return logs.console && process.env.NODE_ENV !== "development";
 }
 
@@ -61,8 +61,15 @@ export async function configureLogs(config) {
   /** @type {LogSink[]} */
   const next = [];
 
-  if (logs.file.enabled) {
-    next.push(createFileSink({ root: config.root, dir: logs.file.dir }));
+  if (logs.file.enabled || logs.drainLog) {
+    next.push(
+      createFileSink({
+        root: config.root,
+        dir: logs.file.dir,
+        persist: logs.file.enabled,
+        drainLog: logs.drainLog,
+      }),
+    );
   }
 
   if (logs.s3.enabled) {

@@ -214,9 +214,11 @@ leadMs = min(max(produceMs * 2, 250ms), ttl / 2)
 
 So a slow page does not fall back to a cold render the moment TTL ends: fresh
 HTML is usually written before `expiresAt`. With no traffic, a sweeper
-soft-stales the entry in the same window and queues it for warming;
-`startPrewarm` (unless `PREWARM=0`) drains that queue over HTTP — even when
-classic `prewarmPaths` is absent.
+soft-stales the entry in the same window and queues it for warming. One pass
+marks at most four entries (soonest expiry first); the rest wait for later
+seconds. `startPrewarm` (unless `PREWARM=0`) drains that queue over HTTP —
+even when classic `prewarmPaths` is absent — but the drain does not use the
+classic tour's `rps: 0`. It runs one request at a time, at most two per second.
 
 A failure of the refresh inside the stale window does not affect the request:
 the old HTML stays valid for the whole window and the error is only logged
@@ -234,7 +236,8 @@ The store is an LRU: an accessed entry is moved to the end, and once the limit
 (`cache().maxEntries`, 500 by default) is exceeded the oldest is evicted. Config
 may ask for more than 500; it **cannot exceed 800** — a higher value is clamped
 to 800 with a warning. Separately, in-process HTML strings plus compressed
-bodies **cannot exceed 256 MB**. A fat page or a `vary.host` copy that is still
+bodies **cannot exceed 256 MB**. The compressed copy is singular: brotli or
+gzip, whichever was requested last. The raw HTML stays. A fat page or a `vary.host` copy that is still
 under the count limit is evicted by this budget too. A single page larger than
 256 MB is not stored; that response is still sent.
 
@@ -379,6 +382,10 @@ Details:
   version or page number go into the key (`news:en:v2:${slug}`).
 - When the TTL is `0` the cache is disabled and the `producer` runs on every
   call — enough to switch a setting off temporarily.
+- **Byte ceiling is 64 MB.** The entry count does not hold fat JSON; in-process
+  bodies cannot pass this ceiling and config cannot raise it. A single value
+  larger than the ceiling is not stored; the caller still receives it.
+  Eviction drops the oldest entry.
 
 The management surface:
 
@@ -852,6 +859,21 @@ build has not been run the id is `dev`.
 `namespace` separates several applications sharing one Redis. The event channel
 deliberately does **not** carry `buildId`: during a deploy the old and the new
 version run side by side and a purge has to reach both.
+
+HTML and data entries of 1 KB or more are not stored as plain JSON. The shared
+tier receives a brotli body prefixed with `JSK\x01` (quality 5, text mode — the
+same settings as response compression). L1 still holds the decoded value;
+compression runs only when sharing after an L1 miss, and it does not delay the
+response. Smaller records stay plain JSON, and older plain JSON records are
+still read. zstd is not used: `node:zlib` gained it in 22.15, while the engine
+range is `>=22`.
+
+When Redis is off, or cannot connect, the same body is written under
+`.jskelet/cache/<buildId>/`. After a restart L1 is empty, but a fresh file
+skips the render. This is single-machine: several instances do not share the
+directory, and a cluster still wants Redis. A new `buildId` deletes the previous
+directory on the next write. `clearHtmlCache()` and invalidation remove the
+file too.
 
 ### Trade-offs worth knowing
 
