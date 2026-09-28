@@ -24,12 +24,31 @@ export type OgCardOptions = {
      */
     accent?: string;
 };
+export type OgFontFace = {
+    /**
+     * Font dosyası. PNG için `ttf` veya `otf`
+     * (librsvg `woff` / `woff2` dosyasından kare basar). Uygulama köküne
+     * göreli ya da mutlak.
+     */
+    path: string;
+    /**
+     * SVG `font-family` adı. Dosyanın içindeki adla
+     * aynı olmak zorunda değil.
+     */
+    family: string;
+    /**
+     * Tek ağırlık (`700`) ya da aralık (`"100 900"`).
+     */
+    weight?: number | string;
+    style?: 'normal' | 'italic' | 'oblique';
+};
 export type OgImageOptions = OgCardOptions & {
     svg?: string;
     width?: number;
     height?: number;
     format?: 'png' | 'svg';
     cacheControl?: string;
+    fonts?: OgFontFace[];
 };
 export type OgImageResult = {
     body: Buffer;
@@ -48,12 +67,26 @@ export type OgImageResult = {
  * @property {string} [accent] Sol şerit rengi
  */
 /**
+ * OG metnine gömülen yüz. `path` + `family` yeter. PNG, dosyanın içindeki
+ * ağırlığı kullanır; `weight` yalnızca SVG yanıtındaki `@font-face` içindir.
+ *
+ * @typedef {object} OgFontFace
+ * @property {string} path Font dosyası. PNG için `ttf` veya `otf`
+ *   (librsvg `woff` / `woff2` dosyasından kare basar). Uygulama köküne
+ *   göreli ya da mutlak.
+ * @property {string} family SVG `font-family` adı. Dosyanın içindeki adla
+ *   aynı olmak zorunda değil.
+ * @property {number | string} [weight] Tek ağırlık (`700`) ya da aralık (`"100 900"`).
+ * @property {'normal' | 'italic' | 'oblique'} [style]
+ */
+/**
  * @typedef {OgCardOptions & {
  *   svg?: string,
  *   width?: number,
  *   height?: number,
  *   format?: 'png' | 'svg',
  *   cacheControl?: string,
+ *   fonts?: OgFontFace[],
  * }} OgImageOptions
  */
 /**
@@ -79,15 +112,23 @@ export declare function escapeXml(value: unknown): string;
 export declare function wrapText(text: string, maxChars: number, maxLines: number): string[];
 /**
  * Hazır kart SVG'si. Uygulama kendi SVG'sini vermek isterse `svg` kullanır.
- * @param {OgCardOptions & { width?: number, height?: number }} options
+ * @param {OgCardOptions & { width?: number, height?: number, fontFamily?: string }} options
  * @returns {string}
  */
 export declare function buildOgSvg(options?: OgCardOptions & {
     width?: number;
     height?: number;
+    fontFamily?: string;
 }): string;
 /**
  * SVG veya kart alanlarından PNG/SVG gövde üretir.
+ *
+ * PNG'de `ttf` / `otf` fontconfig'e eklenir ve kart bu `family` adlarını
+ * kullanır. `woff` / `woff2` yalnızca sharp yokken (ya da `format: "svg"`)
+ * `@font-face` olarak gömülür; librsvg onlardan kare basar. Dosya okunamazsa
+ * görsel yine üretilir, o yüz atlanır. Çalışma imajında `fontconfig` paketi
+ * gerekir.
+ *
  * @param {OgImageOptions} [options]
  * @returns {Promise<OgImageResult>}
  */
@@ -135,10 +176,12 @@ export declare function ogHandler(factory: (ctx: {
 export declare class ImageResponse {
     #private;
     /**
-     * @param {string | OgCardOptions} element
+     * @param {string | (OgCardOptions & { fonts?: OgFontFace[] })} element
      * @param {Omit<OgImageOptions, keyof OgCardOptions | 'svg'> & { width?: number, height?: number }} [init]
      */
-    constructor(element: string | OgCardOptions, init?: Omit<OgImageOptions, keyof OgCardOptions | 'svg'> & {
+    constructor(element: string | (OgCardOptions & {
+        fonts?: OgFontFace[];
+    }), init?: Omit<OgImageOptions, keyof OgCardOptions | 'svg'> & {
         width?: number;
         height?: number;
     });

@@ -582,6 +582,39 @@ app.get("/og/custom.png", async (req, res) => {
 });
 ```
 
+### Fontlar
+
+`bookworm-slim` gibi ince imajlarda sistem fontu yoktur. Hazır kart
+`system-ui` istediği için librsvg her sitede aynı boş kareleri basar.
+`fonts`, `ttf` veya `otf` dosyasını fontconfig üzerinden librsvg'ye
+bağlar. `family` kart metninin kullandığı addır; dosyanın içindeki adla
+aynı olmak zorunda değildir. Ham `svg`'de kendi `font-family` değerinizi
+bırakın ve aynı `family` adını buraya verin — `@font-face` bloğu yazmayın.
+librsvg onu yok sayar.
+
+```js
+return {
+  title: post.title,
+  description: post.excerpt,
+  siteName: "Blog",
+  fonts: [
+    { path: "fonts/Inter-Regular.ttf", family: "Inter" },
+    { path: "fonts/Inter-Bold.ttf", family: "Inter" },
+  ],
+};
+```
+
+`path` uygulama köküne görelidir; mutlak yol da geçerlidir. PNG `ttf` ve
+`otf` okur. librsvg `@font-face`'i yok sayar; `woff` / `woff2` boş kare
+basar (yanıt SVG ise bu dosyalar yine gömülür, tarayıcı kullanabilir).
+`weight` opsiyoneldir; her dosya içindeki ağırlığını korur, başlık gerçekten
+kalın olsun diye regular ve bold dosyalarını birlikte verin. Dosya yoksa
+görsel yine üretilir, o yüz atlanır.
+
+Çalışma imajında `fontconfig` paketi yine gerekir: sharp'ın SVG metin çizimi
+onsuz yüzleri yüklemez. Sistem font paketi (`fonts-dejavu` gibi) gerekmez.
+PNG için `sharp` çalışma bağımlılığıdır.
+
 Varsayılan başlıklar (süreler HTML ayarına bağlı değildir):
 
 ```

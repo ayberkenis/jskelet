@@ -136,7 +136,10 @@ Notlar:
   optimizasyonu için. `--omit=dev` ile dışarıda kalır (devDependency olarak
   kurulmuşsa). **`images.remote` açıksa** sharp runtime bağımlılığıdır —
   production `dependencies`'e alın ya da runtime imajında ayrıca kurun; yoksa
-  optimizer kaynak URL'ye 302 yönlendirir.
+  optimizer kaynak URL'ye 302 yönlendirir. **Dinamik OG PNG** de sharp ister
+  ve imajda `fontconfig` paketi gerekir (`apt-get install -y fontconfig`).
+  `ogImage({ fonts })` site fontunu gömer; sistem font paketi şart değildir.
+  `fontconfig` yoksa metin boş kare basar.
 - `jskelet start`ı `npx` olmadan çağırmak isterseniz
   `CMD ["node", "node_modules/jskelet/bin/jskelet.mjs", "start"]` de çalışır.
 

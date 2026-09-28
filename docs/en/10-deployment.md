@@ -138,6 +138,10 @@ Notes:
   as a devDependency). **If `images.remote` is enabled**, sharp is a runtime
   dependency — move it to production `dependencies` or install it in the
   runtime image; otherwise the optimizer 302-redirects to the source URL.
+  **Dynamic OG PNG** needs sharp too, and the image needs the `fontconfig`
+  package (`apt-get install -y fontconfig`). `ogImage({ fonts })` embeds the
+  site's own faces; a system font package is not required. Without
+  `fontconfig`, text renders as empty boxes.
 - If you would rather call `jskelet start` without `npx`,
   `CMD ["node", "node_modules/jskelet/bin/jskelet.mjs", "start"]` works too.
 

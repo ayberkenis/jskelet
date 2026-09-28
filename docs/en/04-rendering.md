@@ -588,6 +588,39 @@ app.get("/og/custom.png", async (req, res) => {
 });
 ```
 
+### Fonts
+
+A slim image such as `bookworm-slim` has no system fonts. The built-in card
+asks for `system-ui`, so librsvg draws the same empty boxes on every site.
+`fonts` points librsvg at your `ttf` or `otf` through fontconfig. `family` is
+the name the card text uses; it does not have to be the name stored in the
+file. On a raw `svg`, keep your own `font-family` and pass the same `family`
+here — do not write an `@font-face` block. librsvg ignores it.
+
+```js
+return {
+  title: post.title,
+  description: post.excerpt,
+  siteName: "Blog",
+  fonts: [
+    { path: "fonts/Inter-Regular.ttf", family: "Inter" },
+    { path: "fonts/Inter-Bold.ttf", family: "Inter" },
+  ],
+};
+```
+
+`path` is relative to the application root; an absolute path is accepted too.
+PNG rasterization reads `ttf` and `otf`. librsvg ignores `@font-face` and
+draws empty boxes from `woff` / `woff2` (those files are still embedded when
+the response is SVG, because the browser can use them). `weight` is optional;
+each file keeps the weight stored inside it, so pass regular and bold files
+if the title should be a real bold. A missing file is skipped and the image
+is still produced.
+
+The runtime image still needs the `fontconfig` package: sharp's SVG text
+drawing will not load the faces without it. A system font package (such as
+`fonts-dejavu`) is not required. PNG needs `sharp` as a runtime dependency.
+
 Default headers (the durations are not tied to the HTML setting):
 
 ```

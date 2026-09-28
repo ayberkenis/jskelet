@@ -28,6 +28,11 @@ one is listed under a **Breaking** heading.
 
 ### Added
 
+- `ogImage({ fonts })` registers each `ttf` or `otf` (`path` and `family`)
+  with fontconfig so card and raw-SVG text use the site's own files. A slim
+  image still needs the `fontconfig` package. `woff` / `woff2` are not drawn
+  by the rasterizer (empty boxes); they are embedded only when the response
+  is SVG.
 - `robots.txt` responses gain a trailing JSkelet note that disallows framework
   endpoints (`/_jskelet/`, `/__jskelet/`, `/_fragment/`, plus a custom admin,
   image, handoff, or dev path when it sits outside those prefixes). Every
