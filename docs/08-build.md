@@ -343,7 +343,8 @@ orijinal dosyaya döner. Watch turunda hiç çalışmaz.
 `images.remote.allowHosts` verilirse `createApp` `/_jskelet/image` ucunu
 mount eder. CMS / CDN kapakları build'e girmediği için `image()` bu host'lardaki
 URL'leri `?url=&w=` biçiminde yeniden yazar; uç sharp ile webp üretir ve
-`.jskelet/image-cache/` altına yazar. Upstream fetch redirect'leri elle takip
+`.jskelet/image-cache/` altına yazar. Dizin 256 MB'yi geçince en eski dosya
+düşer. Upstream fetch redirect'leri elle takip
 edilir: her hop allowlist + private IP / DNS kontrolünden geçer (açık redirect
 SSRF kapalı). Ayrıntı: [07-yapilandirma.md](./07-yapilandirma.md).
 

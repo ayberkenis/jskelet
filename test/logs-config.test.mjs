@@ -116,4 +116,11 @@ test("normalizeLogs: console false and file dir", () => {
   assert.equal(logs.file.enabled, true);
   assert.equal(logs.file.dir, "var/log");
   assert.equal(logs.file.rotate, "daily");
+  assert.equal(logs.drainLog, null);
+});
+
+test("normalizeLogs: drainLog must be a function", () => {
+  const drainLog = () => {};
+  assert.equal(normalizeLogs({ drainLog }).drainLog, drainLog);
+  assert.equal(normalizeLogs({ drainLog: "nope" }).drainLog, null);
 });

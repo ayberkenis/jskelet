@@ -22,6 +22,7 @@ import crypto from "node:crypto";
 import { DEFAULT_REDIS } from "../config/defaults.js";
 import { tryImportFromApp } from "../build/resolve-peer.mjs";
 import { getBuildId } from "./assets.js";
+import { decodeCacheValue, encodeCacheValue } from "./cache-blob.js";
 
 /**
  * @typedef {import('../config/index.js').RedisConfig} RedisConfig
@@ -289,9 +290,12 @@ export async function redisGetJson(key) {
   if (!usable()) return null;
 
   try {
-    const raw = await client.get(key);
+    // `get` dizge döndürür ve ikili gövdeyi bozar. `getBuffer` yoksa (eski
+    // sahte istemci) düz JSON hâlâ `get` ile okunur.
+    const raw =
+      typeof client.getBuffer === "function" ? await client.getBuffer(key) : await client.get(key);
     noteSuccess();
-    return raw === null ? null : JSON.parse(raw);
+    return raw == null ? null : decodeCacheValue(raw);
   } catch (error) {
     noteFailure("get", error);
     return null;
@@ -299,8 +303,21 @@ export async function redisGetJson(key) {
 }
 
 /**
+ * @param {string} key
+ * @param {string | Buffer} payload
+ * @param {number} ttlMs
+ * @returns {Promise<void>}
+ */
+function writeRaw(key, payload, ttlMs) {
+  return Promise.resolve(client.set(key, payload, "PX", Math.ceil(ttlMs)))
+    .then(noteSuccess)
+    .catch((error) => noteFailure("set", error));
+}
+
+/**
  * Ateşle-unut yazma. İsteğin yanıt yolunda beklenmez: HTML zaten L1'e
- * yazıldı, Redis kopyası yalnızca diğer node'lar için.
+ * yazıldı, Redis kopyası yalnızca diğer node'lar için. 1 KB ve üstü gövdeler
+ * brotli ile yazılır; okuma düz JSON'u da kabul eder.
  *
  * @param {string} key
  * @param {unknown} value
@@ -309,20 +326,22 @@ export async function redisGetJson(key) {
 export function redisSetJson(key, value, ttlMs) {
   if (!usable() || !(ttlMs > 0)) return;
 
-  /** @type {string} */
-  let payload;
-  try {
-    payload = JSON.stringify(value);
-  } catch (error) {
+  const encoded = encodeCacheValue(value);
+  if (encoded === null) {
     // Serileştirilemeyen değer (döngüsel referans, BigInt) sessizce atlanır;
     // L1 kopyası çalışmaya devam eder.
-    noteFailure("serialize", error);
+    noteFailure("serialize", new Error("not JSON"));
     return;
   }
 
-  Promise.resolve(client.set(key, payload, "PX", Math.ceil(ttlMs)))
-    .then(noteSuccess)
-    .catch((error) => noteFailure("set", error));
+  // Küçük gövde senkron döner ki testler `set`'ten hemen sonra kaydı okusun.
+  // Büyük gövdenin brotli'si MISS yanıtını bekletmez.
+  if (typeof encoded === "string" || Buffer.isBuffer(encoded)) {
+    writeRaw(key, encoded, ttlMs);
+    return;
+  }
+
+  encoded.then((payload) => writeRaw(key, payload, ttlMs));
 }
 
 /**

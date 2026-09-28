@@ -56,7 +56,8 @@ export declare function cacheKey(kind: "html" | "data", key: string): string;
 export declare function redisGetJson(key: string): Promise<any | null>;
 /**
  * Ateşle-unut yazma. İsteğin yanıt yolunda beklenmez: HTML zaten L1'e
- * yazıldı, Redis kopyası yalnızca diğer node'lar için.
+ * yazıldı, Redis kopyası yalnızca diğer node'lar için. 1 KB ve üstü gövdeler
+ * brotli ile yazılır; okuma düz JSON'u da kabul eder.
  *
  * @param {string} key
  * @param {unknown} value

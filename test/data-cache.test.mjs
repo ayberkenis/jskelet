@@ -6,10 +6,12 @@ import {
   getDataCacheEntries,
   getDataCacheSize,
   getDataCacheStats,
+  setDataCacheByteBudget,
   withDataCache,
 } from "../src/server/data-cache.js";
 
 afterEach(() => {
+  setDataCacheByteBudget(null);
   clearDataCache();
 });
 
@@ -188,4 +190,22 @@ test("dataCache() derives the key from the arguments", async () => {
     getDataCacheEntries().map((entry) => entry.key),
     ['haber:["a"]', 'haber:["b"]'],
   );
+});
+
+test("the byte budget evicts the oldest value and skips an oversized one", async () => {
+  setDataCacheByteBudget(30);
+
+  await withDataCache("a", 60, async () => "a".repeat(20));
+  await withDataCache("b", 60, async () => "b".repeat(20));
+
+  assert.equal(getDataCacheSize(), 1);
+  assert.deepEqual(
+    getDataCacheEntries().map((entry) => entry.key),
+    ["b"],
+  );
+
+  const huge = await withDataCache("huge", 60, async () => "h".repeat(80));
+  assert.equal(huge.length, 80, "bütçeden büyük değer yine döner");
+  assert.equal(getDataCacheSize(), 1);
+  assert.equal(getDataCacheEntries()[0].key, "b");
 });

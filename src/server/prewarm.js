@@ -23,6 +23,7 @@ import { getRequestContext } from "../http/request-context.js";
 import { publicHost } from "./cache-vary.js";
 import {
   isHtmlCacheFresh,
+  isHtmlCacheKeyFresh,
   startEarlyExpirySweep,
   takeInvalidatedPaths,
   takeInvalidatedTargets,
@@ -106,6 +107,16 @@ const CLASSIC_PREWARM_ENV = [
  * @type {{ concurrency: number | null, rps: number | null }}
  */
 const visitWarmSettings = { concurrency: null, rps: null };
+
+/**
+ * Süre dolumu ısıtması klasik turun `rps: 0` (sınırsız) ayarını kullanmaz.
+ * Bir TTL uçurumu tek seferde yüzlerce render başlatmasın.
+ */
+const EXPIRY_WARM_CONCURRENCY = 1;
+const EXPIRY_WARM_RPS = 2;
+
+/** @type {{ concurrency: number | null, rps: number | null }} */
+const expiryWarmSettings = { concurrency: null, rps: null };
 
 /**
  * Isıtmanın canlı durumu. Dev araçları bunu okuyup ilerlemeyi gösterir;
@@ -208,6 +219,15 @@ function num(value, fallback) {
  * @returns {number}
  */
 function setting(envKey, configKey, fallback) {
+  if (
+    expiryWarmSettings.concurrency != null &&
+    configKey === "concurrency"
+  ) {
+    return expiryWarmSettings.concurrency;
+  }
+  if (expiryWarmSettings.rps != null && configKey === "rps") {
+    return expiryWarmSettings.rps;
+  }
   if (
     visitWarmSettings.concurrency != null &&
     configKey === "concurrency"
@@ -1015,11 +1035,13 @@ async function drainExpiryWarm() {
   if (!targets.length) return;
 
   expiryDraining = true;
+  expiryWarmSettings.concurrency = EXPIRY_WARM_CONCURRENCY;
+  expiryWarmSettings.rps = EXPIRY_WARM_RPS;
   try {
     /** @type {Map<string, string[]>} */
     const byHost = new Map();
     for (const target of targets) {
-      if (isHtmlCacheFresh(target.path, requestForHost(target.host))) continue;
+      if (isHtmlCacheKeyFresh(target.key)) continue;
       const host = target.host || "";
       const list = byHost.get(host);
       if (list) list.push(target.path);
@@ -1053,6 +1075,8 @@ async function drainExpiryWarm() {
   } catch (error) {
     console.error("[prewarm] expiry warm failed", error);
   } finally {
+    expiryWarmSettings.concurrency = null;
+    expiryWarmSettings.rps = null;
     expiryDraining = false;
   }
 }
