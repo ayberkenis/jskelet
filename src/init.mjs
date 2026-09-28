@@ -30,6 +30,8 @@ export default {
     return {
       /** How long a page's HTML stays in the cache (seconds). */
       html: { "/": 60 },
+      /** Edge stale window after that TTL. 0 omits the directive. */
+      staleWhileRevalidate: 60,
     };
   },
 

@@ -85,6 +85,9 @@ export default {
         "/haber/:slug": 300,
         "/etiket/:slug": 120,
       },
+      // Edge'in taze penceresi bittikten sonra eski HTML'i sunacağı süre.
+      // 0 yazılırsa direktif hiç basılmaz.
+      staleWhileRevalidate: 60,
     };
   },
 };
@@ -254,12 +257,33 @@ ile değiştirilebilir):
 Önbelleklenebilir yanıtlarda ayrıca:
 
 ```
-Cache-Control: public, max-age=0, s-maxage=<revalidate>, stale-while-revalidate=60
+Cache-Control: public, max-age=0
+CDN-Cache-Control: max-age=<html ttl>, stale-while-revalidate=<staleWhileRevalidate>
 ```
 
-`max-age=0` tarayıcıda saklamayı kapatır, `s-maxage` ara katmanlara (CDN, ters
-proxy) süreyi bildirir. Böylece CDN önünde durduğunda aynı tazelik modeli iki
-katmanda birlikte çalışır.
+`max-age=0` tarayıcıda saklamayı kapatır. Edge süresi `Cache-Control` içine
+yazılmaz: `s-maxage`, Cloudflare'da `max-age=0` ile birlikte `EXPIRED` üretir.
+Süre `CDN-Cache-Control` üzerindeki `max-age` olur ve mevcut HTML TTL'dir
+(`cache().html` ya da route'un `revalidate` değeri). `s-maxage` hiç yazılmaz;
+ona dönen bir anahtar da yoktur.
+
+`stale-while-revalidate`, edge'in taze penceresi bittikten sonra eski HTML'i
+sunacağı süredir. `cache().staleWhileRevalidate` ile gelir; varsayılan `60`.
+`0` yazılırsa direktif hiç basılmaz:
+
+```
+CDN-Cache-Control: max-age=<html ttl>
+```
+
+`must-revalidate`, `proxy-revalidate` ve `no-cache` aynı yanıtta yoktur; bu
+direktifler stale penceresini keser.
+
+`X-JSkelet-Cache: STALE` süreç içi HTML önbelleğinin katmanıdır. Edge
+başlığındaki stale penceresinden bağımsızdır.
+
+Yalnızca `Cache-Control` / `s-maxage` okuyan bir ara katman (nginx
+`proxy_cache`) bu HTML'i artık önbelleklemez. Cloudflare `CDN-Cache-Control`
+okur.
 
 ## Sıkıştırılmış gövdenin saklanması
 
@@ -517,7 +541,7 @@ baştan render etmek olur — içerik yine aynı eksik hâliyle döner, ziyaret�
 sadece render süresini öder.
 
 Eksik veriyle üretilen çıktı **paylaşılan önbelleklere de sunulmaz**: `degraded`
-bir yanıt `public, s-maxage=…` değil `private, no-store` alır. Süreç içi
+bir yanıt `CDN-Cache-Control` değil `private, no-store` alır. Süreç içi
 önbelleğe yazmama kararını CDN'de geri almak, aynı hatayı bir katman yukarıda
 tekrarlamak olurdu. Teşhis başlığı (`X-JSkelet-Cache: MISS`) yine yazılır.
 

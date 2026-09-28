@@ -93,6 +93,10 @@ export default {
         "/blog/:slug": 300,
       },
 
+      // Edge'in taze penceresi bittikten sonra eski HTML'i sunacağı süre.
+      // 0 yazılırsa direktif hiç basılmaz.
+      staleWhileRevalidate: 60,
+
       /**
        * Query parametreli istek varsayılan olarak dinamiktir: buraya yazılmayan
        * bir parametre cache anahtarına hiç girmez. `?utm_source=…` gibi

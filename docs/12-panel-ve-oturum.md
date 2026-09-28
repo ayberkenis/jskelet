@@ -52,7 +52,8 @@ Bayrağın yaptığı işler:
 | --- | --- | --- |
 | HTML önbelleği | TTL varsa açık | Kapalı, açılamaz |
 | `cache.html` deseni | TTL'i ezer | Yok sayılır |
-| `Cache-Control` | `public, s-maxage=…` | `private, no-store` |
+| `Cache-Control` | `public, max-age=0` | `private, no-store` |
+| `CDN-Cache-Control` | `max-age=<ttl>, stale-while-revalidate=…` | Yazılmaz |
 | `Vary` | `Accept-Encoding` | `Cookie, Accept-Encoding` |
 | ETag | Var | Yok |
 | `X-JSkelet-Cache` | `HIT`/`STALE`/`MISS` | Yazılmaz |

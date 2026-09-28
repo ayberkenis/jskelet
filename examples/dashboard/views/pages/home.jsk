@@ -8,7 +8,7 @@
 
   <p class="mt-4 text-slate-600">
     Bu sayfa public ve önbellekte duruyor: yanıtı
-    <code class="rounded bg-slate-100 px-1 py-0.5 text-sm">s-maxage</code> ile
+    <code class="rounded bg-slate-100 px-1 py-0.5 text-sm">CDN-Cache-Control</code> ile
     işaretli. Paneldeki sayfalar ise
     <code class="rounded bg-slate-100 px-1 py-0.5 text-sm">private, no-store</code>
     ile dönüyor ve HTML önbelleğine hiç girmiyor.

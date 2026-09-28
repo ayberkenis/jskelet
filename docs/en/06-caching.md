@@ -90,6 +90,9 @@ export default {
         "/news/:slug": 300,
         "/tag/:slug": 120,
       },
+      // How long the edge serves stale HTML after the fresh window ends.
+      // 0 omits the directive entirely.
+      staleWhileRevalidate: 60,
     };
   },
 };
@@ -263,12 +266,32 @@ changed with `brand.cacheHeader`):
 On cacheable responses, additionally:
 
 ```
-Cache-Control: public, max-age=0, s-maxage=<revalidate>, stale-while-revalidate=60
+Cache-Control: public, max-age=0
+CDN-Cache-Control: max-age=<html ttl>, stale-while-revalidate=<staleWhileRevalidate>
 ```
 
-`max-age=0` turns off storage in the browser, `s-maxage` announces the duration
-to intermediate layers (CDN, reverse proxy). This way, when a CDN sits in
-front, the same freshness model works across both layers together.
+`max-age=0` turns off storage in the browser. The edge duration is not written
+into `Cache-Control`: `s-maxage` together with `max-age=0` produces `EXPIRED`
+on Cloudflare. The duration is `max-age` on `CDN-Cache-Control`, and it is the
+existing HTML TTL (`cache().html` or the route's `revalidate`). `s-maxage` is
+never written, and there is no switch that puts it back.
+
+`stale-while-revalidate` is how long the edge serves stale HTML after the fresh
+window ends. It comes from `cache().staleWhileRevalidate`; the default is `60`.
+`0` omits the directive entirely:
+
+```
+CDN-Cache-Control: max-age=<html ttl>
+```
+
+`must-revalidate`, `proxy-revalidate` and `no-cache` are not on the same
+response; those directives cut the stale window.
+
+`X-JSkelet-Cache: STALE` is the in-process HTML cache layer. It is independent
+of the stale window on the edge header.
+
+An intermediate layer that only reads `Cache-Control` / `s-maxage` (nginx
+`proxy_cache`) no longer caches this HTML. Cloudflare reads `CDN-Cache-Control`.
 
 ## Storing the compressed body
 
@@ -528,7 +551,7 @@ rendering the page from scratch on every visit — the content comes back just a
 incomplete, and the visitor only pays the render time.
 
 Output produced with missing data is **not offered to shared caches** either: a
-`degraded` response gets `private, no-store` instead of `public, s-maxage=…`.
+`degraded` response gets `private, no-store` instead of `CDN-Cache-Control`.
 Taking back the "do not store" decision at the CDN would repeat the same mistake
 one layer up. The diagnostic header (`X-JSkelet-Cache: MISS`) is still written.
 

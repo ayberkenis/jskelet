@@ -131,6 +131,12 @@ export declare const CLASSIC_PREWARM_KEYS: string[];
  * `vary.host` kopyası sayı tavanının altında da RSS'i şişirir.
  */
 export declare const DEFAULT_HTML_CACHE_MAX_ENTRIES = 500;
+/**
+ * Edge taze penceresi bittikten sonra eski HTML'in sunulacağı süre (saniye).
+ * `cache().staleWhileRevalidate`. 0 ise `stale-while-revalidate` direktifi
+ * basılmaz. Süreç içi HTML cache'in stale penceresinden bağımsızdır.
+ */
+export declare const DEFAULT_STALE_WHILE_REVALIDATE = 60;
 /** `cache().maxEntries` için sert tavan. Üstü uyarıyla bu değere çekilir. */
 export declare const HTML_CACHE_MAX_ENTRIES_CEILING = 800;
 /**

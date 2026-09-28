@@ -74,6 +74,8 @@ export default {
        * okunur kılıyor.
        */
       html: { "/": 300, "/giris": 300 },
+      // Edge'in taze penceresi bittikten sonra eski HTML'i sunacağı süre.
+      staleWhileRevalidate: 60,
 
       /** Oturum gerektiren sayfalar ısıtılamaz; ısıtıcının oturumu yok. */
       prewarm: { enabled: true, max: 20 },

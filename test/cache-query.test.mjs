@@ -143,9 +143,10 @@ test("allowed parameters are cached, one entry per distinct value", async () => 
 
   const first = await run(handler, createRequest("/search", { q: "a" }));
   assert.equal(first.res.getHeader("x-jskelet-cache"), "MISS");
+  assert.equal(first.res.getHeader("cache-control"), "public, max-age=0");
   assert.match(
-    String(first.res.getHeader("cache-control")),
-    /^public, max-age=0, s-maxage=60/,
+    String(first.res.getHeader("cdn-cache-control")),
+    /^max-age=60, stale-while-revalidate=60$/,
   );
 
   const repeat = await run(handler, createRequest("/search", { q: "a" }));

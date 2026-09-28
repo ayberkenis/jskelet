@@ -94,6 +94,11 @@ export declare function buildOgSvg(options?: OgCardOptions & {
 export declare function ogImage(options?: OgImageOptions): Promise<OgImageResult>;
 /**
  * Express yanıtına OG görseli basar.
+ *
+ * Varsayılan edge penceresi 86400 / 604800'tür ve HTML TTL'ye bağlı değildir.
+ * `cacheControl` verilirse yalnızca `Cache-Control` yazılır;
+ * `CDN-Cache-Control` basılmaz.
+ *
  * @param {import('express').Response} res
  * @param {OgImageOptions} [options]
  * @returns {Promise<OgImageResult>}

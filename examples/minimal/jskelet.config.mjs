@@ -13,6 +13,9 @@ export default {
       // Ana sayfa 60 saniye önbellekte kalır. Süre dolunca eski HTML anında
       // döner ve tazeleme arkada çalışır: ziyaretçi render beklemez.
       html: { "/": 60 },
+      // Edge'in taze penceresi bittikten sonra eski HTML'i sunacağı süre.
+      // 0 yazılırsa direktif hiç basılmaz.
+      staleWhileRevalidate: 60,
     };
   },
 

@@ -117,6 +117,12 @@ export type ResolvedConfig = {
      */
     htmlMaxEntries: number;
     /**
+     * Edge taze penceresi bittikten sonra
+     * eski HTML'in sunulacağı süre (saniye). 0 ise direktif basılmaz. Süreç içi
+     * HTML cache'in stale penceresinden bağımsızdır.
+     */
+    staleWhileRevalidate: number;
+    /**
      * Upstream veri önbelleği ayarları.
      */
     data: Record<string, unknown>;

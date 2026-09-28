@@ -257,6 +257,8 @@ export default {
   async cache() {
     return {
       html: { "/": 3600, "/pricing": 3600 },
+      // Edge stale window after the HTML TTL. 0 omits the directive.
+      staleWhileRevalidate: 60,
       query: { "/search": ["q"] }, // only these params enter the cache key
       prewarm: { enabled: true, max: 50, concurrency: 4 },
       // redis: { enabled: true, url: process.env.REDIS_URL },

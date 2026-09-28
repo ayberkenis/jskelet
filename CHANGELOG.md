@@ -18,6 +18,14 @@ one is listed under a **Breaking** heading.
 
 ### Breaking
 
+- HTML edge headers
+  Cacheable HTML and OG images no longer send `s-maxage`. `route()` writes
+  `Cache-Control: public, max-age=0` and
+  `CDN-Cache-Control: max-age=<html ttl>, stale-while-revalidate=<cache().staleWhileRevalidate>`
+  (default 60; `0` omits the directive). OG images keep their own durations
+  (86400 / 604800) on `CDN-Cache-Control`. A layer that only reads
+  `Cache-Control` / `s-maxage` (nginx `proxy_cache`) no longer caches this
+  HTML. Cloudflare reads `CDN-Cache-Control`.
 - Dev gate is opt-in
   `DEV_TOKEN` in the environment no longer locks the site. Require the token
   only with `devGate: true` or `DEV_GATE=1`. `DEV_GATE=0` turns the gate off

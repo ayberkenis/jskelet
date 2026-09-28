@@ -11,7 +11,10 @@ const SITE_URL = process.env.SITE_URL ?? "http://localhost:3000";
 
 /** @param {number} seconds */
 function cacheFor(seconds) {
-  return `public, max-age=0, s-maxage=${seconds}, stale-while-revalidate=60`;
+  return {
+    "Cache-Control": "public, max-age=0",
+    "CDN-Cache-Control": `max-age=${seconds}, stale-while-revalidate=60`,
+  };
 }
 
 export default function register(app) {
@@ -19,7 +22,7 @@ export default function register(app) {
     // Framework kendi uçlarını (`/_jskelet/`, `/__jskelet/`, `/_fragment/`)
     // bu gövdenin altına ekler. Burada yalnızca sitenin kuralları durur.
     res.type("text/plain");
-    res.setHeader("Cache-Control", cacheFor(3600));
+    res.set(cacheFor(3600));
     res.send(
       ["User-agent: *", "Allow: /", `Sitemap: ${SITE_URL}/sitemap.xml`, ""].join(
         "\n",
@@ -37,7 +40,7 @@ export default function register(app) {
       .join("");
 
     res.type("application/xml");
-    res.setHeader("Cache-Control", cacheFor(3600));
+    res.set(cacheFor(3600));
     res.send(
       `<?xml version="1.0" encoding="UTF-8"?>` +
         `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls}</urlset>`,
@@ -58,7 +61,7 @@ export default function register(app) {
       .join("");
 
     res.type("application/rss+xml");
-    res.setHeader("Cache-Control", cacheFor(1800));
+    res.set(cacheFor(1800));
     res.send(
       `<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"><channel>` +
         `<title>JSkelet Blog</title><link>${SITE_URL}</link>` +

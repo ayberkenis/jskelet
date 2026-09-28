@@ -16,6 +16,7 @@
  *   redirects() → [{ source, destination, permanent?, statusCode? }]
  *   rewrites()  → [{ source, destination }] | { beforeFiles?, afterFiles? }
  *   cache()     → { html?: { [source]: saniye },
+ *                   staleWhileRevalidate?: number,
  *                   query?: { [source]: string[] | true },
  *                   vary?: { host?: boolean, headers?: string[], fn?: Function },
  *                   maxEntries?: number,
@@ -56,6 +57,7 @@ import {
   CLASSIC_PREWARM_KEYS,
   DEFAULT_REDIS,
   DEFAULT_SECURITY,
+  DEFAULT_STALE_WHILE_REVALIDATE,
   DEFAULT_STATIC,
   DEFAULT_TRANSIENT_RETRY,
   DEFAULT_UPSTREAM_LIMIT,
@@ -121,6 +123,9 @@ const CONFIG_FILE = "jskelet.config.mjs";
  *   Anahtara eklenen sabit parçalar (query allowlist'ten bağımsız). Host'tan
  *   locale üreten sitelerde `host: true` zorunlu.
  * @property {number} htmlMaxEntries HTML önbelleğinin girdi sınırı.
+ * @property {number} staleWhileRevalidate Edge taze penceresi bittikten sonra
+ *   eski HTML'in sunulacağı süre (saniye). 0 ise direktif basılmaz. Süreç içi
+ *   HTML cache'in stale penceresinden bağımsızdır.
  * @property {Record<string, unknown>} data Upstream veri önbelleği ayarları.
  * @property {boolean} trackUpstream `fetch` sarılıp geçici hatalar otomatik bildirilsin mi.
  * @property {boolean} trackDependencies Render'ın okuduğu veri anahtarları kaydedilsin mi.
@@ -701,6 +706,7 @@ function normalizeVary(raw) {
  * @returns {{ html: ResolvedConfig["html"],
  *   cacheQuery: ResolvedConfig["cacheQuery"],
  *   cacheVary: ResolvedConfig["cacheVary"], htmlMaxEntries: number,
+ *   staleWhileRevalidate: number,
  *   data: Record<string, unknown>, trackUpstream: boolean,
  *   trackDependencies: boolean,
  *   transientRetry: { attempts: number, delayMs: number },
@@ -741,6 +747,7 @@ function normalizeCache(raw) {
     cacheQuery: queryRules,
     cacheVary: normalizeVary(raw?.vary),
     htmlMaxEntries,
+    staleWhileRevalidate: normalizeStaleWhileRevalidate(raw?.staleWhileRevalidate),
     data: normalizeDataCache(raw?.data),
     // Otomatik upstream izleme kapatılabilir olmalı: `fetch`i kendisi saran
     // bir uygulama (ölçüm, retry, circuit breaker) çakışma yaşayabilir.
@@ -761,6 +768,28 @@ function normalizeCache(raw) {
     prewarm,
     prewarmPriority: normalizePriority(prewarm.priority),
   };
+}
+
+/**
+ * Edge stale penceresi. Boş değer varsayılan 60'tır; `0` direktifi kapatır.
+ * Negatif veya sonlu olmayan değer uyarıyla varsayılana döner.
+ *
+ * @param {unknown} raw
+ * @returns {number}
+ */
+function normalizeStaleWhileRevalidate(raw) {
+  if (raw == null || raw === "") return DEFAULT_STALE_WHILE_REVALIDATE;
+
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value < 0) {
+    console.warn(
+      `[config] cache().staleWhileRevalidate ${raw} is not a non-negative number; ` +
+        `using ${DEFAULT_STALE_WHILE_REVALIDATE}`,
+    );
+    return DEFAULT_STALE_WHILE_REVALIDATE;
+  }
+
+  return value;
 }
 
 /**
@@ -1315,6 +1344,7 @@ export async function loadConfig(options = {}) {
     cacheQuery,
     cacheVary,
     htmlMaxEntries,
+    staleWhileRevalidate,
     data,
     trackUpstream,
     trackDependencies,
@@ -1340,6 +1370,7 @@ export async function loadConfig(options = {}) {
     cacheQuery,
     cacheVary,
     htmlMaxEntries,
+    staleWhileRevalidate,
     data,
     trackUpstream,
     trackDependencies,

@@ -276,16 +276,27 @@ Key points:
 
 ### Together with a CDN
 
-The header written on cacheable pages:
+The headers written on cacheable pages:
 
 ```
-Cache-Control: public, max-age=0, s-maxage=<revalidate>, stale-while-revalidate=60
+Cache-Control: public, max-age=0
+CDN-Cache-Control: max-age=<html ttl>, stale-while-revalidate=<staleWhileRevalidate>
 ```
 
-`max-age=0` disables browser storage, `s-maxage` tells the CDN the duration. So
-the same freshness model works across two layers together: the CDN serves its
-own copy for the duration of `s-maxage`, asks the origin when it expires, and
-the origin answers instantly from its own cache.
+`max-age=0` disables browser storage. The edge duration is `max-age` on
+`CDN-Cache-Control`, and it is the existing HTML TTL. `stale-while-revalidate`
+is `cache().staleWhileRevalidate` (default 60; `0` omits the directive).
+`s-maxage` is not written: Cloudflare treats it as `EXPIRED` together with
+`max-age=0`. `must-revalidate`, `proxy-revalidate` and `no-cache` are not on
+the same response.
+
+The CDN serves its own copy for `max-age`, then serves the stale HTML for
+`stale-while-revalidate` while it asks the origin. The origin answers instantly
+from its own cache.
+
+**Breaking.** An intermediate layer that only reads `Cache-Control` /
+`s-maxage` (nginx `proxy_cache`) no longer caches this HTML. Cloudflare reads
+`CDN-Cache-Control`. The in-process cache and `X-JSkelet-Cache` stay the same.
 
 The `X-JSkelet-Cache` header makes it easier to diagnose which layer answered;
 read it together with the CDN's own cache header

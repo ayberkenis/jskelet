@@ -11,6 +11,7 @@
 import { tryImportFromApp } from "../build/resolve-peer.mjs";
 import { getConfig } from "../config/index.js";
 import { isNotFoundError } from "../http/control-flow.js";
+import { setEdgeCacheHeaders } from "./cache-control.js";
 
 /** @type {((input: Buffer, opts?: object) => import('sharp').Sharp) | null | undefined} */
 let sharpModule;
@@ -18,8 +19,12 @@ let sharpModule;
 /** Sosyal kartlar için yaygın boyut (Facebook / X / LinkedIn). */
 export const OG_SIZE = Object.freeze({ width: 1200, height: 630 });
 
-const DEFAULT_CACHE =
-  "public, max-age=0, s-maxage=86400, stale-while-revalidate=604800";
+/**
+ * OG süreleri HTML TTL'ye bağlanmaz. Yalnızca `s-maxage` kalkar; edge
+ * `CDN-Cache-Control` üzerinde aynı pencereyi görür.
+ */
+const OG_EDGE_MAX_AGE = 86400;
+const OG_EDGE_STALE = 604800;
 
 /**
  * @typedef {object} OgCardOptions
@@ -255,17 +260,25 @@ export async function ogImage(options = {}) {
 
 /**
  * Express yanıtına OG görseli basar.
+ *
+ * Varsayılan edge penceresi 86400 / 604800'tür ve HTML TTL'ye bağlı değildir.
+ * `cacheControl` verilirse yalnızca `Cache-Control` yazılır;
+ * `CDN-Cache-Control` basılmaz.
+ *
  * @param {import('express').Response} res
  * @param {OgImageOptions} [options]
  * @returns {Promise<OgImageResult>}
  */
 export async function sendOgImage(res, options = {}) {
   const result = await ogImage(options);
-  const cacheControl = options.cacheControl ?? DEFAULT_CACHE;
 
   res.status(200);
   res.setHeader("Content-Type", result.contentType);
-  res.setHeader("Cache-Control", cacheControl);
+  if (options.cacheControl != null) {
+    res.setHeader("Cache-Control", options.cacheControl);
+  } else {
+    setEdgeCacheHeaders(res, OG_EDGE_MAX_AGE, OG_EDGE_STALE);
+  }
   res.setHeader("Content-Length", String(result.body.length));
   // Kazıyıcılar ve CDN'ler için boyut ipucu (meta ile de verilir).
   res.setHeader("X-Og-Width", String(result.width));

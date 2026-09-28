@@ -155,7 +155,11 @@ test("a public route is cached through a config pattern", async () => {
   const first = await run(handler, createRequest());
   assert.equal(first.error, null);
   assert.match(String(first.res.body), /public/);
-  assert.equal(first.res.getHeader("cache-control"), "public, max-age=0, s-maxage=60, stale-while-revalidate=60");
+  assert.equal(first.res.getHeader("cache-control"), "public, max-age=0");
+  assert.equal(
+    first.res.getHeader("cdn-cache-control"),
+    "max-age=60, stale-while-revalidate=60",
+  );
   assert.equal(first.res.getHeader("x-jskelet-cache"), "MISS");
   assert.equal(getHtmlCacheSize(), 1);
 

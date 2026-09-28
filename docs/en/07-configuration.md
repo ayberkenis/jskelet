@@ -120,6 +120,7 @@ export default {
   async cache() {
     return {
       html: { "/": 60, "/news/:slug": 300 },
+      staleWhileRevalidate: 60,
       query: { "/search": ["q", "page"] },
       maxEntries: 500,
       data: { maxEntries: 10000, staleFactor: 10 },
@@ -695,9 +696,9 @@ Details: [03-routing.md](./03-routing.md).
 ## `cache()`
 
 **Type:**
-`() => { html?: Record<string, number>, query?: Record<string, string[] | true>, vary?: { host?: boolean, headers?: string[], fn?: (req) => string | null }, maxEntries?: number, data?: object, trackUpstream?: boolean, trackDependencies?: boolean, transientRetry?: object | false, upstream?: object, redis?: object, prewarm?: object }` —
+`() => { html?: Record<string, number>, staleWhileRevalidate?: number, query?: Record<string, string[] | true>, vary?: { host?: boolean, headers?: string[], fn?: (req) => string | null }, maxEntries?: number, data?: object, trackUpstream?: boolean, trackDependencies?: boolean, transientRetry?: object | false, upstream?: object, redis?: object, prewarm?: object }` —
 **Default:**
-`{ html: {}, query: {}, vary: { host: false }, maxEntries: 500, data: { maxEntries: 10000, staleFactor: 10 }, trackUpstream: true, trackDependencies: true, transientRetry: { attempts: 1, delayMs: 300 }, upstream: { rate: 0 }, redis: { enabled: false }, prewarm: { enabled: true, max: 400, intervalSeconds: 0, origins: [] } }`
+`{ html: {}, staleWhileRevalidate: 60, query: {}, vary: { host: false }, maxEntries: 500, data: { maxEntries: 10000, staleFactor: 10 }, trackUpstream: true, trackDependencies: true, transientRetry: { attempts: 1, delayMs: 300 }, upstream: { rate: 0 }, redis: { enabled: false }, prewarm: { enabled: true, max: 400, intervalSeconds: 0, origins: [] } }`
 
 ### `cache().html`
 
@@ -718,6 +719,15 @@ html: {
   "/search": 0,
 }
 ```
+
+### `cache().staleWhileRevalidate`
+
+**Type:** `number` — **Default:** `60`
+
+How long the edge serves stale HTML after the fresh window (`cache().html` /
+`revalidate`) ends, in seconds. Written as `stale-while-revalidate` on
+`CDN-Cache-Control`. `0` omits the directive. It does not change the in-process
+HTML cache's stale window. Details: [06-caching.md](./06-caching.md).
 
 ### `cache().query`
 

@@ -588,9 +588,15 @@ app.get("/og/custom.png", async (req, res) => {
 });
 ```
 
-Default `Cache-Control`:
-`public, max-age=0, s-maxage=86400, stale-while-revalidate=604800`.
-Override with `cacheControl`. Working example: `examples/blog/routes/35-og.mjs`.
+Default headers (the durations are not tied to the HTML setting):
+
+```
+Cache-Control: public, max-age=0
+CDN-Cache-Control: max-age=86400, stale-while-revalidate=604800
+```
+
+`cacheControl` overrides `Cache-Control`; in that case `CDN-Cache-Control` is
+not written. Working example: `examples/blog/routes/35-og.mjs`.
 
 ## Hooks
 

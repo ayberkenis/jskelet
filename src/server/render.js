@@ -17,6 +17,7 @@ import path from "node:path";
 import process from "node:process";
 import fs from "node:fs";
 import { pathToFileURL } from "node:url";
+import { setEdgeCacheHeaders } from "./cache-control.js";
 import { noteHtmlCacheGrowth, withHtmlCache } from "./html-cache.js";
 import { buildVaryPrefix } from "./cache-vary.js";
 import { getConfig, hook, FRAMEWORK_ROOT } from "../config/index.js";
@@ -377,7 +378,7 @@ export function route(controller, options = {}) {
       }
 
       // Eksik veriyle üretilen çıktı süreç içi önbelleğe yazılmıyor; aynı
-      // çıktıya CDN'de `s-maxage` vermek o kararı bir katman yukarıda geri
+      // çıktıya edge'de taze pencere vermek o kararı bir katman yukarıda geri
       // almak olurdu. Geçici bir 429 yüzünden üretilen 503, ters proxy'de
       // dakikalarca yaşamamalı.
       const publicCache = cacheable && !leaked && !result.degraded;
@@ -401,10 +402,9 @@ export function route(controller, options = {}) {
       }
 
       if (publicCache) {
-        res.setHeader(
-          "Cache-Control",
-          `public, max-age=0, s-maxage=${revalidate}, stale-while-revalidate=60`,
-        );
+        // Tarayıcıda max-age=0 kalır; edge süresi HTML TTL, stale penceresi
+        // `cache().staleWhileRevalidate`. s-maxage yazılmaz.
+        setEdgeCacheHeaders(res, revalidate, getConfig().staleWhileRevalidate);
       } else {
         res.setHeader("Cache-Control", PRIVATE_CACHE);
         // Anahtarında cookie olmayan bir cache'in bu yanıtı paylaşmasını

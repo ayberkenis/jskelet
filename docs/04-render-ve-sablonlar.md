@@ -582,9 +582,15 @@ app.get("/og/custom.png", async (req, res) => {
 });
 ```
 
-Varsayılan `Cache-Control`:
-`public, max-age=0, s-maxage=86400, stale-while-revalidate=604800`.
-`cacheControl` seçeneğiyle ezilir. Çalışan örnek: `examples/blog/routes/35-og.mjs`.
+Varsayılan başlıklar (süreler HTML ayarına bağlı değildir):
+
+```
+Cache-Control: public, max-age=0
+CDN-Cache-Control: max-age=86400, stale-while-revalidate=604800
+```
+
+`cacheControl` seçeneği `Cache-Control`'ü ezer; bu durumda `CDN-Cache-Control`
+yazılmaz. Çalışan örnek: `examples/blog/routes/35-og.mjs`.
 
 ## Hook'lar
 

@@ -28,7 +28,8 @@ export default function register(app, { renderView }) {
       });
 
       // Fragment'lar kısa süre cache'lenebilir; anahtar query'yi içerir.
-      res.setHeader("Cache-Control", "public, max-age=0, s-maxage=60");
+      res.setHeader("Cache-Control", "public, max-age=0");
+      res.setHeader("CDN-Cache-Control", "max-age=60");
       res.type("html").send(html);
     } catch (error) {
       next(error);
@@ -40,7 +41,8 @@ export default function register(app, { renderView }) {
       const html = await renderView("partials/post-rows", {
         posts: getPosts().slice(0, 3),
       });
-      res.setHeader("Cache-Control", "public, max-age=0, s-maxage=60");
+      res.setHeader("Cache-Control", "public, max-age=0");
+      res.setHeader("CDN-Cache-Control", "max-age=60");
       res.type("html").send(html);
     } catch (error) {
       next(error);

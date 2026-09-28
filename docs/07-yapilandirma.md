@@ -116,6 +116,7 @@ export default {
   async cache() {
     return {
       html: { "/": 60, "/haber/:slug": 300 },
+      staleWhileRevalidate: 60,
       query: { "/arama": ["q", "page"] },
       maxEntries: 500,
       data: { maxEntries: 10000, staleFactor: 10 },
@@ -682,9 +683,9 @@ Ayrıntı: [03-routing.md](./03-routing.md).
 ## `cache()`
 
 **Tip:**
-`() => { html?: Record<string, number>, query?: Record<string, string[] | true>, vary?: { host?: boolean, headers?: string[], fn?: (req) => string | null }, maxEntries?: number, data?: object, trackUpstream?: boolean, trackDependencies?: boolean, transientRetry?: object | false, upstream?: object, redis?: object, prewarm?: object }` —
+`() => { html?: Record<string, number>, staleWhileRevalidate?: number, query?: Record<string, string[] | true>, vary?: { host?: boolean, headers?: string[], fn?: (req) => string | null }, maxEntries?: number, data?: object, trackUpstream?: boolean, trackDependencies?: boolean, transientRetry?: object | false, upstream?: object, redis?: object, prewarm?: object }` —
 **Varsayılan:**
-`{ html: {}, query: {}, vary: { host: false }, maxEntries: 500, data: { maxEntries: 10000, staleFactor: 10 }, trackUpstream: true, trackDependencies: true, transientRetry: { attempts: 1, delayMs: 300 }, upstream: { rate: 0 }, redis: { enabled: false }, prewarm: { enabled: true, max: 400, intervalSeconds: 0, origins: [] } }`
+`{ html: {}, staleWhileRevalidate: 60, query: {}, vary: { host: false }, maxEntries: 500, data: { maxEntries: 10000, staleFactor: 10 }, trackUpstream: true, trackDependencies: true, transientRetry: { attempts: 1, delayMs: 300 }, upstream: { rate: 0 }, redis: { enabled: false }, prewarm: { enabled: true, max: 400, intervalSeconds: 0, origins: [] } }`
 
 ### `cache().html`
 
@@ -705,6 +706,16 @@ html: {
 Tek istisna `route(fn, { private: true })`: bu route'ta desen eşleşse bile yok
 sayılır. Kilidin tek yönlü olması bilinçli — ters yönde bir hata, bir
 kullanıcının HTML'inin bir başkasına servis edilmesi anlamına geliyor.
+
+### `cache().staleWhileRevalidate`
+
+**Tip:** `number` — **Varsayılan:** `60`
+
+Edge'in taze penceresi (`cache().html` / `revalidate`) bittikten sonra eski
+HTML'i sunacağı süre, saniye. `CDN-Cache-Control` üzerindeki
+`stale-while-revalidate` direktifine yazılır. `0` ise direktif basılmaz.
+Süreç içi HTML önbelleğinin stale penceresini değiştirmez. Ayrıntı:
+[06-cache.md](./06-cache.md).
 
 ### `cache().query`
 

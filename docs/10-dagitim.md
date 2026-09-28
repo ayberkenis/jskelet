@@ -275,16 +275,26 @@ server {
 
 ### CDN ile birlikte
 
-Önbelleklenebilir sayfalara yazılan başlık:
+Önbelleklenebilir sayfalara yazılan başlıklar:
 
 ```
-Cache-Control: public, max-age=0, s-maxage=<revalidate>, stale-while-revalidate=60
+Cache-Control: public, max-age=0
+CDN-Cache-Control: max-age=<html ttl>, stale-while-revalidate=<staleWhileRevalidate>
 ```
 
-`max-age=0` tarayıcıda saklamayı kapatır, `s-maxage` CDN'e süreyi bildirir. Yani
-aynı tazelik modeli iki katmanda birlikte çalışır: CDN `s-maxage` boyunca kendi
-kopyasını verir, süresi geçtiğinde origin'e sorar ve origin de kendi
-önbelleğinden anında yanıtlar.
+`max-age=0` tarayıcıda saklamayı kapatır. Edge süresi `CDN-Cache-Control`
+üzerindeki `max-age`'dir ve mevcut HTML TTL'dir. `stale-while-revalidate`
+`cache().staleWhileRevalidate` değeridir (varsayılan 60; `0` direktifi basmaz).
+`s-maxage` yazılmaz: Cloudflare `max-age=0` ile birlikte onu `EXPIRED` sayar.
+`must-revalidate`, `proxy-revalidate` ve `no-cache` aynı yanıtta yoktur.
+
+CDN `max-age` boyunca kendi kopyasını verir, taze pencere bitince
+`stale-while-revalidate` süresince eski HTML'i sunar ve arkada origin'e sorar.
+Origin da kendi önbelleğinden anında yanıtlar.
+
+**Kırılma.** Yalnızca `Cache-Control` / `s-maxage` okuyan bir ara katman
+(nginx `proxy_cache`) bu HTML'i artık önbelleklemez. Cloudflare
+`CDN-Cache-Control` okur. Süreç içi önbellek ve `X-JSkelet-Cache` aynı kalır.
 
 `X-JSkelet-Cache` başlığı hangi katmanın yanıtladığını teşhis etmeyi
 kolaylaştırır; CDN'in kendi cache başlığıyla birlikte okuyun

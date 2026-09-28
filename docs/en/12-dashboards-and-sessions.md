@@ -53,7 +53,8 @@ What the flag does:
 | --- | --- | --- |
 | HTML cache | On when a TTL exists | Off, cannot be turned on |
 | `cache.html` pattern | Overrides the TTL | Ignored |
-| `Cache-Control` | `public, s-maxage=…` | `private, no-store` |
+| `Cache-Control` | `public, max-age=0` | `private, no-store` |
+| `CDN-Cache-Control` | `max-age=<ttl>, stale-while-revalidate=…` | Not written |
 | `Vary` | `Accept-Encoding` | `Cookie, Accept-Encoding` |
 | ETag | Present | Absent |
 | `X-JSkelet-Cache` | `HIT`/`STALE`/`MISS` | Not written |
