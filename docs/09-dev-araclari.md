@@ -199,9 +199,9 @@ Gösterdikleri:
 - **API:** açık sayfanın dışarı giden `fetch` çağrıları — tarayıcıdaki
   island/veri istekleri ve SSR sırasında yapılan upstream çağrıları.
   Host kırılımı, toplam/ortalama süre, durum kodu; satıra tıklanınca
-  yöntem, tam URL, boyut, island ve (başarısızsa) yanıt gövdesi. Canlı
-  kanal `serverApi` listesini de taşır, böylece SSR çağrıları yenileme
-  olmadan görünür.
+  **component** (island adı veya `lib/` / `routes/` dosyası), yöntem,
+  tam URL, boyut ve (başarısızsa) yanıt gövdesi. Canlı kanal `serverApi`
+  listesini de taşır, böylece SSR çağrıları yenileme olmadan görünür.
 - **İstekler:** her HTML isteğinin metodu, yolu, durumu, süresi ve
   `X-JSkelet-Cache` değeri. Aynı satırlar terminale de basılır.
 - **Web Vitals:** TTFB, FCP, LCP, CLS, INP, DCL, load, uzun task sayısı ve

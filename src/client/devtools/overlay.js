@@ -337,6 +337,7 @@ const islandSummary = cached(() => ({
  *   contentType: string | null,
  *   initiator: string,
  *   island: string | null,
+ *   component: string | null,
  *   page: string,
  *   at: number,
  *   error: string | null,
@@ -347,6 +348,25 @@ const islandSummary = cached(() => ({
 /** @type {ClientApiCall[]} */
 const clientApi = [];
 let nextApiId = 1;
+
+/**
+ * Son etkileşilen island. Mount bittikten sonra event handler içindeki
+ * `fetch` yığında dosya adı her zaman görünmeyebiliyor; tıklanan island
+ * köke bakmak o boşluğu doldurur.
+ */
+function trackIslandInteraction() {
+  /** @param {Event} event */
+  const mark = (event) => {
+    const target = /** @type {Element | null} */ (event.target);
+    const host = target?.closest?.("[data-island]");
+    const name = host?.getAttribute?.("data-island");
+    if (name) globalThis.__JSKELET_LAST_ISLAND = name;
+  };
+
+  for (const type of ["pointerdown", "click", "keydown", "submit", "change"]) {
+    document.addEventListener(type, mark, true);
+  }
+}
 
 /**
  * Tarayıcıdaki veri çağrıları. Panelin kendi uçları ve statik varlıklar
@@ -406,6 +426,7 @@ function captureFetch() {
    * @returns {ClientApiCall}
    */
   function record(url, method, ms, status, response) {
+    const component = inferComponent();
     /** @type {ClientApiCall} */
     const entry = {
       id: nextApiId++,
@@ -416,7 +437,8 @@ function captureFetch() {
       bytes: Number(response?.headers.get("content-length") ?? 0),
       contentType: response?.headers.get("content-type") ?? null,
       initiator: "client",
-      island: inferIsland(),
+      island: component,
+      component,
       page: location.pathname + location.search,
       at: Date.now(),
       error: status === 0 || (status >= 400) ? `HTTP ${status || "network"}` : null,
@@ -519,18 +541,59 @@ function shortUrl(url) {
 }
 
 /**
- * Çağrı yığınında `islands/ad` izi varsa ya da bir island mount edilirken
- * yakalanmışsa ada bağlar.
+ * Çağrıyı hangi island / client modülünden geldiğine bağlar.
+ * Sıra: mount işareti → yığın izi → son etkileşilen island.
  *
  * @returns {string | null}
  */
-function inferIsland() {
+function inferComponent() {
   const mounting = globalThis.__JSKELET_MOUNTING_ISLAND;
   if (typeof mounting === "string" && mounting) return mounting;
 
-  const stack = new Error().stack ?? "";
-  const match = stack.match(/islands[/\\]([A-Za-z0-9_-]+)/);
-  return match?.[1] ?? null;
+  const fromStack = componentFromClientStack(new Error().stack ?? "");
+  if (fromStack) return fromStack;
+
+  const last = globalThis.__JSKELET_LAST_ISLAND;
+  if (typeof last === "string" && last) return last;
+
+  return null;
+}
+
+/** @deprecated {@link inferComponent} */
+function inferIsland() {
+  return inferComponent();
+}
+
+/**
+ * @param {string} stack
+ * @returns {string | null}
+ */
+function componentFromClientStack(stack) {
+  const islandPath = stack.match(/islands[/\\]([A-Za-z0-9_-]+)/);
+  if (islandPath) return islandPath[1];
+
+  // Build çıktısı: /assets/islands/counter-a1b2c3.js
+  const assetIsland = stack.match(/[/\\]islands[/\\]([A-Za-z0-9_-]+?)(?:-[a-z0-9]+)?\.(?:js|mjs|ts|tsx)/i);
+  if (assetIsland) return assetIsland[1];
+
+  const clientPath = stack.match(/client[/\\]([A-Za-z0-9_./\\-]+\.[A-Za-z0-9]+)/);
+  if (clientPath) return `client/${clientPath[1].replace(/\\/g, "/")}`;
+
+  // Kayıtlı island adları yığında (hash'li chunk URL'sinde) geçiyorsa.
+  for (const node of document.querySelectorAll("[data-island]")) {
+    const name = node.getAttribute("data-island");
+    if (!name || name.length < 2) continue;
+    if (
+      stack.includes(`/${name}.`) ||
+      stack.includes(`/${name}-`) ||
+      stack.includes(`islands/${name}`) ||
+      stack.includes(`islands%2F${name}`)
+    ) {
+      return name;
+    }
+  }
+
+  return null;
 }
 
 /**
@@ -1661,7 +1724,7 @@ function versionNotice() {
  *   ms: number,
  *   bytes: number,
  *   contentType: string | null,
- *   island: string | null,
+ *   component: string | null,
  *   page: string | null,
  *   at: number,
  *   error: string | null,
@@ -1688,7 +1751,7 @@ function pageApiCalls() {
       ms: call.ms,
       bytes: call.bytes,
       contentType: call.contentType,
-      island: call.island,
+      component: call.component ?? call.island,
       page: call.page,
       at: call.at,
       error: call.error,
@@ -1711,7 +1774,7 @@ function pageApiCalls() {
       ms: Math.round(call.ms),
       bytes: call.bytes ?? 0,
       contentType: null,
-      island: null,
+      component: call.component ?? null,
       page: call.page,
       at: call.at,
       error: call.error,
@@ -1743,7 +1806,7 @@ function apiTab() {
     calls
       .map(
         (call) =>
-          `${new Date(call.at).toISOString()} [${call.side}] ${call.method} ${call.url} ${call.status} ${call.ms}ms${
+          `${new Date(call.at).toISOString()} [${call.side}] ${call.component ?? "—"} ${call.method} ${call.url} ${call.status} ${call.ms}ms${
             call.error ? ` ${call.error}` : ""
           }`,
       )
@@ -1770,7 +1833,7 @@ function apiTab() {
           `(${clientApi.length} in the browser, ${calls.length - clientApi.length} during SSR), ` +
           `taking <strong>${ms(totalMs)}</strong> in total` +
           `${failed.length ? ` · <strong>${failed.length} failed</strong>` : ""}. ` +
-          `Click a row for method, host, timing and response details.`
+          `Click a row for the component, host, timing and response details.`
         : "No outbound API calls recorded for this page yet. Browser <code>fetch</code> and SSR upstream calls show up here as they happen.",
     )}
     ${
@@ -1821,7 +1884,11 @@ function apiTab() {
                 <span class="status ${bad ? "bad" : warn ? "warn" : ""}">${call.status || "—"}</span>
                 <span class="method">${escapeHtml(call.method)}</span>
                 <span class="path" title="${escapeHtml(call.url)}">${escapeHtml(shortUrl(call.url))}</span>
-                <span class="hint">${escapeHtml(call.side)}${call.island ? ` · ${escapeHtml(call.island)}` : ""}</span>
+                <span class="hint" title="${escapeHtml(call.component ?? call.side)}">${
+                  call.component
+                    ? escapeHtml(shortComponent(call.component))
+                    : escapeHtml(call.side)
+                }</span>
                 <span class="${grade(call.ms, [150, 500])}">${call.ms} ms</span>
               </div>`;
             })
@@ -1829,6 +1896,12 @@ function apiTab() {
         : ""
     }
   `;
+}
+
+/** @param {string} value */
+function shortComponent(value) {
+  const parts = value.replace(/\\/g, "/").split("/");
+  return parts.length > 2 ? parts.slice(-2).join("/") : value;
 }
 
 /**
@@ -1844,9 +1917,9 @@ function apiDetailPanel(call) {
       `ms: ${call.ms}`,
       `bytes: ${call.bytes}`,
       `side: ${call.side}`,
+      call.component ? `component: ${call.component}` : "",
       call.host ? `host: ${call.host}` : "",
       call.page ? `page: ${call.page}` : "",
-      call.island ? `island: ${call.island}` : "",
       call.contentType ? `content-type: ${call.contentType}` : "",
       call.error ? `error: ${call.error}` : "",
       call.details == null
@@ -1864,12 +1937,22 @@ function apiDetailPanel(call) {
   return `<div class="api-detail">
     <div class="meta" style="display:flex;align-items:center;gap:8px;margin-bottom:10px;color:var(--muted);font-size:10.5px">
       <span class="tag">${escapeHtml(call.side)}</span>
+      ${
+        call.component
+          ? `<span class="tag island" title="Component">${escapeHtml(call.component)}</span>`
+          : ""
+      }
       <span>${new Date(call.at).toLocaleTimeString()}</span>
       <span class="spacer"></span>
       ${copyButton(detailKey, "copy")}
       <button class="link" data-action="api-select" data-key="${escapeHtml(call.key)}" style="margin:0">close</button>
     </div>
     <dl class="kv">
+      <dt>Component</dt><dd>${
+        call.component
+          ? escapeHtml(call.component)
+          : `<span class="hint">unknown</span>`
+      }</dd>
       <dt>Method</dt><dd>${escapeHtml(call.method)}</dd>
       <dt>URL</dt><dd>${escapeHtml(call.url)}</dd>
       <dt>Host</dt><dd>${escapeHtml(call.host)}</dd>
@@ -1878,7 +1961,6 @@ function apiDetailPanel(call) {
       <dt>Size</dt><dd>${call.bytes ? kb(call.bytes) : "—"}</dd>
       ${call.contentType ? `<dt>Type</dt><dd>${escapeHtml(call.contentType)}</dd>` : ""}
       ${call.page ? `<dt>Page</dt><dd>${pathLink(call.page)}</dd>` : ""}
-      ${call.island ? `<dt>Island</dt><dd>${escapeHtml(call.island)}</dd>` : ""}
       ${call.error ? `<dt>Error</dt><dd class="bad">${escapeHtml(call.error)}</dd>` : ""}
     </dl>
     ${
@@ -2660,6 +2742,7 @@ function start() {
   captureErrors();
   captureMetrics();
   captureFetch();
+  trackIslandInteraction();
   bind(ensureRoot());
   refreshSeo();
   render();

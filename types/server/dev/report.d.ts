@@ -44,6 +44,7 @@ export type ServerApiCall = {
     at: number;
     error: string | null;
     page: string | null;
+    component: string | null;
     details: unknown;
 };
 export type ApiFailure = {
@@ -54,6 +55,7 @@ export type ApiFailure = {
     bytes: number;
     error: string | null;
     page: string | null;
+    component: string | null;
     details: unknown;
 };
 /**
@@ -65,6 +67,7 @@ export type ApiFailure = {
  *   bytes: number,
  *   error: string | null,
  *   page: string | null,
+ *   component: string | null,
  *   details: unknown,
  * }} ApiFailure
  */

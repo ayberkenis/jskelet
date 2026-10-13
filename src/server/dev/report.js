@@ -89,6 +89,7 @@ export function clearPageReports() {
  *   at: number,
  *   error: string | null,
  *   page: string | null,
+ *   component: string | null,
  *   details: unknown,
  * }} ServerApiCall
  */
@@ -109,6 +110,7 @@ const DETAILS_MAX = 4_000;
  *   bytes: number,
  *   error: string | null,
  *   page: string | null,
+ *   component: string | null,
  *   details: unknown,
  * }} ApiFailure
  */
@@ -141,6 +143,8 @@ export function trackServerFetch(options = {}) {
     const method = String(init?.method ?? "GET").toUpperCase();
     const started = Date.now();
     const page = currentPage();
+    // Yığını çağrı anında al: await sonrası stack sarmalayıcıda kalır.
+    const component = inferServerComponent();
 
     // Kendi sunucumuza yapılan istekler (ısıtma, sağlık kontrolü) API sayılmaz.
     const isSelf = /^https?:\/\/(127\.0\.0\.1|\[::1\]|localhost)(:|\/|$)/i.test(url);
@@ -160,6 +164,7 @@ export function trackServerFetch(options = {}) {
           bytes: Number(response.headers.get("content-length") ?? 0),
           error,
           page,
+          component,
           details,
         };
         push(call);
@@ -178,6 +183,7 @@ export function trackServerFetch(options = {}) {
           bytes: 0,
           error: message,
           page,
+          component,
           details: null,
         };
         push(call);
@@ -205,6 +211,28 @@ export function getServerApiCalls(limit = 50) {
 /** @returns {string | null} */
 function currentPage() {
   return getRequestContext()?.pathname ?? null;
+}
+
+/**
+ * SSR `fetch` çağrısını uygulamanın hangi dosyasından geldiğine bağlar.
+ * Framework ve `node_modules` kareleri atlanır; `lib/`, `routes/`,
+ * `controllers/` veya `views/` altındaki ilk kare alınır.
+ *
+ * @returns {string | null}
+ */
+function inferServerComponent() {
+  const stack = new Error().stack ?? "";
+  for (const line of stack.split("\n")) {
+    if (/node_modules|server[/\\]dev[/\\]|node:internal/i.test(line)) continue;
+
+    const match = line.match(
+      /((?:lib|routes|controllers|views)[/\\][A-Za-z0-9_./\\-]+\.[A-Za-z0-9]+)/i,
+    );
+    if (!match) continue;
+
+    return match[1].replace(/\\/g, "/");
+  }
+  return null;
 }
 
 /**

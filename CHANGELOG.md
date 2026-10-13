@@ -19,10 +19,12 @@ one is listed under a **Breaking** heading.
 
 - Dev overlay **API** tab (between Performance and Server): outbound
   `fetch` calls for the current page — browser and SSR — with host
-  rollup, duration, status, and a detail pane on click (URL, timing,
-  size, island, response body when captured). The live stats channel
-  now includes recent server API calls so the tab updates without a
-  refresh.
+  rollup, duration, status, and a detail pane on click (component,
+  URL, timing, size, response body when captured). Browser calls are
+  attributed to the island/module (mount, stack, or last interaction);
+  SSR calls to the first `lib/` / `routes/` / `controllers/` / `views/`
+  frame. The live stats channel includes recent server API calls so the
+  tab updates without a refresh.
 - Optional CDN asset publishing via `build.assets`: `prefix` rewrites
   `asset()` / optimised image URLs (manifest stays relative on disk);
   `upload.bucket` / `keyPrefix` / `region` / `endpoint` come from config only.

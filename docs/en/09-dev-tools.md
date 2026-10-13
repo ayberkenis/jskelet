@@ -203,9 +203,10 @@ What it shows:
   part of the production bundle.
 - **API:** outbound `fetch` calls for the open page — browser island/data
   requests and upstream calls made during SSR. Host rollup, total/average
-  duration, status codes; click a row for method, full URL, size, island
-  and (on failure) the response body. The live channel also carries the
-  `serverApi` list so SSR calls appear without a refresh.
+  duration, status codes; click a row for the **component** (island name
+  or `lib/` / `routes/` file), method, full URL, size and (on failure)
+  the response body. The live channel also carries the `serverApi` list
+  so SSR calls appear without a refresh.
 - **Requests:** the method, path, status, duration and `X-JSkelet-Cache` value
   of every HTML request. The same lines are printed to the terminal too.
 - **Web Vitals:** TTFB, FCP, LCP, CLS, INP, DCL, load, long task count and
