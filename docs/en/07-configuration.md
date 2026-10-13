@@ -644,7 +644,7 @@ changes** — assets stay on the origin.
 | --- | --- | --- | --- |
 | `assets.prefix` | `string` | `""` | CDN origin; prefix for `asset()` URLs (no trailing `/`). Config only. The on-disk manifest stays relative. |
 | `assets.upload.enabled` | `boolean` | `false` | Turns on when `true` or when `bucket` is set in config; explicit `false` wins. |
-| `assets.upload.bucket` | `string \| null` | `null` | **S3 bucket name** (dotted names like `static.example.com` are fine) or `bucket/key/prefix`. A `https://…` scheme is rejected — that belongs in `prefix`. |
+| `assets.upload.bucket` | `string \| null` | `null` | **S3 bucket name** (dotted names like `static.example.com` are fine; PutObject uses path-style) or `bucket/key/prefix`. A `https://…` scheme is rejected — that belongs in `prefix`. |
 | `assets.upload.keyPrefix` | `string` | `""` | Object key prefix; a path on the bucket wins (`prefix` is accepted as an alias). |
 | `assets.upload.region` | `string` | `us-east-1` | Config; defaults to `auto` when `endpoint` is set. |
 | `assets.upload.endpoint` | `string \| null` | `null` | S3-compatible API (R2 / MinIO); config. |

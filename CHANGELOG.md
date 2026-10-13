@@ -8,8 +8,21 @@ one is listed under a **Breaking** heading.
 
 ## [Unreleased]
 
+### Fixed
+
+- S3 PutObject uses path-style URLs for bucket names that contain dots
+  (e.g. `static.investvio.dev`). Virtual-hosted
+  `bucket.s3.region.amazonaws.com` fails TLS because the cert only covers
+  `*.s3.region.amazonaws.com` (one label). Fetch errors are also shortened.
+
 ### Added
 
+- Dev overlay **API** tab (between Performance and Server): outbound
+  `fetch` calls for the current page — browser and SSR — with host
+  rollup, duration, status, and a detail pane on click (URL, timing,
+  size, island, response body when captured). The live stats channel
+  now includes recent server API calls so the tab updates without a
+  refresh.
 - Optional CDN asset publishing via `build.assets`: `prefix` rewrites
   `asset()` / optimised image URLs (manifest stays relative on disk);
   `upload.bucket` / `keyPrefix` / `region` / `endpoint` come from config only.

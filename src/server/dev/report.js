@@ -121,13 +121,19 @@ const DETAILS_MAX = 4_000;
  * overlay hata günlüğüne de düşer — uygulama kendi logger'ıyla stderr'e
  * yazsa bile panel "hangi sayfa hangi API" bilgisini görsün.
  *
- * @param {{ onFailure?: (call: ApiFailure) => void }} [options]
+ * Her dış çağrı (başarılı ya da değil) `onCall` ile de bildirilir; overlay
+ * API sekmesi canlı kanal üzerinden güncellensin diye.
+ *
+ * @param {{
+ *   onFailure?: (call: ApiFailure) => void,
+ *   onCall?: (call: ApiFailure) => void,
+ * }} [options]
  */
 export function trackServerFetch(options = {}) {
   const original = globalThis.fetch;
   if (/** @type {any} */ (original).__jskeletWrapped) return;
 
-  const { onFailure } = options;
+  const { onFailure, onCall } = options;
 
   /** @type {typeof fetch} */
   const wrapped = async (input, init) => {
@@ -157,6 +163,7 @@ export function trackServerFetch(options = {}) {
           details,
         };
         push(call);
+        onCall?.(call);
         if (error) onFailure?.(call);
       }
       return response;
@@ -174,6 +181,7 @@ export function trackServerFetch(options = {}) {
           details: null,
         };
         push(call);
+        onCall?.(call);
         onFailure?.(call);
       }
       throw error;
@@ -182,6 +190,16 @@ export function trackServerFetch(options = {}) {
 
   /** @type {any} */ (wrapped).__jskeletWrapped = true;
   globalThis.fetch = wrapped;
+}
+
+/**
+ * Overlay ve istatistik uçları için son dış çağrıları döner (yeniden eskiye).
+ *
+ * @param {number} [limit]
+ * @returns {ServerApiCall[]}
+ */
+export function getServerApiCalls(limit = 50) {
+  return serverApiCalls.slice(-limit).reverse();
 }
 
 /** @returns {string | null} */

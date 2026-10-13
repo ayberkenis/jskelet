@@ -11,6 +11,7 @@ import {
   encodeS3Path,
   formatAmzDates,
   sha256Hex,
+  useS3PathStyle,
 } from "../src/server/logs/s3-put.js";
 
 test("formatAmzDates and sha256Hex are stable", () => {
@@ -112,6 +113,30 @@ test("buildSignedPutObject path-style with custom endpoint", () => {
 
   assert.equal(signed.url, "http://127.0.0.1:9000/local/a/b.ndjson");
   assert.equal(signed.headers.host, "127.0.0.1:9000");
+});
+
+test("dotted bucket names use path-style (TLS wildcard)", () => {
+  assert.equal(useS3PathStyle("static.investvio.dev", null), true);
+  assert.equal(useS3PathStyle("my-bucket", null), false);
+  assert.equal(useS3PathStyle("my-bucket", "https://s3.example"), true);
+
+  const signed = buildSignedPutObject({
+    bucket: "static.investvio.dev",
+    key: "js/assets/app.css",
+    body: "x",
+    region: "eu-central-1",
+    credentials: {
+      accessKeyId: "AKIAIOSFODNN7EXAMPLE",
+      secretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+    },
+    now: new Date("2013-05-24T00:00:00.000Z"),
+  });
+
+  assert.equal(
+    signed.url,
+    "https://s3.eu-central-1.amazonaws.com/static.investvio.dev/js/assets/app.css",
+  );
+  assert.equal(signed.headers.host, "s3.eu-central-1.amazonaws.com");
 });
 
 test("buildStringToSign wraps hashed canonical request", () => {

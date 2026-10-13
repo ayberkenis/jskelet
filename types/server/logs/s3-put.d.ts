@@ -70,6 +70,17 @@ export declare function buildStringToSign(parts: {
  */
 export declare function encodeS3Path(value: string): string;
 /**
+ * Virtual-hosted (`bucket.s3.region…`) TLS sertifikası `*.s3.region…` —
+ * yalnızca **tek** etiket. `static.investvio.dev` gibi noktalı bucket'lar
+ * `Host: static.investvio.dev.s3.…` üretir ve `ERR_TLS_CERT_ALTNAME_INVALID`
+ * verir. Path-style (`s3.region…/bucket/key`) bunu çözer.
+ *
+ * @param {string} bucket
+ * @param {string | null | undefined} endpoint
+ * @returns {boolean}
+ */
+export declare function useS3PathStyle(bucket: string, endpoint: string | null | undefined): boolean;
+/**
  * PutObject isteğini imzalar; ağ çağrısı yapmaz — test edilebilir olsun diye.
  *
  * @param {PutObjectInput} input

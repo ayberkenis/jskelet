@@ -117,6 +117,21 @@ export function encodeS3Path(value) {
 }
 
 /**
+ * Virtual-hosted (`bucket.s3.region…`) TLS sertifikası `*.s3.region…` —
+ * yalnızca **tek** etiket. `static.investvio.dev` gibi noktalı bucket'lar
+ * `Host: static.investvio.dev.s3.…` üretir ve `ERR_TLS_CERT_ALTNAME_INVALID`
+ * verir. Path-style (`s3.region…/bucket/key`) bunu çözer.
+ *
+ * @param {string} bucket
+ * @param {string | null | undefined} endpoint
+ * @returns {boolean}
+ */
+export function useS3PathStyle(bucket, endpoint) {
+  if (endpoint) return true;
+  return bucket.includes(".");
+}
+
+/**
  * PutObject isteğini imzalar; ağ çağrısı yapmaz — test edilebilir olsun diye.
  *
  * @param {PutObjectInput} input
@@ -130,13 +145,24 @@ export function buildSignedPutObject(input) {
   const payloadHash = sha256Hex(body);
 
   const keyPath = encodeS3Path(input.key.replace(/^\/+/, ""));
-  const usePathStyle = Boolean(input.endpoint);
-  const endpointHost = input.endpoint
-    ? new URL(input.endpoint).host
-    : `${input.bucket}.s3.${input.region}.amazonaws.com`;
-  const host = usePathStyle ? new URL(input.endpoint ?? "").host : endpointHost;
+  const pathStyle = useS3PathStyle(input.bucket, input.endpoint);
 
-  const canonicalUri = usePathStyle
+  /** @type {string} */
+  let host;
+  /** @type {string} */
+  let base;
+  if (input.endpoint) {
+    base = String(input.endpoint).replace(/\/+$/, "");
+    host = new URL(input.endpoint).host;
+  } else if (pathStyle) {
+    host = `s3.${input.region}.amazonaws.com`;
+    base = `https://${host}`;
+  } else {
+    host = `${input.bucket}.s3.${input.region}.amazonaws.com`;
+    base = `https://${host}`;
+  }
+
+  const canonicalUri = pathStyle
     ? `/${encodeS3Path(input.bucket)}/${keyPath}`
     : `/${keyPath}`;
 
@@ -186,10 +212,7 @@ export function buildSignedPutObject(input) {
     `AWS4-HMAC-SHA256 Credential=${input.credentials.accessKeyId}/${credentialScope}, ` +
     `SignedHeaders=${signedHeaders}, Signature=${signature}`;
 
-  const base = usePathStyle
-    ? String(input.endpoint).replace(/\/+$/, "")
-    : `https://${host}`;
-  const url = usePathStyle
+  const url = pathStyle
     ? `${base}/${encodeS3Path(input.bucket)}/${keyPath}`
     : `${base}/${keyPath}`;
 
@@ -202,11 +225,25 @@ export function buildSignedPutObject(input) {
  */
 export async function putObject(input) {
   const signed = buildSignedPutObject(input);
-  const response = await fetch(signed.url, {
-    method: "PUT",
-    headers: signed.headers,
-    body: signed.body,
-  });
+  /** @type {Response} */
+  let response;
+  try {
+    response = await fetch(signed.url, {
+      method: "PUT",
+      headers: signed.headers,
+      body: signed.body,
+    });
+  } catch (error) {
+    const cause =
+      error && typeof error === "object" && "cause" in error && error.cause
+        ? /** @type {{ message?: string, code?: string }} */ (error.cause)
+        : null;
+    const detail =
+      cause?.code ||
+      cause?.message ||
+      (error instanceof Error ? error.message : String(error));
+    throw new Error(`S3 PutObject fetch failed (${signed.url}): ${detail}`);
+  }
 
   if (!response.ok) {
     const text = await response.text().catch(() => "");

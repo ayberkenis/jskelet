@@ -1,6 +1,6 @@
 /**
  * Dev overlay: sağ altta yüzen baloncuk; hataları, performans
- * istatistiklerini ve SEO taramasını gösterir.
+ * istatistiklerini, sayfa API çağrılarını ve SEO taramasını gösterir.
  *
  * Bu dosya **build'e dahil değildir**. `npm run dev` sırasında sunucu onu
  * `/__jskelet/dev/overlay.js` altından ham olarak servis eder, layout da
@@ -46,6 +46,9 @@ let expanded = new Set();
 let seoHighlight = false;
 /** Panel listesinde açılan sorun açıklaması. */
 let seoExpandedId = null;
+
+/** API sekmesinde açılan çağrı; `side:id` biçiminde. */
+let selectedApiKey = null;
 /** @type {import('./seo.js').SeoIssue[]} */
 let seoIssues = [];
 const seoLayer = new SeoHighlighter();
@@ -323,14 +326,34 @@ const islandSummary = cached(() => ({
 
 /* --------------------------------------------------------- API çağrıları */
 
-/** @type {{ url: string, ms: number, status: number, bytes: number, initiator: string }[]} */
+/**
+ * @typedef {{
+ *   id: number,
+ *   url: string,
+ *   method: string,
+ *   ms: number,
+ *   status: number,
+ *   bytes: number,
+ *   contentType: string | null,
+ *   initiator: string,
+ *   island: string | null,
+ *   page: string,
+ *   at: number,
+ *   error: string | null,
+ *   details: unknown,
+ * }} ClientApiCall
+ */
+
+/** @type {ClientApiCall[]} */
 const clientApi = [];
+let nextApiId = 1;
 
 /**
  * Tarayıcıdaki veri çağrıları. Panelin kendi uçları ve statik varlıklar
  * sayılmaz; amaç sayfanın hangi API'lere kaç ms harcadığını görmek.
  * 4xx/5xx ve ağ hataları Errors sekmesine de düşer — hangi sayfa / island
- * bağlamı mümkün olduğunca doldurulur.
+ * bağlamı mümkün olduğunca doldurulur. Aynı kayıtlar API sekmesinde de
+ * listelenir.
  */
 function captureFetch() {
   const original = window.fetch.bind(window);
@@ -343,9 +366,10 @@ function captureFetch() {
     const started = performance.now();
     try {
       const response = await original(input, init);
-      record(url, performance.now() - started, response.status, response);
+      const entry = record(url, method, performance.now() - started, response.status, response);
       if (!response.ok) {
         void reportFailedFetch({
+          id: entry.id,
           url,
           method,
           status: response.status,
@@ -354,7 +378,9 @@ function captureFetch() {
       }
       return response;
     } catch (error) {
-      record(url, performance.now() - started, 0, null);
+      const entry = record(url, method, performance.now() - started, 0, null);
+      entry.error = "network error";
+      entry.details = error instanceof Error ? error.message : String(error);
       pushError(
         "error",
         `${method} ${shortUrl(url)} → network error`,
@@ -362,9 +388,9 @@ function captureFetch() {
           source: "fetch",
           url,
           page: location.pathname + location.search,
-          island: inferIsland(),
+          island: entry.island,
           stack: error instanceof Error ? error.stack : null,
-          details: error instanceof Error ? error.message : String(error),
+          details: entry.details,
         },
       );
       throw error;
@@ -373,31 +399,56 @@ function captureFetch() {
 
   /**
    * @param {string} url
+   * @param {string} method
    * @param {number} ms
    * @param {number} status
    * @param {Response | null} response
+   * @returns {ClientApiCall}
    */
-  function record(url, ms, status, response) {
-    clientApi.push({
+  function record(url, method, ms, status, response) {
+    /** @type {ClientApiCall} */
+    const entry = {
+      id: nextApiId++,
       url,
+      method,
       ms: Math.round(ms),
       status,
       bytes: Number(response?.headers.get("content-length") ?? 0),
-      initiator: "fetch",
-    });
+      contentType: response?.headers.get("content-type") ?? null,
+      initiator: "client",
+      island: inferIsland(),
+      page: location.pathname + location.search,
+      at: Date.now(),
+      error: status === 0 || (status >= 400) ? `HTTP ${status || "network"}` : null,
+      details: null,
+    };
+    clientApi.push(entry);
     if (clientApi.length > 100) clientApi.shift();
+    // API sekmesi açıkken yeni çağrı hemen görünsün.
+    lastBody = "";
+    render();
+    return entry;
   }
 }
 
 /**
  * Başarısız bir tarayıcı fetch'ini Errors listesine yazar. Gövdeyi klonlayıp
- * okur; asıl Response tüketilmez.
+ * okur; asıl Response tüketilmez. Aynı gövde API satırının detayına da yazılır.
  *
- * @param {{ url: string, method: string, status: number, response: Response }} call
+ * @param {{ id: number, url: string, method: string, status: number, response: Response }} call
  */
 async function reportFailedFetch(call) {
   const details = await readResponseDetails(call.response);
   const summary = detailSummary(details);
+  const entry = clientApi.find((item) => item.id === call.id);
+  if (entry) {
+    entry.details = details;
+    entry.error = summary
+      ? `HTTP ${call.status}: ${summary}`
+      : `HTTP ${call.status}`;
+    lastBody = "";
+    render();
+  }
   pushError(
     "error",
     `${call.method} ${shortUrl(call.url)} → ${call.status}${
@@ -407,7 +458,7 @@ async function reportFailedFetch(call) {
       source: "fetch",
       url: call.url,
       page: location.pathname + location.search,
-      island: inferIsland(),
+      island: entry?.island ?? inferIsland(),
       details,
     },
   );
@@ -734,6 +785,8 @@ async function startPrewarm(paths) {
 
 async function clearAll() {
   clientErrors.length = 0;
+  clientApi.length = 0;
+  selectedApiKey = null;
   try {
     await fetch(`${BASE}/clear`, { method: "POST" });
   } catch {
@@ -1047,6 +1100,27 @@ h4 .head-action { float: inline-end; text-transform: none; letter-spacing: 0; }
 .status.bad { background: rgba(251,113,133,.14); color: var(--bad); }
 .hint { color: var(--muted); font-size: 10.5px; }
 .row .good { color: var(--good); } .row .mid { color: var(--mid); } .row .bad { color: var(--bad); }
+.row.clickable { cursor: pointer; grid-template-columns: auto auto 1fr auto auto; }
+.row.clickable.selected { border-color: rgba(255,255,255,.22); background: var(--surface-hover); }
+.row .method {
+  font-size: 10px; font-weight: 700; letter-spacing: .04em; color: #c4b5fd;
+  min-width: 2.6em; text-align: center;
+}
+.api-detail {
+  margin: 0 0 8px; padding: 12px 14px; border-radius: 12px;
+  background: rgba(0,0,0,.35); border: 1px solid var(--line);
+  font-size: 12px; line-height: 1.55;
+}
+.api-detail .kv { display: grid; grid-template-columns: 88px 1fr; gap: 6px 12px; margin: 0 0 10px; }
+.api-detail .kv dt { color: var(--muted); font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; font-weight: 600; }
+.api-detail .kv dd { margin: 0; color: #dbe2ea; word-break: break-all; font-family: ui-monospace, SFMono-Regular, monospace; font-size: 11.5px; }
+.api-detail .good { color: var(--good); } .api-detail .mid { color: var(--mid); } .api-detail .bad { color: var(--bad); }
+.api-detail pre {
+  margin: 0; padding: 8px 10px; background: rgba(0,0,0,.4); border-radius: 8px;
+  white-space: pre-wrap; word-break: break-word; color: #b8c0cb;
+  font-size: 11px; font-family: ui-monospace, SFMono-Regular, monospace;
+  max-height: 220px; overflow: auto;
+}
 
 .btn {
   background: var(--surface); border: 1px solid var(--line); color: var(--text);
@@ -1079,6 +1153,7 @@ const TAB_ICONS = {
   errors: `<svg viewBox="0 0 16 16"><path d="M8 5.5v4M8 11.5h.01M8 1.8 1.8 13.2h12.4L8 1.8Z"/></svg>`,
   seo: `<svg viewBox="0 0 16 16"><circle cx="7.2" cy="7.2" r="4.4"/><path d="M10.4 10.4 13.6 13.6M5.2 7.2h4M7.2 5.2v4"/></svg>`,
   perf: `<svg viewBox="0 0 16 16"><path d="M2 13V8m4 5V3m4 10V6m4 7v-3"/></svg>`,
+  api: `<svg viewBox="0 0 16 16"><path d="M2.5 8h3l1.5-3.5L9.5 12 11 8h2.5"/><circle cx="3.2" cy="8" r=".7"/><circle cx="12.8" cy="8" r=".7"/></svg>`,
   server: `<svg viewBox="0 0 16 16"><path d="M2.5 3.5h11v3h-11zM2.5 9.5h11v3h-11zM5 5h.01M5 11h.01"/></svg>`,
   warm: `<svg viewBox="0 0 16 16"><path d="M8 14c2.5 0 4.2-1.7 4.2-3.9C12.2 6.5 8 2 8 2S3.8 6.5 3.8 10.1C3.8 12.3 5.5 14 8 14Z"/></svg>`,
   about: `<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.2"/><path d="M8 7.2v4M8 4.9h.01"/></svg>`,
@@ -1105,6 +1180,7 @@ const SKELETON = `
           <button class="tab" data-tab="errors">${TAB_ICONS.errors} Errors<span class="chip" data-part="chip" hidden></span></button>
           <button class="tab" data-tab="seo">${TAB_ICONS.seo} SEO<span class="chip" data-part="seo-chip" hidden></span></button>
           <button class="tab" data-tab="perf">${TAB_ICONS.perf} Performance</button>
+          <button class="tab" data-tab="api">${TAB_ICONS.api} API<span class="chip neutral" data-part="api-chip" hidden></span></button>
           <button class="tab" data-tab="server">${TAB_ICONS.server} Server<span class="chip neutral" data-part="version-chip" hidden>update</span></button>
           <button class="tab" data-tab="warm">${TAB_ICONS.warm} Prewarming<span class="chip neutral" data-part="warm-chip" hidden></span></button>
           <div class="rail-foot">
@@ -1572,6 +1648,247 @@ function versionNotice() {
   );
 }
 
+/**
+ * Bu sayfanın tarayıcı + SSR API çağrılarını birleştirir.
+ *
+ * @returns {{
+ *   key: string,
+ *   side: "client" | "server",
+ *   method: string,
+ *   url: string,
+ *   host: string,
+ *   status: number,
+ *   ms: number,
+ *   bytes: number,
+ *   contentType: string | null,
+ *   island: string | null,
+ *   page: string | null,
+ *   at: number,
+ *   error: string | null,
+ *   details: unknown,
+ * }[]}
+ */
+function pageApiCalls() {
+  const pagePath = location.pathname;
+
+  const client = clientApi.map((call) => {
+    let host = location.host;
+    try {
+      host = new URL(call.url, location.origin).host;
+    } catch {
+      // göreli / bozuk URL
+    }
+    return {
+      key: `client:${call.id}`,
+      side: /** @type {const} */ ("client"),
+      method: call.method,
+      url: call.url,
+      host,
+      status: call.status,
+      ms: call.ms,
+      bytes: call.bytes,
+      contentType: call.contentType,
+      island: call.island,
+      page: call.page,
+      at: call.at,
+      error: call.error,
+      details: call.details,
+    };
+  });
+
+  const server = (serverStats?.serverApi ?? [])
+    .filter((call) => {
+      if (!call.page) return false;
+      return call.page.split("?")[0] === pagePath;
+    })
+    .map((call, index) => ({
+      key: `server:${call.at}:${index}`,
+      side: /** @type {const} */ ("server"),
+      method: call.method,
+      url: call.url,
+      host: call.host ?? "—",
+      status: call.status,
+      ms: Math.round(call.ms),
+      bytes: call.bytes ?? 0,
+      contentType: null,
+      island: null,
+      page: call.page,
+      at: call.at,
+      error: call.error,
+      details: call.details,
+    }));
+
+  return [...client, ...server].sort((a, b) => b.at - a.at);
+}
+
+function apiTab() {
+  const calls = pageApiCalls();
+  const failed = calls.filter((call) => call.error || call.status >= 400 || call.status === 0);
+  const totalMs = calls.reduce((sum, call) => sum + call.ms, 0);
+  const byHost = new Map();
+
+  for (const call of calls) {
+    const bucket = byHost.get(call.host) ?? { count: 0, ms: 0 };
+    bucket.count += 1;
+    bucket.ms += call.ms;
+    byHost.set(call.host, bucket);
+  }
+
+  const hosts = [...byHost.entries()]
+    .sort((a, b) => b[1].ms - a[1].ms)
+    .slice(0, 8);
+
+  clipboard.set(
+    "api",
+    calls
+      .map(
+        (call) =>
+          `${new Date(call.at).toISOString()} [${call.side}] ${call.method} ${call.url} ${call.status} ${call.ms}ms${
+            call.error ? ` ${call.error}` : ""
+          }`,
+      )
+      .join("\n"),
+  );
+
+  const selected = selectedApiKey
+    ? calls.find((call) => call.key === selectedApiKey) ?? null
+    : null;
+
+  const tone = failed.length
+    ? "bad"
+    : calls.some((call) => call.ms > 500)
+      ? "mid"
+      : calls.length
+        ? "good"
+        : "mid";
+
+  return `
+    ${lede(
+      tone,
+      calls.length
+        ? `This page made <strong>${calls.length} API call${calls.length === 1 ? "" : "s"}</strong> ` +
+          `(${clientApi.length} in the browser, ${calls.length - clientApi.length} during SSR), ` +
+          `taking <strong>${ms(totalMs)}</strong> in total` +
+          `${failed.length ? ` · <strong>${failed.length} failed</strong>` : ""}. ` +
+          `Click a row for method, host, timing and response details.`
+        : "No outbound API calls recorded for this page yet. Browser <code>fetch</code> and SSR upstream calls show up here as they happen.",
+    )}
+    ${
+      calls.length
+        ? `${metricGrid([
+            { label: "Calls", value: String(calls.length) },
+            { label: "Total time", value: ms(totalMs), tone: grade(totalMs, [300, 1200]), ratio: ratio(totalMs, 1200) },
+            {
+              label: "Avg",
+              value: ms(totalMs / calls.length),
+              tone: grade(totalMs / calls.length, [150, 500]),
+            },
+            {
+              label: "Failed",
+              value: String(failed.length),
+              tone: failed.length ? "bad" : "good",
+            },
+            { label: "Hosts", value: String(byHost.size) },
+            { label: "Browser", value: String(clientApi.length) },
+            { label: "SSR", value: String(calls.length - clientApi.length) },
+          ])}
+          ${
+            hosts.length
+              ? `<h4>By host</h4>
+                <div class="rows">${hosts
+                  .map(
+                    ([host, info]) => `<div class="row">
+                      <span class="tag">${info.count}×</span>
+                      <span class="path">${escapeHtml(host)}</span>
+                      <span class="hint">${Math.round((info.ms / Math.max(totalMs, 1)) * 100)}%</span>
+                      <span class="${grade(info.ms / info.count, [150, 500])}">${ms(info.ms)}</span>
+                    </div>`,
+                  )
+                  .join("")}</div>`
+              : ""
+          }
+          <h4>Calls<span class="head-action">${copyButton("api", "copy all")}</span></h4>
+          ${
+            selected
+              ? apiDetailPanel(selected)
+              : `<div class="empty" style="margin-bottom:8px">Select a call to inspect headers, timing and the response body when available.</div>`
+          }
+          <div class="rows">${calls
+            .map((call) => {
+              const bad = call.error || call.status >= 400 || call.status === 0;
+              const warn = !bad && call.status >= 300;
+              return `<div class="row clickable ${selectedApiKey === call.key ? "selected" : ""}" data-action="api-select" data-key="${escapeHtml(call.key)}">
+                <span class="status ${bad ? "bad" : warn ? "warn" : ""}">${call.status || "—"}</span>
+                <span class="method">${escapeHtml(call.method)}</span>
+                <span class="path" title="${escapeHtml(call.url)}">${escapeHtml(shortUrl(call.url))}</span>
+                <span class="hint">${escapeHtml(call.side)}${call.island ? ` · ${escapeHtml(call.island)}` : ""}</span>
+                <span class="${grade(call.ms, [150, 500])}">${call.ms} ms</span>
+              </div>`;
+            })
+            .join("")}</div>`
+        : ""
+    }
+  `;
+}
+
+/**
+ * @param {ReturnType<typeof pageApiCalls>[number]} call
+ */
+function apiDetailPanel(call) {
+  const detailKey = `api-detail:${call.key}`;
+  clipboard.set(
+    detailKey,
+    [
+      `${call.method} ${call.url}`,
+      `status: ${call.status}`,
+      `ms: ${call.ms}`,
+      `bytes: ${call.bytes}`,
+      `side: ${call.side}`,
+      call.host ? `host: ${call.host}` : "",
+      call.page ? `page: ${call.page}` : "",
+      call.island ? `island: ${call.island}` : "",
+      call.contentType ? `content-type: ${call.contentType}` : "",
+      call.error ? `error: ${call.error}` : "",
+      call.details == null
+        ? ""
+        : typeof call.details === "string"
+          ? call.details
+          : safeJson(call.details),
+    ]
+      .filter(Boolean)
+      .join("\n"),
+  );
+
+  const detailsText = formatDetails(call.details);
+
+  return `<div class="api-detail">
+    <div class="meta" style="display:flex;align-items:center;gap:8px;margin-bottom:10px;color:var(--muted);font-size:10.5px">
+      <span class="tag">${escapeHtml(call.side)}</span>
+      <span>${new Date(call.at).toLocaleTimeString()}</span>
+      <span class="spacer"></span>
+      ${copyButton(detailKey, "copy")}
+      <button class="link" data-action="api-select" data-key="${escapeHtml(call.key)}" style="margin:0">close</button>
+    </div>
+    <dl class="kv">
+      <dt>Method</dt><dd>${escapeHtml(call.method)}</dd>
+      <dt>URL</dt><dd>${escapeHtml(call.url)}</dd>
+      <dt>Host</dt><dd>${escapeHtml(call.host)}</dd>
+      <dt>Status</dt><dd class="${call.error || call.status >= 400 || call.status === 0 ? "bad" : call.status >= 300 ? "mid" : "good"}">${call.status || "—"}</dd>
+      <dt>Duration</dt><dd class="${grade(call.ms, [150, 500])}">${call.ms} ms</dd>
+      <dt>Size</dt><dd>${call.bytes ? kb(call.bytes) : "—"}</dd>
+      ${call.contentType ? `<dt>Type</dt><dd>${escapeHtml(call.contentType)}</dd>` : ""}
+      ${call.page ? `<dt>Page</dt><dd>${pathLink(call.page)}</dd>` : ""}
+      ${call.island ? `<dt>Island</dt><dd>${escapeHtml(call.island)}</dd>` : ""}
+      ${call.error ? `<dt>Error</dt><dd class="bad">${escapeHtml(call.error)}</dd>` : ""}
+    </dl>
+    ${
+      detailsText
+        ? `<h4 style="margin:0 0 8px">Response body</h4><pre>${escapeHtml(detailsText)}</pre>`
+        : `<div class="hint">No response body captured${call.side === "client" && !call.error ? " (successful browser calls keep the body for the page)" : ""}.</div>`
+    }
+  </div>`;
+}
+
 function serverTab() {
   if (!serverStats) return `<div class="empty">Waiting for server stats…</div>`;
 
@@ -1807,7 +2124,7 @@ const ABOUT = {
       <div class="step"><span class="n">2</span><span><b>Islands</b><span>Every interactive piece is marked with <code>data-island</code> and its module loads once it enters the viewport. The whole page is never hydrated.</span></span></div>
       <div class="step"><span class="n">3</span><span><b>Build pipeline</b><span>esbuild compiles JS, Tailwind + LightningCSS the styles, sharp the images, Phosphor the icons; the output is hashed and written to <code>manifest.json</code>.</span></span></div>
       <div class="step"><span class="n">4</span><span><b>Dev loop</b><span>Sources are watched: on a CSS change the stylesheet is swapped, on a JS or server change a single full reload happens.</span></span></div>
-      <div class="step"><span class="n">5</span><span><b>Observability</b><span>This panel collects errors, Web Vitals measurements and server requests; records survive a server restart.</span></span></div>
+      <div class="step"><span class="n">5</span><span><b>Observability</b><span>This panel collects errors, Web Vitals, outbound API calls and server requests; records survive a server restart.</span></span></div>
     </div>
     <div class="cards">
       <div class="card"><b>Runtime</b><span>Node + Express 5, ESM. Page templates are EJS, the data layer is the services under <code>lib/</code>.</span></div>
@@ -2126,6 +2443,16 @@ function paint() {
   versionChip.hidden = !version?.outdated;
   if (version?.outdated) versionChip.title = `JSkelet ${version.latest} is available`;
 
+  const apiCalls = pageApiCalls();
+  const apiChip = root.querySelector("[data-part='api-chip']");
+  apiChip.hidden = !apiCalls.length;
+  apiChip.className = `chip ${
+    apiCalls.some((call) => call.error || call.status >= 400 || call.status === 0)
+      ? ""
+      : "neutral"
+  }`;
+  apiChip.textContent = String(apiCalls.length);
+
   const warm = serverStats?.prewarm;
   const warmChip = root.querySelector("[data-part='warm-chip']");
   warmChip.hidden = !warm?.total;
@@ -2149,11 +2476,13 @@ function paint() {
         ? seoTab()
         : activeTab === "perf"
           ? perfTab()
-          : activeTab === "about"
-            ? aboutTab()
-            : activeTab === "warm"
-              ? warmTab()
-              : serverTab();
+          : activeTab === "api"
+            ? apiTab()
+            : activeTab === "about"
+              ? aboutTab()
+              : activeTab === "warm"
+                ? warmTab()
+                : serverTab();
 
   if (html !== lastBody) {
     const body = root.querySelector(".body");
@@ -2234,6 +2563,14 @@ function bind(root) {
       if (expanded.has(key)) expanded.delete(key);
       else expanded.add(key);
       saveState();
+      render();
+      return;
+    }
+
+    if (target.dataset.action === "api-select") {
+      const key = target.dataset.key ?? null;
+      selectedApiKey = selectedApiKey === key ? null : key;
+      lastBody = "";
       render();
       return;
     }

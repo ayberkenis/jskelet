@@ -76,11 +76,25 @@ export type ApiFailure = {
  * overlay hata günlüğüne de düşer — uygulama kendi logger'ıyla stderr'e
  * yazsa bile panel "hangi sayfa hangi API" bilgisini görsün.
  *
- * @param {{ onFailure?: (call: ApiFailure) => void }} [options]
+ * Her dış çağrı (başarılı ya da değil) `onCall` ile de bildirilir; overlay
+ * API sekmesi canlı kanal üzerinden güncellensin diye.
+ *
+ * @param {{
+ *   onFailure?: (call: ApiFailure) => void,
+ *   onCall?: (call: ApiFailure) => void,
+ * }} [options]
  */
 export declare function trackServerFetch(options?: {
     onFailure?: (call: ApiFailure) => void;
+    onCall?: (call: ApiFailure) => void;
 }): void;
+/**
+ * Overlay ve istatistik uçları için son dış çağrıları döner (yeniden eskiye).
+ *
+ * @param {number} [limit]
+ * @returns {ServerApiCall[]}
+ */
+export declare function getServerApiCalls(limit?: number): ServerApiCall[];
 /**
  * Rapor sayfasının tek veri kaynağı.
  * @param {{ requests: object[], errors: object[] }} devtools

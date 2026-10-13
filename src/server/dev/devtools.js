@@ -19,6 +19,7 @@ import { clearHtmlCache } from "../html-cache.js";
 import {
   buildReport,
   clearPageReports,
+  getServerApiCalls,
   recordPageReport,
   trackServerFetch,
 } from "./report.js";
@@ -326,6 +327,9 @@ function statsPayload() {
     prewarm: { ...prewarmProgress },
     requests: requests.slice(-25).reverse(),
     errors: errors.slice(-25).reverse(),
+    // SSR dış çağrıları: overlay API sekmesi hangi sayfanın hangi
+    // upstream'e kaç ms harcadığını buradan okur.
+    serverApi: getServerApiCalls(50),
   };
 }
 
@@ -565,7 +569,11 @@ export function mountDevtools(app) {
 
   restore();
   patchConsole();
-  trackServerFetch({ onFailure: recordApiFailure });
+  trackServerFetch({
+    onFailure: recordApiFailure,
+    // Başarılı çağrılar Errors'a düşmez ama API sekmesi onları da görmeli.
+    onCall: () => pushStats(),
+  });
   watchManifest();
   startVersionCheck();
   startHeartbeat();
