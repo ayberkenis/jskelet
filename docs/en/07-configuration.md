@@ -648,7 +648,8 @@ changes** — assets stay on the origin.
 | `assets.upload.keyPrefix` | `string` | `""` | Object key prefix; a path on the bucket wins (`prefix` is accepted as an alias). |
 | `assets.upload.region` | `string` | `us-east-1` | Config; defaults to `auto` when `endpoint` is set. |
 | `assets.upload.endpoint` | `string \| null` | `null` | S3-compatible API (R2 / MinIO); config. |
-| `assets.upload.include` | `string[]` | `["assets"]` | Directories under `public/` (`assets`, optionally `fonts`, …). |
+| `assets.upload.include` | `string[]` | `["assets", "fonts"]` | Directories under `public/`. When `assets.prefix` is set, `fonts` is added if missing. |
+| `assets.upload.corsOrigin` | `string \| null` | `"*"` | PutBucketCors `AllowedOrigin` when fonts upload; `null` disables (replaces prior bucket CORS). |
 | `assets.upload.cacheControl` | `string` | `public, max-age=31536000, immutable` | PutObject `Cache-Control`. |
 
 **Credentials are not written in the config.** Chain: `AWS_ACCESS_KEY_ID` /

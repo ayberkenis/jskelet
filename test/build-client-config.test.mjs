@@ -33,7 +33,8 @@ test("normalizeBuild: defaults when empty", () => {
   assert.equal(build.client.chunkGroup, null);
   assert.equal(build.assets.prefix, "");
   assert.equal(build.assets.upload.enabled, false);
-  assert.deepEqual(build.assets.upload.include, ["assets"]);
+  assert.deepEqual(build.assets.upload.include, ["assets", "fonts"]);
+  assert.equal(build.assets.upload.corsOrigin, "*");
 });
 
 test("normalizeBuild: invalid build ignored", () => {
@@ -107,6 +108,16 @@ test("normalizeBuild: upload enabled false wins over config bucket", () => {
   assert.equal(build.assets.upload.bucket, "blocked");
 });
 
+test("normalizeBuild: prefix forces fonts into upload.include", () => {
+  const build = normalizeBuild({
+    assets: {
+      prefix: "https://cdn.example.com/js",
+      upload: { bucket: "app-assets", include: ["assets"] },
+    },
+  });
+  assert.deepEqual(build.assets.upload.include, ["assets", "fonts"]);
+});
+
 test("normalizeBuild: dotted bucket names are fine; https URL is rejected", () => {
   const ok = normalizeBuild({
     assets: {
@@ -118,6 +129,7 @@ test("normalizeBuild: dotted bucket names are fine; https URL is rejected", () =
   assert.equal(ok.assets.upload.keyPrefix, "js/");
   assert.equal(ok.assets.upload.enabled, true);
   assert.equal(ok.assets.prefix, "https://static.investvio.dev/js");
+  assert.ok(ok.assets.upload.include.includes("fonts"));
 
   const bad = normalizeBuild({
     assets: {

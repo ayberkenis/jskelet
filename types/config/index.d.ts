@@ -240,6 +240,10 @@ export type BuildAssetsUploadConfig = {
     endpoint: string | null;
     include: string[];
     cacheControl: string;
+    /**
+     * Font/CDN PutBucketCors `AllowedOrigin`; `null` kapatır.
+     */
+    corsOrigin: string | null;
 };
 export type BuildAssetsConfig = {
     /**

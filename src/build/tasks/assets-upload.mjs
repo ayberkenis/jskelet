@@ -16,11 +16,21 @@ import {
   resolveS3Credentials,
   s3CredentialsMissingReason,
 } from "../../server/logs/s3-credentials.js";
-import { putObject } from "../../server/logs/s3-put.js";
+import { putBucketCors, putObject } from "../../server/logs/s3-put.js";
 import * as log from "../../log.mjs";
 import { paths } from "../paths.mjs";
 
 const CONCURRENCY = 8;
+
+/** Font MIME — CDN'den HTML çapraz origin yüklerken CORS gerekir. */
+const FONT_MIME = new Set([
+  "font/woff",
+  "font/woff2",
+  "font/ttf",
+  "font/otf",
+  "application/font-woff",
+  "application/font-woff2",
+]);
 
 /** @type {Record<string, string>} */
 const MIME = {
@@ -116,6 +126,7 @@ export function assetsUploadSkipReason(config) {
 /**
  * @param {import('../../config/index.js').ResolvedConfig} config
  * @param {{ put?: typeof putObject,
+ *   putCors?: typeof putBucketCors,
  *   resolveCredentials?: typeof resolveS3Credentials }} [options]
  * @returns {Promise<void>}
  */
@@ -135,6 +146,7 @@ export async function uploadAssets(config, options = {}) {
   }
 
   const put = options.put ?? putObject;
+  const putCors = options.putCors ?? putBucketCors;
   // Normalize bazen atlanır (test / elle config); önek `/` ile bitsin.
   let keyPrefix = (upload.keyPrefix || "").replace(/^\/+/, "");
   if (keyPrefix && !keyPrefix.endsWith("/")) keyPrefix += "/";
@@ -160,6 +172,27 @@ export async function uploadAssets(config, options = {}) {
   if (!jobs.length) {
     log.detail("0 files");
     return;
+  }
+
+  const uploadsFonts = jobs.some((job) =>
+    FONT_MIME.has(contentTypeFor(job.file)),
+  );
+  if (uploadsFonts && upload.corsOrigin) {
+    try {
+      await putCors({
+        bucket: upload.bucket,
+        region: upload.region,
+        endpoint: upload.endpoint,
+        credentials,
+        allowedOrigin: upload.corsOrigin,
+      });
+      log.detail(`cors ${upload.corsOrigin}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(
+        `[assets] PutBucketCors failed (${message}) — set CDN/bucket CORS manually for cross-origin fonts`,
+      );
+    }
   }
 
   let uploaded = 0;

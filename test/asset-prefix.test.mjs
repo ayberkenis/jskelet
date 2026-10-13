@@ -6,6 +6,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, test } from "node:test";
+import { rewriteCssStaticUrls } from "../src/build/rewrite-css-urls.mjs";
 import { applyAssetPrefix, asset } from "../src/server/assets.js";
 import {
   assetsUploadSkipReason,
@@ -39,6 +40,29 @@ test("applyAssetPrefix joins origin and path", () => {
   assert.equal(
     applyAssetPrefix("https://cdn.example.com", "https://other/x.js"),
     "https://other/x.js",
+  );
+});
+
+test("rewriteCssStaticUrls aligns /fonts/ (and static.prefixes) with CDN prefix", () => {
+  const css = `
+@font-face {
+  src: url("/fonts/inter-400.woff2") format("woff2");
+}
+.hero { background: url('/assets/hero.png'); }
+.icon { background: url(../images/x.svg); }
+.ext { background: url("https://other/fonts/x.woff2"); }
+`;
+  const out = rewriteCssStaticUrls(css, {
+    prefix: "https://cdn.example.com/js",
+    prefixes: ["/assets/", "/fonts/"],
+  });
+  assert.match(out, /url\("https:\/\/cdn\.example\.com\/js\/fonts\/inter-400\.woff2"\)/);
+  assert.match(out, /url\('https:\/\/cdn\.example\.com\/js\/assets\/hero\.png'\)/);
+  assert.match(out, /url\(\.\.\/images\/x\.svg\)/);
+  assert.match(out, /url\("https:\/\/other\/fonts\/x\.woff2"\)/);
+  assert.equal(
+    rewriteCssStaticUrls(css, { prefix: "", prefixes: ["/fonts/"] }),
+    css,
   );
 });
 
@@ -156,6 +180,7 @@ function uploadConfig(root, upload) {
           endpoint: null,
           include: ["assets"],
           cacheControl: "public, max-age=31536000, immutable",
+          corsOrigin: null,
           ...upload,
         },
       },
@@ -253,6 +278,47 @@ test("uploadAssets puts objects with content-type and cache-control", async () =
   assert.equal(puts[0].contentType, "text/css; charset=utf-8");
   assert.equal(puts[0].cacheControl, "public, max-age=31536000, immutable");
   assert.equal(puts[0].body.toString(), "body{}");
+
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test("uploadAssets uploads fonts and runs PutBucketCors when corsOrigin is set", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "jskelet-font-up-"));
+  const publicDir = path.join(root, "public");
+  const fontsDir = path.join(publicDir, "fonts");
+  fs.mkdirSync(fontsDir, { recursive: true });
+  fs.writeFileSync(path.join(fontsDir, "inter-400.woff2"), "woff");
+
+  process.env.AWS_ACCESS_KEY_ID = "AKIA";
+  process.env.AWS_SECRET_ACCESS_KEY = "secret";
+
+  const config = uploadConfig(root, {
+    enabled: true,
+    bucket: "app-assets",
+    keyPrefix: "js/",
+    include: ["fonts"],
+    corsOrigin: "*",
+  });
+  initBuildPaths(config);
+
+  /** @type {import('../src/server/logs/s3-put.js').PutObjectInput[]} */
+  const puts = [];
+  /** @type {import('../src/server/logs/s3-put.js').PutBucketCorsInput[]} */
+  const cors = [];
+  await uploadAssets(config, {
+    put: async (input) => {
+      puts.push(input);
+    },
+    putCors: async (input) => {
+      cors.push(input);
+    },
+  });
+
+  assert.equal(cors.length, 1);
+  assert.equal(cors[0].allowedOrigin, "*");
+  assert.equal(puts.length, 1);
+  assert.equal(puts[0].key, "js/fonts/inter-400.woff2");
+  assert.equal(puts[0].contentType, "font/woff2");
 
   fs.rmSync(root, { recursive: true, force: true });
 });

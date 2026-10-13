@@ -94,11 +94,20 @@ They are passed to templates automatically; in server code,
 Off by default. Prefix / bucket / keyPrefix come from config; credentials
 resolve from env → ECS task role → EC2 IMDS. When enabled:
 
-1. A production build PutObjects files under `public/assets/` (and any other
-   directories in `include`) to S3.
-2. At runtime `asset()` / optimised images emit absolute CDN URLs via
-   `build.assets.prefix`. When the entry script is on the CDN, esbuild chunks
-   resolve relatively on the same host. The `icon()` sprite and
+1. A production build PutObjects `public/assets/` and `public/fonts/`
+   (default `include`) to S3. When `assets.prefix` is set, `fonts` is added
+   to `include` if missing.
+2. The CSS step rewrites root-absolute `url()` paths under `static.prefixes`
+   (`/fonts/…`, `/assets/…`) with `prefix` — otherwise a stylesheet on the CDN
+   resolves `url("/fonts/x")` against the host root and drops `keyPrefix`.
+   `@font-face` can stay in the CDN CSS; font and CSS share a host, so no
+   extra CORS is needed for that path.
+3. When fonts are uploaded and `upload.corsOrigin` is set (default `"*"`),
+   PutBucketCors writes a GET/HEAD rule — it **replaces** the bucket's
+   previous CORS config; set `corsOrigin: null` to skip. Cross-origin fonts
+   from HTML still need this (or a CloudFront response-header policy).
+4. At runtime `asset()` / optimised images emit absolute CDN URLs via
+   `build.assets.prefix`. The `icon()` sprite and
    `asset(name, { origin: "document" })` stay on the document origin.
 
 Bucket names may include dots (`static.example.com`); put `https://…` in
@@ -304,6 +313,10 @@ Usage is written by hand in the stylesheet:
 
 Because the `.woff2` extension and the `/fonts/` prefix are in the default
 `static` rules, these files automatically get an `immutable` cache.
+
+When `build.assets.prefix` is set, the build rewrites `url("/fonts/…")` in CSS
+to the CDN prefix and uploads the font files too — you do not need a separate
+`@font-face` block in the layout.
 
 ## Icon sprite
 

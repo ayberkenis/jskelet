@@ -14,6 +14,14 @@ export type PutObjectInput = {
     cacheControl?: string | null;
     now?: Date;
 };
+export type PutBucketCorsInput = {
+    bucket: string;
+    region: string;
+    endpoint?: string | null;
+    credentials: AwsCredentials;
+    allowedOrigin: string;
+    now?: Date;
+};
 /**
  * @param {string | Buffer} data
  * @returns {string}
@@ -91,6 +99,32 @@ export declare function buildSignedPutObject(input: PutObjectInput): {
     headers: Record<string, string>;
     body: Buffer;
 };
+/**
+ * PutBucketCors gövdesi — tek kural, GET/HEAD.
+ *
+ * @param {string} allowedOrigin
+ * @returns {string}
+ */
+export declare function corsConfigurationXml(allowedOrigin: string): string;
+/**
+ * PutBucketCors isteğini imzalar (`PUT /?cors` veya path-style `/bucket?cors`).
+ *
+ * @param {PutBucketCorsInput} input
+ * @returns {{ url: string, headers: Record<string, string>, body: Buffer }}
+ */
+export declare function buildSignedPutBucketCors(input: PutBucketCorsInput): {
+    url: string;
+    headers: Record<string, string>;
+    body: Buffer;
+};
+/**
+ * Bucket CORS yazar. Mevcut kuralların **üzerine** yazar; paylaşımlı
+ * kovada bilinçli kullanılmalı. İzin yoksa çağıran uyarır, upload sürer.
+ *
+ * @param {PutBucketCorsInput} input
+ * @returns {Promise<void>}
+ */
+export declare function putBucketCors(input: PutBucketCorsInput): Promise<void>;
 /**
  * @param {PutObjectInput} input
  * @returns {Promise<void>}

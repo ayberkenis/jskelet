@@ -24,6 +24,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { paths, writeAsset, writeManifest } from "../paths.mjs";
+import { rewriteCssStaticUrls } from "../rewrite-css-urls.mjs";
 import { importFromApp, tryImportFromApp } from "../resolve-peer.mjs";
 import * as log from "../../log.mjs";
 
@@ -86,6 +87,23 @@ function listPageStyles(dir) {
 }
 
 /**
+ * `build.assets.prefix` doluysa `static.prefixes` kök-mutlak `url()` yollarını
+ * CDN'e çevirir (`/fonts/…` → `https://cdn…/js/fonts/…`).
+ *
+ * @param {string} css
+ * @param {import('../../config/index.js').ResolvedConfig} config
+ * @returns {string}
+ */
+function applyCdnStaticUrls(css, config) {
+  const prefix = config.build?.assets?.prefix ?? "";
+  if (!prefix) return css;
+  return rewriteCssStaticUrls(css, {
+    prefix,
+    prefixes: config.static?.prefixes ?? ["/assets/", "/fonts/"],
+  });
+}
+
+/**
  * @param {import('../../config/index.js').ResolvedConfig} config
  * @param {{ watch?: boolean }} [options]
  * @returns {Promise<Record<string, string>>}
@@ -101,7 +119,7 @@ export async function buildCss(config, { watch = false } = {}) {
     const urls = {};
     let bytes = 0;
 
-    const appCss = await compile(input);
+    const appCss = applyCdnStaticUrls(await compile(input), config);
     const appUrl = writeAsset("app.css", appCss);
     urls["app.css"] = appUrl;
     bytes += Buffer.byteLength(appCss);
@@ -111,7 +129,7 @@ export async function buildCss(config, { watch = false } = {}) {
 
     for (const file of listPageStyles(pagesDir)) {
       const name = path.basename(file);
-      const css = await compile(file);
+      const css = applyCdnStaticUrls(await compile(file), config);
       const url = writeAsset(name, css);
       urls[name] = url;
       bytes += Buffer.byteLength(css);

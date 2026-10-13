@@ -184,6 +184,7 @@ const CONFIG_FILE = "jskelet.config.mjs";
  * @property {string | null} endpoint
  * @property {string[]} include
  * @property {string} cacheControl
+ * @property {string | null} corsOrigin Font/CDN PutBucketCors `AllowedOrigin`; `null` kapatır.
  *
  * @typedef {object} BuildAssetsConfig
  * @property {string} prefix CDN origin (`build.assets.prefix`); sonunda `/` yok.
@@ -1264,10 +1265,24 @@ export function normalizeBuildAssets(raw) {
     }
   }
 
+  // CDN CSS `/fonts/…` → prefix'li URL yazar; fontlar upload'ta yoksa 403.
+  // Kullanıcı `include: ["assets"]` yazsa bile prefix varken `fonts` eklenir.
+  if (prefix && !include.includes("fonts")) {
+    include = [...include, "fonts"];
+  }
+
   const cacheControl =
     typeof uploadRaw.cacheControl === "string" && uploadRaw.cacheControl.trim()
       ? uploadRaw.cacheControl.trim()
       : DEFAULT_BUILD.assets.upload.cacheControl;
+
+  /** @type {string | null} */
+  let corsOrigin = DEFAULT_BUILD.assets.upload.corsOrigin;
+  if (uploadRaw.corsOrigin === null || uploadRaw.corsOrigin === false) {
+    corsOrigin = null;
+  } else if (typeof uploadRaw.corsOrigin === "string") {
+    corsOrigin = uploadRaw.corsOrigin.trim() || null;
+  }
 
   // Config'te bucket varsa `enabled` unutulmuş olsa bile aç. Açık `false` ezer.
   const enabled =
@@ -1284,6 +1299,7 @@ export function normalizeBuildAssets(raw) {
       endpoint,
       include,
       cacheControl,
+      corsOrigin,
     },
   };
 }

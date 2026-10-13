@@ -17,6 +17,12 @@ one is listed under a **Breaking** heading.
 
 ### Added
 
+- When `build.assets.prefix` is set, the CSS build rewrites root-absolute
+  `url()` paths under `static.prefixes` (e.g. `/fonts/…`) to the CDN
+  prefix so they match the S3 key (`…/js/fonts/…`). Default upload
+  `include` is `["assets", "fonts"]`; prefix also forces `fonts` into
+  `include`. Font uploads run PutBucketCors with
+  `upload.corsOrigin` (default `"*"`, set `null` to skip).
 - `asset(name, { origin: "document" })` skips `build.assets.prefix` and
   returns the site-origin `/assets/…` path. `icon()` always resolves the
   sprite this way so SVG `<use href>` keeps working when other assets are

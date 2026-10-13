@@ -5,8 +5,10 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   buildCanonicalRequest,
+  buildSignedPutBucketCors,
   buildSignedPutObject,
   buildStringToSign,
+  corsConfigurationXml,
   deriveSigningKey,
   encodeS3Path,
   formatAmzDates,
@@ -137,6 +139,34 @@ test("dotted bucket names use path-style (TLS wildcard)", () => {
     "https://s3.eu-central-1.amazonaws.com/static.investvio.dev/js/assets/app.css",
   );
   assert.equal(signed.headers.host, "s3.eu-central-1.amazonaws.com");
+});
+
+test("corsConfigurationXml escapes origin and allows GET/HEAD", () => {
+  const xml = corsConfigurationXml("https://a&b.com");
+  assert.match(xml, /<AllowedOrigin>https:\/\/a&amp;b\.com<\/AllowedOrigin>/);
+  assert.match(xml, /<AllowedMethod>GET<\/AllowedMethod>/);
+  assert.match(xml, /<AllowedMethod>HEAD<\/AllowedMethod>/);
+});
+
+test("buildSignedPutBucketCors uses cors= query and path-style for dotted buckets", () => {
+  const signed = buildSignedPutBucketCors({
+    bucket: "static.investvio.dev",
+    region: "eu-central-1",
+    credentials: {
+      accessKeyId: "AKIAIOSFODNN7EXAMPLE",
+      secretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+    },
+    allowedOrigin: "*",
+    now: new Date("2013-05-24T00:00:00.000Z"),
+  });
+
+  assert.equal(
+    signed.url,
+    "https://s3.eu-central-1.amazonaws.com/static.investvio.dev?cors",
+  );
+  assert.equal(signed.headers["content-type"], "application/xml");
+  assert.match(signed.body.toString(), /<AllowedOrigin>\*<\/AllowedOrigin>/);
+  assert.match(signed.headers.authorization, /AWS4-HMAC-SHA256/);
 });
 
 test("buildStringToSign wraps hashed canonical request", () => {

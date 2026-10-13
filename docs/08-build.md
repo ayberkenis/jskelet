@@ -91,12 +91,21 @@ dosya adlarını okunur tutuyor. Hash'li olmaları sayesinde bu dosyalara
 Varsayılan kapalıdır. Prefix / bucket / keyPrefix config'te; credential
 env → ECS task role → EC2 IMDS zincirinden. Açılınca:
 
-1. Production build `public/assets/` (ve `include` listesindeki diğer dizinler)
-   altındaki dosyaları S3'e PutObject ile kopyalar.
-2. Çalışma anında `asset()` / optimize görseller `build.assets.prefix` ile
-   absolute CDN URL basar. Entry CDN'deyse esbuild chunk'ları göreli yolla aynı
-   host'a gider. `icon()` sprite'ı ve `asset(name, { origin: "document" })`
-   site origin'inde kalır.
+1. Production build `public/assets/` ve `public/fonts/` (varsayılan `include`)
+   altındaki dosyaları S3'e PutObject ile kopyalar. `assets.prefix` doluysa
+   `include`'da `fonts` yoksa otomatik eklenir.
+2. CSS derlemesi `static.prefixes` kök-mutlak `url()` yollarını
+   (`/fonts/…`, `/assets/…`) `prefix` ile yeniden yazar — aksi hâlde CDN'deki
+   stylesheet `url("/fonts/x")` yolunu host köküne çözer ve `keyPrefix`
+   kaybolur. `@font-face` CDN CSS içinde kalabilir; font ile CSS aynı host'ta
+   olduğu için ek CORS gerekmez.
+3. Font yüklendiğinde ve `upload.corsOrigin` doluysa (varsayılan `"*"`)
+   PutBucketCors bir GET/HEAD kuralı yazar — bucket'taki önceki CORS'un
+   **üzerine** yazar; kapatmak için `corsOrigin: null`. HTML'den çapraz
+   origin font için bu (veya CloudFront response header) gerekir.
+4. Çalışma anında `asset()` / optimize görseller `build.assets.prefix` ile
+   absolute CDN URL basar. `icon()` sprite'ı ve
+   `asset(name, { origin: "document" })` site origin'inde kalır.
 
 Bucket adı noktalı olabilir (`static.ornek.com`); `https://…` şeması
 `prefix`'e yazılır. Config sözlüğü: [07-yapilandirma.md](./07-yapilandirma.md#build).
@@ -296,6 +305,10 @@ Kullanımı stylesheet'te elle yazılır:
 
 `.woff2` uzantısı ve `/fonts/` öneki varsayılan `static` kurallarında olduğu için
 bu dosyalara otomatik olarak `immutable` cache yazılır.
+
+`build.assets.prefix` açıksa build, CSS'teki `url("/fonts/…")` yollarını CDN
+prefix'iyle yeniden yazar ve fontları S3'e de basar — layout'ta ayrı
+`@font-face` tutmaya gerek kalmaz.
 
 ## İkon sprite
 

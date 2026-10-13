@@ -508,9 +508,19 @@ export const DEFAULT_BUILD = {
       keyPrefix: "",
       region: "us-east-1",
       endpoint: null,
-      /** `public/` altı dizin adları. */
-      include: /** @type {string[]} */ (["assets"]),
+      /**
+       * `public/` altı dizin adları. `fonts` varsayılan: CDN CSS'teki
+       * `/fonts/…` rewrite'ı upload nesnesiyle hizalansın.
+       */
+      include: /** @type {string[]} */ (["assets", "fonts"]),
       cacheControl: "public, max-age=31536000, immutable",
+      /**
+       * Upload sırasında PutBucketCors ile yazılan `AllowedOrigin`.
+       * `null` / `false` → CORS adımı atlanır. Bucket'taki önceki CORS
+       * kuralının üzerine yazar — paylaşımlı kovada bilinçli açın.
+       * CDN CSS + aynı host font için genelde gerekmez.
+       */
+      corsOrigin: /** @type {string | null} */ ("*"),
     },
   },
 };

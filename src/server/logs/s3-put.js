@@ -14,6 +14,9 @@ import crypto from "node:crypto";
  * @typedef {{ bucket: string, key: string, body: string | Buffer,
  *   region: string, endpoint?: string | null, credentials: AwsCredentials,
  *   contentType?: string, cacheControl?: string | null, now?: Date }} PutObjectInput
+ *
+ * @typedef {{ bucket: string, region: string, endpoint?: string | null,
+ *   credentials: AwsCredentials, allowedOrigin: string, now?: Date }} PutBucketCorsInput
  */
 
 /**
@@ -132,6 +135,24 @@ export function useS3PathStyle(bucket, endpoint) {
 }
 
 /**
+ * @param {{ bucket: string, region: string, endpoint?: string | null }} input
+ * @returns {{ host: string, base: string, pathStyle: boolean }}
+ */
+function s3EndpointParts(input) {
+  const pathStyle = useS3PathStyle(input.bucket, input.endpoint);
+  if (input.endpoint) {
+    const base = String(input.endpoint).replace(/\/+$/, "");
+    return { host: new URL(input.endpoint).host, base, pathStyle: true };
+  }
+  if (pathStyle) {
+    const host = `s3.${input.region}.amazonaws.com`;
+    return { host, base: `https://${host}`, pathStyle: true };
+  }
+  const host = `${input.bucket}.s3.${input.region}.amazonaws.com`;
+  return { host, base: `https://${host}`, pathStyle: false };
+}
+
+/**
  * PutObject isteğini imzalar; ağ çağrısı yapmaz — test edilebilir olsun diye.
  *
  * @param {PutObjectInput} input
@@ -145,22 +166,7 @@ export function buildSignedPutObject(input) {
   const payloadHash = sha256Hex(body);
 
   const keyPath = encodeS3Path(input.key.replace(/^\/+/, ""));
-  const pathStyle = useS3PathStyle(input.bucket, input.endpoint);
-
-  /** @type {string} */
-  let host;
-  /** @type {string} */
-  let base;
-  if (input.endpoint) {
-    base = String(input.endpoint).replace(/\/+$/, "");
-    host = new URL(input.endpoint).host;
-  } else if (pathStyle) {
-    host = `s3.${input.region}.amazonaws.com`;
-    base = `https://${host}`;
-  } else {
-    host = `${input.bucket}.s3.${input.region}.amazonaws.com`;
-    base = `https://${host}`;
-  }
+  const { host, base, pathStyle } = s3EndpointParts(input);
 
   const canonicalUri = pathStyle
     ? `/${encodeS3Path(input.bucket)}/${keyPath}`
@@ -217,6 +223,132 @@ export function buildSignedPutObject(input) {
     : `${base}/${keyPath}`;
 
   return { url, headers, body };
+}
+
+/**
+ * PutBucketCors gövdesi — tek kural, GET/HEAD.
+ *
+ * @param {string} allowedOrigin
+ * @returns {string}
+ */
+export function corsConfigurationXml(allowedOrigin) {
+  const origin = String(allowedOrigin)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+
+  return (
+    `<?xml version="1.0" encoding="UTF-8"?>` +
+    `<CORSConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/">` +
+    `<CORSRule>` +
+    `<AllowedOrigin>${origin}</AllowedOrigin>` +
+    `<AllowedMethod>GET</AllowedMethod>` +
+    `<AllowedMethod>HEAD</AllowedMethod>` +
+    `<AllowedHeader>*</AllowedHeader>` +
+    `<ExposeHeader>ETag</ExposeHeader>` +
+    `<ExposeHeader>Content-Type</ExposeHeader>` +
+    `<MaxAgeSeconds>86400</MaxAgeSeconds>` +
+    `</CORSRule>` +
+    `</CORSConfiguration>`
+  );
+}
+
+/**
+ * PutBucketCors isteğini imzalar (`PUT /?cors` veya path-style `/bucket?cors`).
+ *
+ * @param {PutBucketCorsInput} input
+ * @returns {{ url: string, headers: Record<string, string>, body: Buffer }}
+ */
+export function buildSignedPutBucketCors(input) {
+  const body = Buffer.from(corsConfigurationXml(input.allowedOrigin), "utf8");
+  const now = input.now ?? new Date();
+  const { amzDate, dateStamp } = formatAmzDates(now);
+  const payloadHash = sha256Hex(body);
+  const { host, base, pathStyle } = s3EndpointParts(input);
+
+  // AWS: cors alt kaynağının canonical query'si `cors=` (boş değer).
+  const canonicalQuerystring = "cors=";
+  const canonicalUri = pathStyle ? `/${encodeS3Path(input.bucket)}` : "/";
+
+  /** @type {Record<string, string>} */
+  const headers = {
+    host,
+    "content-type": "application/xml",
+    "content-length": String(body.length),
+    "x-amz-content-sha256": payloadHash,
+    "x-amz-date": amzDate,
+  };
+
+  if (input.credentials.sessionToken) {
+    headers["x-amz-security-token"] = input.credentials.sessionToken;
+  }
+
+  const { canonicalRequest, signedHeaders } = buildCanonicalRequest({
+    method: "PUT",
+    canonicalUri,
+    canonicalQuerystring,
+    headers,
+    payloadHash,
+  });
+
+  const stringToSign = buildStringToSign({
+    amzDate,
+    dateStamp,
+    region: input.region,
+    service: "s3",
+    canonicalRequest,
+  });
+
+  const signingKey = deriveSigningKey(
+    input.credentials.secretAccessKey,
+    dateStamp,
+    input.region,
+    "s3",
+  );
+  const signature = hmac("sha256", signingKey, stringToSign).toString("hex");
+  const credentialScope = `${dateStamp}/${input.region}/s3/aws4_request`;
+
+  headers.authorization =
+    `AWS4-HMAC-SHA256 Credential=${input.credentials.accessKeyId}/${credentialScope}, ` +
+    `SignedHeaders=${signedHeaders}, Signature=${signature}`;
+
+  const url = pathStyle
+    ? `${base}/${encodeS3Path(input.bucket)}?cors`
+    : `${base}/?cors`;
+
+  return { url, headers, body };
+}
+
+/**
+ * Bucket CORS yazar. Mevcut kuralların **üzerine** yazar; paylaşımlı
+ * kovada bilinçli kullanılmalı. İzin yoksa çağıran uyarır, upload sürer.
+ *
+ * @param {PutBucketCorsInput} input
+ * @returns {Promise<void>}
+ */
+export async function putBucketCors(input) {
+  const signed = buildSignedPutBucketCors(input);
+  /** @type {Response} */
+  let response;
+  try {
+    response = await fetch(signed.url, {
+      method: "PUT",
+      headers: signed.headers,
+      body: signed.body,
+    });
+  } catch (error) {
+    const detail =
+      error instanceof Error ? error.message : String(error);
+    throw new Error(`S3 PutBucketCors fetch failed (${signed.url}): ${detail}`);
+  }
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(
+      `S3 PutBucketCors ${response.status}: ${text.slice(0, 200) || response.statusText}`,
+    );
+  }
 }
 
 /**

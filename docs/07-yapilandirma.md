@@ -635,7 +635,8 @@ değişmez** — asset'ler origin'den servis edilir.
 | `assets.upload.keyPrefix` | `string` | `""` | Nesne anahtarı öneki; bucket yolunda verilmişse o kazanır (`prefix` takma adı da kabul). |
 | `assets.upload.region` | `string` | `us-east-1` | Config; custom `endpoint` varken varsayılan `auto`. |
 | `assets.upload.endpoint` | `string \| null` | `null` | S3-uyumlu API (R2 / MinIO); config. |
-| `assets.upload.include` | `string[]` | `["assets"]` | `public/` altı dizinler (`assets`, isteğe `fonts`, …). |
+| `assets.upload.include` | `string[]` | `["assets", "fonts"]` | `public/` altı dizinler. `assets.prefix` doluysa `fonts` yoksa eklenir. |
+| `assets.upload.corsOrigin` | `string \| null` | `"*"` | Font upload'ta PutBucketCors `AllowedOrigin`; `null` kapatır (önceki CORS'un üzerine yazar). |
 | `assets.upload.cacheControl` | `string` | `public, max-age=31536000, immutable` | PutObject `Cache-Control`. |
 
 **Credential config'e yazılmaz.** Zincir: `AWS_ACCESS_KEY_ID` /
