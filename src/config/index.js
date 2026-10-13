@@ -34,6 +34,10 @@ import process from "node:process";
 import { pathToFileURL } from "node:url";
 import { compilePattern, matchPattern } from "./pattern.js";
 import {
+  readS3CredentialsFromEnv,
+  resolveS3Credentials,
+} from "../server/logs/s3-credentials.js";
+import {
   DEFAULT_ADMIN,
   DEFAULT_AUTH,
   DEFAULT_BRAND,
@@ -63,6 +67,8 @@ import {
   DEFAULT_TRANSIENT_RETRY,
   DEFAULT_UPSTREAM_LIMIT,
 } from "./defaults.js";
+
+export { readS3CredentialsFromEnv, resolveS3Credentials };
 
 /** Framework paketinin kökü — kendi şablonlarına ve varlıklarına erişir. */
 export const FRAMEWORK_ROOT = path.resolve(import.meta.dirname, "..", "..");
@@ -525,32 +531,6 @@ export function splitS3BucketPath(value) {
  */
 function envText(value) {
   return typeof value === "string" && value ? value : null;
-}
-
-/**
- * S3 imza credential'ları. AWS deploy'da standart env önce gelir; R2/MinIO
- * için `JSKELET_S3_*` yedek. IAM instance/task role (IMDS) desteklenmez —
- * CI'da `configure-aws-credentials` gibi araçlar zaten `AWS_*` basar.
- *
- * @returns {{ accessKeyId: string, secretAccessKey: string,
- *   sessionToken: string | null } | null}
- */
-export function readS3CredentialsFromEnv() {
-  const accessKeyId =
-    envText(process.env.AWS_ACCESS_KEY_ID) ??
-    envText(process.env.JSKELET_S3_ACCESS_KEY_ID);
-  const secretAccessKey =
-    envText(process.env.AWS_SECRET_ACCESS_KEY) ??
-    envText(process.env.JSKELET_S3_SECRET_ACCESS_KEY) ??
-    envText(process.env.JSKELET_S3_ACCESS_SECRET);
-  if (!accessKeyId || !secretAccessKey) return null;
-  return {
-    accessKeyId,
-    secretAccessKey,
-    sessionToken:
-      envText(process.env.AWS_SESSION_TOKEN) ??
-      envText(process.env.JSKELET_S3_SESSION_TOKEN),
-  };
 }
 
 /**

@@ -87,8 +87,8 @@ They are passed to templates automatically; in server code,
 
 ### CDN prefix and S3 upload
 
-Off by default. Prefix / bucket / keyPrefix come from config; only credentials
-come from the environment (`AWS_*`, else `JSKELET_S3_*`). When enabled:
+Off by default. Prefix / bucket / keyPrefix come from config; credentials
+resolve from env → ECS task role → EC2 IMDS. When enabled:
 
 1. A production build PutObjects files under `public/assets/` (and any other
    directories in `include`) to S3.

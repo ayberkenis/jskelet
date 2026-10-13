@@ -6,9 +6,9 @@
  */
 import process from "node:process";
 import * as log from "../../log.mjs";
-import { readS3CredentialsFromEnv } from "../../config/index.js";
 import { createFileSink } from "./file-sink.js";
 import { createS3Sink } from "./s3-sink.js";
+import { resolveS3Credentials } from "./s3-credentials.js";
 
 /**
  * @typedef {import('../../config/index.js').LogsConfig} LogsConfig
@@ -73,14 +73,15 @@ export async function configureLogs(config) {
   }
 
   if (logs.s3.enabled) {
-    const credentials = readS3CredentialsFromEnv();
+    const credentials = await resolveS3Credentials();
     if (!logs.s3.bucket) {
       console.warn(
         "[logs] s3.enabled but no bucket (set JSKELET_LOG_BUCKET, JSKELET_S3_BUCKET or logs.s3.bucket)",
       );
     } else if (!credentials) {
       console.warn(
-        "[logs] s3.enabled but credentials missing — set AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY or JSKELET_S3_*",
+        "[logs] s3.enabled but credentials missing — set AWS_ACCESS_KEY_ID/" +
+          "AWS_SECRET_ACCESS_KEY or JSKELET_S3_*, or run with an ECS/EC2 IAM role",
       );
     } else {
       const region = logs.s3.region || "auto";

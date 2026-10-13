@@ -651,13 +651,14 @@ changes** — assets stay on the origin.
 | `assets.upload.include` | `string[]` | `["assets"]` | Directories under `public/` (`assets`, optionally `fonts`, …). |
 | `assets.upload.cacheControl` | `string` | `public, max-age=31536000, immutable` | PutObject `Cache-Control`. |
 
-**Only credentials come from the environment:** `AWS_ACCESS_KEY_ID` /
-`AWS_SECRET_ACCESS_KEY` / `AWS_SESSION_TOKEN` (else `JSKELET_S3_*`). Prefix,
-bucket, region, etc. are written in the config. On a production build the Assets
-upload step always appears; when off it logs a one-line reason such as
-`skipped (no build.assets.upload.bucket)` or `skipped (credentials missing)`.
-No upload on watch passes. `.br` / `.gz` siblings are not uploaded. Details:
-[08-build.md](./08-build.md), [10-deployment.md](./10-deployment.md).
+**Credentials are not written in the config.** Chain: `AWS_ACCESS_KEY_ID` /
+`AWS_SECRET_ACCESS_KEY` / `AWS_SESSION_TOKEN` (else `JSKELET_S3_*`) → ECS/Fargate
+task role (`AWS_CONTAINER_CREDENTIALS_*`) → EC2 instance profile (IMDSv2).
+Prefix, bucket, region, etc. live in the config. With a task role, env keys are
+not required. On a production build the Assets upload step always appears; when
+off it logs `skipped (…)`. No upload on watch passes. `.br` / `.gz` siblings are
+not uploaded. Details: [08-build.md](./08-build.md),
+[10-deployment.md](./10-deployment.md).
 
 ```js
 build: {

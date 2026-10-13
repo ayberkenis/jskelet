@@ -84,8 +84,8 @@ dosya adlarını okunur tutuyor. Hash'li olmaları sayesinde bu dosyalara
 
 ### CDN prefix ve S3 upload
 
-Varsayılan kapalıdır. Prefix / bucket / keyPrefix config'te; yalnızca
-credential env'den (`AWS_*`, yoksa `JSKELET_S3_*`). Açılınca:
+Varsayılan kapalıdır. Prefix / bucket / keyPrefix config'te; credential
+env → ECS task role → EC2 IMDS zincirinden. Açılınca:
 
 1. Production build `public/assets/` (ve `include` listesindeki diğer dizinler)
    altındaki dosyaları S3'e PutObject ile kopyalar.

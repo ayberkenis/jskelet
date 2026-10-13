@@ -73,9 +73,9 @@ build: {
 ```
 
 ```bash
+# CI / local: explicit keys. On ECS/EC2 a task/instance role is enough — no keys required.
 AWS_ACCESS_KEY_ID=…
 AWS_SECRET_ACCESS_KEY=…
-# for temporary credentials:
 # AWS_SESSION_TOKEN=…
 ```
 

@@ -1,4 +1,6 @@
+import { readS3CredentialsFromEnv, resolveS3Credentials } from "../server/logs/s3-credentials.js";
 import { DEFAULT_ADMIN, DEFAULT_CLOUDFLARE, DEFAULT_UPSTREAM_LIMIT } from "./defaults.js";
+export { readS3CredentialsFromEnv, resolveS3Credentials };
 /** Framework paketinin kökü — kendi şablonlarına ve varlıklarına erişir. */
 export declare const FRAMEWORK_ROOT: string;
 export type Eagerness = "conservative" | "moderate" | "eager";
@@ -241,7 +243,7 @@ export type BuildAssetsUploadConfig = {
 };
 export type BuildAssetsConfig = {
     /**
-     * CDN origin (`JSKELET_ASSET_PREFIX`); sonunda `/` yok.
+     * CDN origin (`build.assets.prefix`); sonunda `/` yok.
      */
     prefix: string;
     upload: BuildAssetsUploadConfig;
@@ -279,19 +281,6 @@ export declare function splitS3BucketPath(value: string | null): {
     prefix: string | null;
 };
 /**
- * S3 imza credential'ları. AWS deploy'da standart env önce gelir; R2/MinIO
- * için `JSKELET_S3_*` yedek. IAM instance/task role (IMDS) desteklenmez —
- * CI'da `configure-aws-credentials` gibi araçlar zaten `AWS_*` basar.
- *
- * @returns {{ accessKeyId: string, secretAccessKey: string,
- *   sessionToken: string | null } | null}
- */
-export declare function readS3CredentialsFromEnv(): {
-    accessKeyId: string;
-    secretAccessKey: string;
-    sessionToken: string | null;
-} | null;
-/**
  * Kalıcı log sink'leri. Bozuk bir `kinds` listesi siteyi düşürmemeli —
  * bilinmeyen girdiler atılır; hiç geçerli tür kalmazsa varsayılana dönülür.
  *
@@ -313,7 +302,10 @@ export type SecurityConfig = {
     };
 };
 /**
- * CDN prefix + S3 upload (`build.assets`). Credential config'e yazılmaz.
+ * CDN prefix + S3 upload (`build.assets`).
+ *
+ * Prefix / bucket / keyPrefix / region / endpoint **yalnızca config**'ten.
+ * Credential env'den (`AWS_*`, yoksa `JSKELET_S3_*`) — config'e yazılmaz.
  *
  * @param {unknown} raw
  * @returns {BuildAssetsConfig}

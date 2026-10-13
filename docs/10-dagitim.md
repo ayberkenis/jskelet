@@ -72,9 +72,9 @@ build: {
 ```
 
 ```bash
+# CI / local: explicit keys. ECS/EC2'de task/instance role yeter — key şart değil.
 AWS_ACCESS_KEY_ID=…
 AWS_SECRET_ACCESS_KEY=…
-# geçici credential ise:
 # AWS_SESSION_TOKEN=…
 ```
 

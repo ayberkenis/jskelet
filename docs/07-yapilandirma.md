@@ -638,13 +638,13 @@ değişmez** — asset'ler origin'den servis edilir.
 | `assets.upload.include` | `string[]` | `["assets"]` | `public/` altı dizinler (`assets`, isteğe `fonts`, …). |
 | `assets.upload.cacheControl` | `string` | `public, max-age=31536000, immutable` | PutObject `Cache-Control`. |
 
-**Yalnızca credential env'den gelir:** `AWS_ACCESS_KEY_ID` /
-`AWS_SECRET_ACCESS_KEY` / `AWS_SESSION_TOKEN` (yoksa `JSKELET_S3_*`). Prefix,
-bucket, region vb. config'te yazılır. Production build'de Assets upload adımı
-her zaman görünür; kapalıysa `skipped (no build.assets.upload.bucket)` /
-`skipped (credentials missing)` gibi tek satır sebep basılır. Watch'ta adım
-yok. `.br` / `.gz` yüklenmez. Ayrıntı: [08-build.md](./08-build.md),
-[10-dagitim.md](./10-dagitim.md).
+**Credential config'e yazılmaz.** Zincir: `AWS_ACCESS_KEY_ID` /
+`AWS_SECRET_ACCESS_KEY` / `AWS_SESSION_TOKEN` (yoksa `JSKELET_S3_*`) → ECS/Fargate
+task role (`AWS_CONTAINER_CREDENTIALS_*`) → EC2 instance profile (IMDSv2).
+Prefix, bucket, region vb. config'te yazılır. Task role varken env key şart
+değil. Production build'de Assets upload adımı her zaman görünür; kapalıysa
+`skipped (…)` ile sebep basılır. Watch'ta adım yok. `.br` / `.gz` yüklenmez.
+Ayrıntı: [08-build.md](./08-build.md), [10-dagitim.md](./10-dagitim.md).
 
 ```js
 build: {

@@ -2,9 +2,8 @@
  * Minimal S3 PutObject — yalnızca SigV4 + `fetch`.
  *
  * `@aws-sdk/client-s3` taşınmıyor: tek operasyon için SDK'nın maliyeti ve
- * peer yüzeyi gereksiz. Credential zinciri env'den okunur (`AWS_*` önce,
- * sonra `JSKELET_S3_*`); IAM role / instance metadata yok — CI'da
- * `configure-aws-credentials` gibi araçlar key basar.
+ * peer yüzeyi gereksiz. Credential `resolveS3Credentials` ile gelir
+ * (env → ECS task role → EC2 IMDS).
  */
 import crypto from "node:crypto";
 

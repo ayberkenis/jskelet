@@ -122,11 +122,6 @@ function uploadConfig(root, upload) {
 }
 
 test("assetsUploadSkipReason explains why upload is off", () => {
-  delete process.env.AWS_ACCESS_KEY_ID;
-  delete process.env.AWS_SECRET_ACCESS_KEY;
-  delete process.env.JSKELET_S3_ACCESS_KEY_ID;
-  delete process.env.JSKELET_S3_SECRET_ACCESS_KEY;
-
   const root = "/tmp/jskelet-skip";
   assert.equal(
     assetsUploadSkipReason(uploadConfig(root, { enabled: false, bucket: null })),
@@ -138,21 +133,49 @@ test("assetsUploadSkipReason explains why upload is off", () => {
     ),
     "build.assets.upload.enabled is false",
   );
-  assert.equal(
-    assetsUploadSkipReason(
-      uploadConfig(root, { enabled: true, bucket: "app-assets" }),
-    ),
-    "credentials missing",
-  );
-
-  process.env.AWS_ACCESS_KEY_ID = "AKIA";
-  process.env.AWS_SECRET_ACCESS_KEY = "secret";
+  // Credential async (task role); sync skip yalnızca config kapısı.
   assert.equal(
     assetsUploadSkipReason(
       uploadConfig(root, { enabled: true, bucket: "app-assets" }),
     ),
     null,
   );
+});
+
+test("uploadAssets uses resolveCredentials (task role path)", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "jskelet-role-"));
+  const assetsDir = path.join(root, "public", "assets");
+  fs.mkdirSync(assetsDir, { recursive: true });
+  fs.writeFileSync(path.join(assetsDir, "a.js"), "1");
+
+  delete process.env.AWS_ACCESS_KEY_ID;
+  delete process.env.AWS_SECRET_ACCESS_KEY;
+
+  const config = uploadConfig(root, {
+    enabled: true,
+    bucket: "static.investvio.dev",
+    keyPrefix: "js",
+  });
+  initBuildPaths(config);
+
+  /** @type {import('../src/server/logs/s3-put.js').PutObjectInput[]} */
+  const puts = [];
+  await uploadAssets(config, {
+    resolveCredentials: async () => ({
+      accessKeyId: "ASIAFROMROLE",
+      secretAccessKey: "role-secret",
+      sessionToken: "role-token",
+    }),
+    put: async (input) => {
+      puts.push(input);
+    },
+  });
+
+  assert.equal(puts.length, 1);
+  assert.equal(puts[0].credentials.accessKeyId, "ASIAFROMROLE");
+  assert.equal(puts[0].credentials.sessionToken, "role-token");
+  assert.equal(puts[0].key, "js/assets/a.js");
+  fs.rmSync(root, { recursive: true, force: true });
 });
 
 test("uploadAssets puts objects with content-type and cache-control", async () => {

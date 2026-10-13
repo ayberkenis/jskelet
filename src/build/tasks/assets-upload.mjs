@@ -1,16 +1,18 @@
 /**
  * Production build sonunda hash'li varlıkları S3'e PutObject ile kopyalar.
  *
- * Watch turunda çalışmaz (çağıran sorumlu). Credential env'den gelir
- * (`AWS_*` önce, `JSKELET_S3_*` yedek). Bucket / credential yoksa veya upload
- * kapalıysa adım yine görünür: `skipped (…)` ile sebep basılır, build düşmez.
+ * Watch turunda çalışmaz (çağıran sorumlu). Credential: env (`AWS_*` /
+ * `JSKELET_S3_*`) → ECS task role → EC2 instance profile. Bucket yoksa veya
+ * upload kapalıysa adım yine görünür: `skipped (…)` ile sebep basılır.
+ * Credential yalnızca env+metadata zinciri boşsa skip; task role varken
+ * env key şart değil.
  *
  * `.br` / `.gz` kardeşleri yüklenmez: edge kendi sıkıştırmasını yapsın;
  * origin precompress Express için kalır.
  */
 import fs from "node:fs";
 import path from "node:path";
-import { readS3CredentialsFromEnv } from "../../config/index.js";
+import { resolveS3Credentials } from "../../server/logs/s3-credentials.js";
 import { putObject } from "../../server/logs/s3-put.js";
 import * as log from "../../log.mjs";
 import { paths } from "../paths.mjs";
@@ -88,7 +90,7 @@ function resolveIncludeDir(name) {
 }
 
 /**
- * Upload yapılmayacaksa kısa sebep; yapılacaksa `null`.
+ * Config kapısı — credential burada bakılmaz (task role async).
  *
  * @param {import('../../config/index.js').ResolvedConfig} config
  * @returns {string | null}
@@ -105,14 +107,13 @@ export function assetsUploadSkipReason(config) {
 
   if (!upload.bucket) return "no build.assets.upload.bucket";
 
-  if (!readS3CredentialsFromEnv()) return "credentials missing";
-
   return null;
 }
 
 /**
  * @param {import('../../config/index.js').ResolvedConfig} config
- * @param {{ put?: typeof putObject }} [options]
+ * @param {{ put?: typeof putObject,
+ *   resolveCredentials?: typeof resolveS3Credentials }} [options]
  * @returns {Promise<void>}
  */
 export async function uploadAssets(config, options = {}) {
@@ -123,15 +124,17 @@ export async function uploadAssets(config, options = {}) {
   }
 
   const upload = config.build.assets.upload;
-  const credentials = readS3CredentialsFromEnv();
-  // skipReason null iken credential ve bucket vardır; TS/akış için daralt.
+  const resolve = options.resolveCredentials ?? resolveS3Credentials;
+  const credentials = await resolve();
   if (!upload.bucket || !credentials) {
     log.detail("skipped (credentials missing)");
     return;
   }
 
   const put = options.put ?? putObject;
-  const keyPrefix = (upload.keyPrefix || "").replace(/^\/+/, "");
+  // Normalize bazen atlanır (test / elle config); önek `/` ile bitsin.
+  let keyPrefix = (upload.keyPrefix || "").replace(/^\/+/, "");
+  if (keyPrefix && !keyPrefix.endsWith("/")) keyPrefix += "/";
 
   /** @type {{ file: string, key: string }[]} */
   const jobs = [];
