@@ -175,7 +175,8 @@ esbuild ayarları:
 
 | Ayar | Değer | Sebebi |
 | --- | --- | --- |
-| `bundle`, `splitting` | `true` | Ortak modüller paylaşılan chunk'a çıkar |
+| `bundle` | `true` | — |
+| `splitting` | `config.build.client.splitting` (varsayılan `true`) | Ortak modüller paylaşılan chunk'a çıkar; kapatılınca gruplama da düşer |
 | `format` | `esm` | `type="module"` script'ler |
 | `target` | `chrome111`, `edge111`, `firefox111`, `safari16.4` | ESM + dinamik import + `IntersectionObserver` island modelinin alt sınırı; daha eskisine transpile etmek çıktıyı büyütüp hiçbir ziyaretçi kazandırmıyor |
 | `minify` | `true` | — |
@@ -185,7 +186,26 @@ esbuild ayarları:
 | `legalComments` | `none` | — |
 
 Çıktı `public/assets/js/` altına düşer ve her turda önce temizlenir.
-`browserslist` okunmaz; hedef listesi kod içinde sabittir.
+`browserslist` okunmaz; hedef listesi kod içinde sabittir. Adım satırı entry
+sayısına ek olarak toplam JS dosya sayısını yazar (`1 entry, 48 files`) — çok
+chunk teşhisini kolaylaştırır.
+
+### Chunk gruplama (`build.client.groups` / `chunkGroup`)
+
+esbuild native `manualChunks` sunmaz. `build.client.groups` ve
+`build.client.chunkGroup` bir plugin ile uygulanır:
+
+1. Eşleşen import bir re-export sarmalayıcısına yönlenir.
+2. Sarmalayıcı `jskelet-group:<name>` barrel'ını side-effect olarak çeker.
+3. Barrel gruptaki tüm bilinen üyeleri (bare paketler + yol önekindeki
+   `.{js,ts,mts}` dosyaları + resolve sırasında keşfedilenler) statik import
+   eder — gruba dokunan entry'ler aynı üye kümesine ulaşır ve tek paylaşılan
+   chunk oluşur.
+
+**Trade-off:** grup içi tree-shaking zayıflar; bir üyeyi kullanan sayfa grubun
+geri kalanını da indirebilir. Grup adı config anahtarıdır; çıktı dosyası
+çoğunlukla `chunks/chunk.<hash>.js` kalır. Config sözlüğü:
+[07-yapilandirma.md](./07-yapilandirma.md#build).
 
 ### `@/` alias'ı
 

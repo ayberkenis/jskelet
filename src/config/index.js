@@ -47,6 +47,7 @@ import {
   ON_VISIT_CONCURRENCY_CEILING,
   ON_VISIT_PER_PAGE_CEILING,
   ON_VISIT_RPS_CEILING,
+  DEFAULT_BUILD,
   DEFAULT_IMAGES,
   DEFAULT_LOGS,
   DEFAULT_NAVIGATION,
@@ -160,6 +161,17 @@ const CONFIG_FILE = "jskelet.config.mjs";
  * @property {{ scan?: string[], dir: string } | false} icons
  * @property {ImagesConfig | false} images
  * @property {string[]} clientEnv Client bundle'a gömülecek env anahtarları.
+ * @property {BuildConfig} build Client bundling (esbuild splitting / chunk groups).
+ */
+
+/**
+ * @typedef {object} BuildClientConfig
+ * @property {boolean} splitting
+ * @property {Record<string, string[]>} groups
+ * @property {((id: string) => string | null | undefined) | null} chunkGroup
+ *
+ * @typedef {object} BuildConfig
+ * @property {BuildClientConfig} client
  */
 
 /**
@@ -1140,6 +1152,118 @@ function normalizeSecurity(raw) {
 }
 
 /**
+ * Client build ayarları (`build.client`). Bozuk tipler uyarıyla varsayılana düşer.
+ *
+ * @param {unknown} raw
+ * @returns {BuildConfig}
+ */
+export function normalizeBuild(raw) {
+  if (raw == null) {
+    return {
+      client: {
+        splitting: DEFAULT_BUILD.client.splitting,
+        groups: {},
+        chunkGroup: null,
+      },
+    };
+  }
+
+  if (typeof raw !== "object" || Array.isArray(raw)) {
+    console.warn("[config] build must be an object, ignoring it");
+    return {
+      client: {
+        splitting: DEFAULT_BUILD.client.splitting,
+        groups: {},
+        chunkGroup: null,
+      },
+    };
+  }
+
+  const source = /** @type {Record<string, any>} */ (raw);
+  const clientRaw = source.client;
+
+  if (clientRaw == null) {
+    return {
+      client: {
+        splitting: DEFAULT_BUILD.client.splitting,
+        groups: {},
+        chunkGroup: null,
+      },
+    };
+  }
+
+  if (typeof clientRaw !== "object" || Array.isArray(clientRaw)) {
+    console.warn("[config] build.client must be an object, ignoring it");
+    return {
+      client: {
+        splitting: DEFAULT_BUILD.client.splitting,
+        groups: {},
+        chunkGroup: null,
+      },
+    };
+  }
+
+  const client = /** @type {Record<string, any>} */ (clientRaw);
+  const splitting = client.splitting !== false;
+
+  /** @type {Record<string, string[]>} */
+  const groups = {};
+  if (client.groups != null) {
+    if (typeof client.groups !== "object" || Array.isArray(client.groups)) {
+      console.warn("[config] build.client.groups must be an object, ignoring it");
+    } else {
+      for (const [name, matchers] of Object.entries(client.groups)) {
+        if (!isSafeGroupName(name)) {
+          console.warn(
+            `[config] build.client.groups key "${name}" is invalid ` +
+              "(use letters, digits, _ or -); skipping",
+          );
+          continue;
+        }
+        const list = asArray(matchers, `build.client.groups.${name}`)
+          .filter((entry) => typeof entry === "string" && entry.trim())
+          .map((entry) => String(entry).trim());
+        if (list.length) groups[name] = list;
+      }
+    }
+  }
+
+  /** @type {((id: string) => string | null | undefined) | null} */
+  let chunkGroup = null;
+  if (client.chunkGroup != null) {
+    if (typeof client.chunkGroup === "function") {
+      chunkGroup = client.chunkGroup;
+    } else {
+      console.warn(
+        "[config] build.client.chunkGroup must be a function, ignoring it",
+      );
+    }
+  }
+
+  if (
+    !splitting &&
+    (Object.keys(groups).length > 0 || chunkGroup)
+  ) {
+    console.warn(
+      "[config] build.client.groups / chunkGroup require splitting; " +
+        "they are ignored while splitting is false",
+    );
+  }
+
+  return { client: { splitting, groups, chunkGroup } };
+}
+
+/**
+ * Chunk dosya adına güvenli grup adı.
+ *
+ * @param {string} name
+ * @returns {boolean}
+ */
+function isSafeGroupName(name) {
+  return typeof name === "string" && /^[A-Za-z0-9_-]+$/.test(name);
+}
+
+/**
  * İkon sprite ayarları. `false` → adım atlanır. `dir` varsayılanı `"icons"`:
  * o dizin varsa yalnızca yerel SVG'ler; yoksa Phosphor.
  *
@@ -1423,6 +1547,7 @@ export async function loadConfig(options = {}) {
     icons: normalizeIcons(source.icons),
     images: normalizeImages(source.images),
     clientEnv: source.clientEnv ?? [],
+    build: normalizeBuild(source.build),
   };
 
   if (

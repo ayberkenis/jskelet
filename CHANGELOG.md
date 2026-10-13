@@ -28,6 +28,11 @@ one is listed under a **Breaking** heading.
 
 ### Added
 
+- `build.client` configures esbuild code splitting and chunk groups:
+  `splitting`, declarative `groups` (bare package / path / `@/` matchers), and
+  a `chunkGroup(id)` hook. Matched modules are co-located into one shared
+  chunk (webpack-`manualChunks` trade-off: weaker tree-shaking inside the
+  group). The client build step also prints the total JS file count.
 - `ogImage({ fonts })` registers each `ttf` or `otf` (`path` and `family`)
   with fontconfig so card and raw-SVG text use the site's own files. A slim
   image still needs the `fontconfig` package. `woff` / `woff2` are not drawn

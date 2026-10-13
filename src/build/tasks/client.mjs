@@ -15,6 +15,7 @@ import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import * as esbuild from "esbuild";
+import { chunkGroupsPlugin } from "../chunk-groups.mjs";
 import { paths, patchManifest, pruneAssets } from "../paths.mjs";
 import * as log from "../../log.mjs";
 
@@ -187,13 +188,34 @@ export async function buildClient(config, { watch = false } = {}) {
     .split(path.sep)
     .join("/");
 
+  const clientBuild = config.build?.client ?? {
+    splitting: true,
+    groups: {},
+    chunkGroup: null,
+  };
+  const splitting = clientBuild.splitting !== false;
+  const groups = splitting ? (clientBuild.groups ?? {}) : {};
+  const chunkGroup = splitting ? (clientBuild.chunkGroup ?? null) : null;
+
+  const groupPlugin = splitting
+    ? chunkGroupsPlugin({
+        root: config.root,
+        groups,
+        chunkGroup,
+      })
+    : null;
+
+  /** @type {esbuild.Plugin[]} */
+  const plugins = [aliasPlugin(config.root)];
+  if (groupPlugin) plugins.push(groupPlugin);
+
   /** @type {esbuild.BuildOptions} */
   const options = {
     entryPoints,
     outdir: outDir,
     absWorkingDir: config.root,
     bundle: true,
-    splitting: true,
+    splitting,
     format: "esm",
     target: ["chrome111", "edge111", "firefox111", "safari16.4"],
     minify: true,
@@ -203,10 +225,15 @@ export async function buildClient(config, { watch = false } = {}) {
     entryNames: "[name].[hash]",
     chunkNames: "chunks/[name].[hash]",
     legalComments: "none",
-    plugins: [aliasPlugin(config.root)],
+    plugins,
     define: {
       "process.env": JSON.stringify(publicEnv(config.clientEnv)),
     },
+    // Grup sarmalayıcısı her üyede `export { default }` yazar; named-only
+    // modüllerde bu uyarı gürültü — davranış yine doğru (default undefined).
+    ...(groupPlugin
+      ? { logOverride: { "import-is-undefined": "silent" } }
+      : {}),
   };
 
   if (watch) {
@@ -218,8 +245,7 @@ export async function buildClient(config, { watch = false } = {}) {
     await context.watch();
     writeMetafile(result.metafile);
     const manifest = toManifest(result.metafile, config, entryRoot);
-    const entries = Object.keys(manifest).length;
-    log.detail(`${entries} ${entries === 1 ? "entry" : "entries"}`);
+    log.detail(summarizeClientBuild(manifest, result.metafile));
     return manifest;
   }
 
@@ -230,9 +256,30 @@ export async function buildClient(config, { watch = false } = {}) {
     (sum, output) => sum + output.bytes,
     0,
   );
-  const entries = Object.keys(manifest).length;
-  log.detail(`${entries} ${entries === 1 ? "entry" : "entries"}, ${log.size(bytes)}`);
+  log.detail(
+    `${summarizeClientBuild(manifest, result.metafile)}, ${log.size(bytes)}`,
+  );
   return manifest;
+}
+
+/**
+ * Entry + inject edilen group entry'ler metafile'da durur; teşhis için
+ * hem gerçek manifest entry sayısını hem toplam çıktı dosyasını yaz.
+ *
+ * @param {Record<string, string>} manifest
+ * @param {esbuild.Metafile} [metafile]
+ * @returns {string}
+ */
+function summarizeClientBuild(manifest, metafile) {
+  const entries = Object.keys(manifest).length;
+  const entryLabel = `${entries} ${entries === 1 ? "entry" : "entries"}`;
+  if (!metafile) return entryLabel;
+
+  const outputs = Object.keys(metafile.outputs).filter(
+    (file) => file.endsWith(".js") || file.endsWith(".mjs"),
+  );
+  const chunks = outputs.length;
+  return `${entryLabel}, ${chunks} ${chunks === 1 ? "file" : "files"}`;
 }
 
 /**

@@ -421,6 +421,30 @@ export declare const DEFAULT_SECURITY: {
     };
 };
 /**
+ * Client bundle (esbuild) ayarları.
+ *
+ * `groups` / `chunkGroup` esbuild'in native manualChunks'ı olmadığı için
+ * framework plugin'i ile uygulanır — ayrıntı `src/build/chunk-groups.mjs`.
+ */
+export declare const DEFAULT_BUILD: {
+    client: {
+        /** esbuild `splitting`; kapalıyken gruplama yok sayılır. */
+        splitting: boolean;
+        /**
+         * İsim → matcher listesi. Bare paket (`chart.js`), yol öneki
+         * (`./client/chrome/`) veya `@/` öneki.
+         * @type {Record<string, string[]>}
+         */
+        groups: Record<string, string[]>;
+        /**
+         * Modül kimliğini (mutlak yol veya bare specifier) grup adına map eder.
+         * `groups` ile çakışınca hook kazanır.
+         * @type {((id: string) => string | null | undefined) | null}
+         */
+        chunkGroup: ((id: string) => string | null | undefined) | null;
+    };
+};
+/**
  * Build-zamanı görsel adımı + opsiyonel runtime uzak görsel proxy.
  *
  * `remote` kapalıyken `image()` uzak URL'leri olduğu gibi basar (eski davranış).

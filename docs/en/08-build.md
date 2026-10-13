@@ -183,7 +183,8 @@ esbuild settings:
 
 | Setting | Value | Reason |
 | --- | --- | --- |
-| `bundle`, `splitting` | `true` | Shared modules move into a shared chunk |
+| `bundle` | `true` | — |
+| `splitting` | `config.build.client.splitting` (default `true`) | Shared modules move into a shared chunk; turning it off also disables grouping |
 | `format` | `esm` | `type="module"` scripts |
 | `target` | `chrome111`, `edge111`, `firefox111`, `safari16.4` | The lower bound of the ESM + dynamic import + `IntersectionObserver` island model; transpiling to anything older grows the output without winning a single visitor |
 | `minify` | `true` | — |
@@ -193,7 +194,26 @@ esbuild settings:
 | `legalComments` | `none` | — |
 
 The output lands under `public/assets/js/` and is cleaned first on every pass.
-`browserslist` is not read; the target list is hard-coded.
+`browserslist` is not read; the target list is hard-coded. The step line prints
+the total JS file count next to the entry count (`1 entry, 48 files`) so large
+chunk graphs are easier to spot.
+
+### Chunk grouping (`build.client.groups` / `chunkGroup`)
+
+esbuild has no native `manualChunks`. `build.client.groups` and
+`build.client.chunkGroup` are applied through a plugin:
+
+1. A matching import is redirected to a re-export wrapper.
+2. The wrapper side-effect-imports the `jskelet-group:<name>` barrel.
+3. The barrel statically imports every known member of the group (bare packages,
+   `.{js,ts,mts}` files under path prefixes, plus members discovered at resolve
+   time) — every entry that touches the group reaches the same member set and
+   one shared chunk is produced.
+
+**Trade-off:** tree-shaking inside a group weakens; a page that uses one member
+may download the rest of the group. The group name is a config key; the output
+file is usually still `chunks/chunk.<hash>.js`. Config reference:
+[07-configuration.md](./07-configuration.md#build).
 
 ### The `@/` alias
 

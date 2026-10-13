@@ -220,6 +220,18 @@ export type ResolvedConfig = {
      * Client bundle'a gömülecek env anahtarları.
      */
     clientEnv: string[];
+    /**
+     * Client bundling (esbuild splitting / chunk groups).
+     */
+    build: BuildConfig;
+};
+export type BuildClientConfig = {
+    splitting: boolean;
+    groups: Record<string, string[]>;
+    chunkGroup: ((id: string) => string | null | undefined) | null;
+};
+export type BuildConfig = {
+    client: BuildClientConfig;
 };
 export type ImagesRemoteConfig = {
     enabled: boolean;
@@ -279,6 +291,13 @@ export type SecurityConfig = {
         headerName: string;
     };
 };
+/**
+ * Client build ayarları (`build.client`). Bozuk tipler uyarıyla varsayılana düşer.
+ *
+ * @param {unknown} raw
+ * @returns {BuildConfig}
+ */
+export declare function normalizeBuild(raw: unknown): BuildConfig;
 /**
  * Config'i okur, normalize eder ve modül durumuna yazar. Sunucu ve build
  * süreçleri açılışta bir kez çağırır.

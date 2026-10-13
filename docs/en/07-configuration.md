@@ -95,6 +95,11 @@ export default {
   icons: { dir: "icons", scan: ["views", "client", "routes", "lib"] },
   images: { widths: [400, 800, 1200], quality: 78, skip: ["downloads"] },
   clientEnv: ["PUBLIC_WS_URL"],
+  build: {
+    client: {
+      groups: { charts: ["chart.js"] },
+    },
+  },
 
   async headers() {
     return [
@@ -597,6 +602,42 @@ images: {
 `image({ src: "https://static.example.com/a.jpg", width: 96, alt: "…" })`
 rewrites `src` / `srcset` to `/_jskelet/image?url=…&w=96`. To build URLs by
 hand, use `remoteImageUrl(src, { width })` from `jskelet`.
+
+## `build`
+
+**Type:** `{ client?: { splitting?, groups?, chunkGroup? } }` — **Default:**
+`{ client: { splitting: true, groups: {}, chunkGroup: null } }`
+
+Client JS (esbuild) bundling knobs. `fonts` / `icons` / `images` / `clientEnv`
+stay top-level; this section is only for splitting and chunk grouping.
+
+| Field | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `client.splitting` | `boolean` | `true` | esbuild code splitting. When `false`, `groups` / `chunkGroup` are ignored (one warning). |
+| `client.groups` | `Record<string, string[]>` | `{}` | Name → matcher list. Bare package (`chart.js`), path prefix (`./client/chrome/`), or `@/` prefix. |
+| `client.chunkGroup` | `(id: string) => string \| null \| undefined` | `null` | Maps a module id (absolute path or bare specifier) to a group name. **When it conflicts with `groups`, the hook wins.** |
+
+esbuild has no native `manualChunks`. The framework pulls imports that land in a
+group into the same shared chunk via a barrel. Trade-off: tree-shaking inside a
+group weakens — a page that uses one member may download the rest of the group
+(same trade-off as webpack `manualChunks`). Output filenames usually stay
+`chunks/chunk.<hash>.js`; the group name is a config key, not the file name.
+Details: [08-build.md](./08-build.md).
+
+```js
+build: {
+  client: {
+    splitting: true,
+    groups: {
+      charts: ["chart.js", "chartjs-adapter-date-fns"],
+      chrome: ["./client/chrome/", "@/client/chrome/"],
+    },
+    chunkGroup(id) {
+      if (id.includes("node_modules/lodash")) return "vendor";
+    },
+  },
+},
+```
 
 ## `clientEnv`
 
