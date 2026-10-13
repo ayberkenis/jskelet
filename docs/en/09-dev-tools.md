@@ -213,6 +213,11 @@ What it shows:
   blocking time.
 - **Prewarm:** the progress of the warming round; it can be triggered manually
   from the panel, and individual paths can be retried.
+- **Cache (Server tab):** HTML and data entry counts; **Clear this page**
+  hard-drops every variant of the open path and reloads, **Clear all HTML** /
+  **Clear data cache** empty the in-process caches (with a confirm). Same
+  core APIs as the admin panel's `html:invalidate` / `html:clear` /
+  `data:clear`.
 - **Process:** pid, Node version, uptime, RSS and heap usage.
 - **Version:** the installed JSkelet version compared against the `latest` tag
   on npm. When a newer release exists, the **Server** tab grows an `update` chip
@@ -302,6 +307,9 @@ Under `brand.devBasePath` (default `/__jskelet/dev`):
 | `/report/clear` | POST | Resets page measurements and server API records |
 | `/prewarm` | POST | Triggers warming manually. If the body has `paths`, only those paths; 409 if warming is already running. |
 | `/clear` | POST | Resets the request and error logs |
+| `/cache/clear-html` | POST | Clears the entire HTML cache; returns `{ cleared }` |
+| `/cache/clear-data` | POST | Clears the data cache. Optional `prefix` in the body; returns `{ cleared }` |
+| `/cache/invalidate` | POST | Body: required `path` (must start with `/`) and optional `hard` (default `true`). Returns `{ count }` for affected entries |
 
 All of these endpoints are mounted by `mountDevtools()` only when
 `NODE_ENV=development`; thanks to the dynamic import, nothing is loaded into the

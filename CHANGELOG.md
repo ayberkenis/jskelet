@@ -17,6 +17,10 @@ one is listed under a **Breaking** heading.
 
 ### Added
 
+- Dev tools **Server** tab can clear the HTML cache for the open page, every
+  HTML entry, or the data cache. Live stats include HTML/data entry counts;
+  new endpoints under `devBasePath`: `POST /cache/clear-html`,
+  `/cache/clear-data`, and `/cache/invalidate`.
 - On-demand HTML cache via `cache().prewarm: false`: visited pages still
   write to L1 and Redis/disk L2 with the usual `html` TTLs, but classic
   prewarm, `onVisit` link warming, and early-expiry HTTP refresh stay off

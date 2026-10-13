@@ -861,6 +861,93 @@ async function clearAll() {
   pollServer();
 }
 
+/** Son önbellek eyleminin kısa geri bildirimi; sonraki poll'da silinmez. */
+let cacheNotice = null;
+/** @type {ReturnType<typeof setTimeout> | null} */
+let cacheNoticeTimer = null;
+
+/**
+ * @param {string} message
+ */
+function setCacheNotice(message) {
+  cacheNotice = message;
+  if (cacheNoticeTimer) clearTimeout(cacheNoticeTimer);
+  cacheNoticeTimer = setTimeout(() => {
+    cacheNotice = null;
+    cacheNoticeTimer = null;
+    lastBody = "";
+    render();
+  }, 4000);
+  lastBody = "";
+  render();
+}
+
+/**
+ * Bu sekmenin HTML önbelleğini düşürür ve sayfayı yeniler — aksi hâlde
+ * tarayıcıdaki DOM eski kalır, soğuk render görülmez.
+ */
+async function clearThisPageCache() {
+  const path = location.pathname || "/";
+  try {
+    await fetch(`${BASE}/cache/invalidate`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ path, hard: true }),
+    });
+  } catch {
+    setCacheNotice("Could not reach the server to clear this page.");
+    return;
+  }
+  saveState();
+  location.reload();
+}
+
+async function clearHtmlCacheAll() {
+  if (
+    !confirm(
+      "Clear the entire HTML cache? Every page goes cold until the next render or prewarm.",
+    )
+  ) {
+    return;
+  }
+
+  try {
+    const response = await fetch(`${BASE}/cache/clear-html`, { method: "POST" });
+    const body = await response.json().catch(() => ({}));
+    setCacheNotice(
+      `HTML cache cleared (${typeof body.cleared === "number" ? body.cleared : "?"} entries).`,
+    );
+  } catch {
+    setCacheNotice("Could not clear the HTML cache.");
+  }
+  pollServer();
+}
+
+async function clearDataCacheAll() {
+  if (
+    !confirm(
+      "Clear every data-cache entry? Upstream traffic will spike on the next renders.",
+    )
+  ) {
+    return;
+  }
+
+  try {
+    const response = await fetch(`${BASE}/cache/clear-data`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    const body = await response.json().catch(() => ({}));
+    setCacheNotice(
+      `Data cache cleared (${typeof body.cleared === "number" ? body.cleared : "?"} entries).`,
+    );
+  } catch {
+    setCacheNotice("Could not clear the data cache.");
+  }
+  pollServer();
+}
+
 /* ---------------------------------------------------------------- arayüz */
 
 const CSS = `
@@ -1162,6 +1249,7 @@ h4 .head-action { float: inline-end; text-transform: none; letter-spacing: 0; }
 .status.warn { background: rgba(251,191,36,.14); color: var(--mid); }
 .status.bad { background: rgba(251,113,133,.14); color: var(--bad); }
 .hint { color: var(--muted); font-size: 10.5px; }
+.hint.block { display: block; margin: 0 0 8px; line-height: 1.45; }
 .row .good { color: var(--good); } .row .mid { color: var(--mid); } .row .bad { color: var(--bad); }
 .row.clickable { cursor: pointer; grid-template-columns: auto auto 1fr auto auto; }
 .row.clickable.selected { border-color: rgba(255,255,255,.22); background: var(--surface-hover); }
@@ -1200,9 +1288,14 @@ h4 .head-action { float: inline-end; text-transform: none; letter-spacing: 0; }
 .btn.mini { display: inline-flex; align-items: center; gap: 6px; padding: 4px 9px; font-size: 11px; }
 .btn.mini svg { width: 12px; height: 12px; }
 .btn[disabled] { opacity: .5; cursor: default; }
-.toolbar { display: flex; justify-content: flex-end; margin-bottom: 10px; }
+.toolbar { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; margin-bottom: 10px; }
+.toolbar.start { justify-content: flex-start; }
 .btn.danger { color: #ffc9d2; border-color: rgba(251,113,133,.28); background: rgba(251,113,133,.1); }
 .btn.danger:hover { color: #fff; border-color: rgba(251,113,133,.55); background: rgba(251,113,133,.22); }
+.notice {
+  margin: 0 0 10px; padding: 8px 10px; border-radius: 8px; font-size: 12px; line-height: 1.4;
+  color: #b9f2dc; background: rgba(52,211,153,.1); border: 1px solid rgba(52,211,153,.28);
+}
 `;
 
 let shadow = null;
@@ -2022,6 +2115,14 @@ function serverTab() {
       { label: "Avg. render", value: ms(average), tone: grade(average, [150, 500]) },
       { label: "Slowest", value: ms(slowest), tone: grade(slowest, [300, 1000]) },
       { label: "Restart", value: String(restarts), tone: offline ? "mid" : "" },
+      {
+        label: "HTML cache",
+        value: String(serverStats.cache?.html ?? 0),
+      },
+      {
+        label: "Data cache",
+        value: String(serverStats.cache?.data ?? 0),
+      },
       ...(serverStats.prewarm?.total
         ? [
             {
@@ -2033,6 +2134,7 @@ function serverTab() {
           ]
         : []),
     ])}
+    ${cacheSection()}
     ${upstreamSection()}
     <h4>Recent requests</h4>
     ${
@@ -2049,6 +2151,42 @@ function serverTab() {
             .join("")}</div>`
         : `<div class="empty">No requests yet.</div>`
     }
+  `;
+}
+
+/**
+ * HTML / veri önbelleğini panelden boşaltma. Admin panelindeki aynı işlemlerin
+ * kısa yolu; "bu sayfa" mevcut `location.pathname` için sert düşürme yapar.
+ *
+ * @returns {string}
+ */
+function cacheSection() {
+  const path = location.pathname || "/";
+  const html = serverStats?.cache?.html ?? 0;
+  const data = serverStats?.cache?.data ?? 0;
+
+  return `
+    <h4>Cache</h4>
+    ${
+      cacheNotice
+        ? `<div class="notice">${escapeHtml(cacheNotice)}</div>`
+        : ""
+    }
+    <p class="hint block">
+      In-process HTML (${html}) and data (${data}) entries.
+      Clearing this page drops every variant of <code>${escapeHtml(path)}</code> and reloads.
+    </p>
+    <div class="toolbar start">
+      <button class="btn mini" data-action="cache-page" title="Hard-drop HTML for ${escapeHtml(path)}">
+        ${TRASH_ICON} Clear this page
+      </button>
+      <button class="btn mini danger" data-action="cache-html" title="Clear every HTML cache entry">
+        ${TRASH_ICON} Clear all HTML
+      </button>
+      <button class="btn mini danger" data-action="cache-data" title="Clear every data-cache entry">
+        ${TRASH_ICON} Clear data cache
+      </button>
+    </div>
   `;
 }
 
@@ -2224,7 +2362,7 @@ const ABOUT = {
       <div class="step"><span class="n">1</span><span><b>Route</b><span><code>server/routes/</code> matches the URL and hands the request to the right controller.</span></span></div>
       <div class="step"><span class="n">2</span><span><b>Controller</b><span><code>server/controllers/</code> gathers the data it needs from the <code>lib/</code> services and prepares the model for the template.</span></span></div>
       <div class="step"><span class="n">3</span><span><b>Render</b><span><code>server/render.js</code> runs the EJS template and prints manifest entries and head hints into the layout.</span></span></div>
-      <div class="step"><span class="n">4</span><span><b>HTML cache</b><span><code>server/html-cache.js</code> stores the output; if the same URL is requested again the template never runs. The <code>cached</code> label on the Server tab shows this.</span></span></div>
+      <div class="step"><span class="n">4</span><span><b>HTML cache</b><span><code>server/html-cache.js</code> stores the output; if the same URL is requested again the template never runs. The Server tab shows entry counts and can clear this page, all HTML, or the data cache.</span></span></div>
       <div class="step"><span class="n">5</span><span><b>Response</b><span>Compression and cache headers are decided in <code>server/middleware/</code>; responses like event streams skip compression.</span></span></div>
     </div>
     <p><strong>Prewarming:</strong> <code>server/prewarm.js</code> visits the most travelled
@@ -2734,6 +2872,21 @@ function bind(root) {
     }
 
     if (target.dataset.action === "clear") clearAll();
+
+    if (target.dataset.action === "cache-page") {
+      void clearThisPageCache();
+      return;
+    }
+
+    if (target.dataset.action === "cache-html") {
+      void clearHtmlCacheAll();
+      return;
+    }
+
+    if (target.dataset.action === "cache-data") {
+      void clearDataCacheAll();
+      return;
+    }
   });
 }
 

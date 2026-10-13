@@ -15,7 +15,12 @@ import * as log from "../../log.mjs";
 import { FRAMEWORK_ROOT, getConfig } from "../../config/index.js";
 import { getRequestContext } from "../../http/request-context.js";
 import { prewarm, prewarmProgress } from "../prewarm.js";
-import { clearHtmlCache } from "../html-cache.js";
+import {
+  clearHtmlCache,
+  getHtmlCacheSize,
+  invalidateHtmlCache,
+} from "../html-cache.js";
+import { clearDataCache, getDataCacheSize } from "../data-cache.js";
 import {
   buildReport,
   clearPageReports,
@@ -325,6 +330,12 @@ function statsPayload() {
     version: versionStatus(),
     memory: { rss: usage.rss, heapUsed: usage.heapUsed },
     prewarm: { ...prewarmProgress },
+    // Overlay Server sekmesindeki önbellek sayaçları; her kalp atışında
+    // güncellenir ki temizleme sonrası yenilemeye gerek kalmasın.
+    cache: {
+      html: getHtmlCacheSize(),
+      data: getDataCacheSize(),
+    },
     requests: requests.slice(-25).reverse(),
     errors: errors.slice(-25).reverse(),
     // SSR dış çağrıları: overlay API sekmesi hangi sayfanın hangi
@@ -555,6 +566,41 @@ function router() {
     persist();
     pushStats();
     res.json({ ok: true });
+  });
+
+  // Panelden HTML / veri önbelleğini elle boşaltma. Admin panelindeki
+  // `html:clear` / `html:invalidate` / `data:clear` ile aynı çekirdek API;
+  // yalnızca development'ta ve CSRF'siz — overlay zaten aynı origin'den gelir.
+  api.post("/cache/clear-html", (req, res) => {
+    const cleared = getHtmlCacheSize();
+    clearHtmlCache();
+    pushStats();
+    res.json({ ok: true, cleared });
+  });
+
+  api.post("/cache/clear-data", express.json({ limit: "8kb" }), (req, res) => {
+    const prefix =
+      typeof req.body?.prefix === "string" && req.body.prefix
+        ? req.body.prefix
+        : undefined;
+    const cleared = clearDataCache(prefix);
+    pushStats();
+    res.json({ ok: true, cleared });
+  });
+
+  api.post("/cache/invalidate", express.json({ limit: "8kb" }), (req, res) => {
+    const target = String(req.body?.path ?? "");
+    if (!target.startsWith("/")) {
+      res.status(400).json({ ok: false, reason: "path" });
+      return;
+    }
+
+    // Dev panelinde "bu sayfayı sil" soğuk render bekler; yumuşak bayatlatma
+    // eski HTML'i servis etmeye devam eder ve etkisi görünmez kalır.
+    const hard = req.body?.hard !== false;
+    const count = invalidateHtmlCache(target, { hard });
+    pushStats();
+    res.json({ ok: true, count, path: target, hard });
   });
 
   return api;

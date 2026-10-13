@@ -208,6 +208,11 @@ Gösterdikleri:
   bloke süresi.
 - **Prewarm:** ısıtma turunun ilerlemesi; panelden elle tetiklenebilir, tek tek
   yollar tekrar denenebilir.
+- **Önbellek (Server sekmesi):** HTML ve veri girdisi sayıları; **Clear this
+  page** açık yolun bütün varyantlarını sert düşürüp sayfayı yeniler, **Clear
+  all HTML** / **Clear data cache** süreç önbelleğini boşaltır (onay ister).
+  Aynı işlemler admin panelindeki `html:invalidate` / `html:clear` /
+  `data:clear` ile paylaşılır.
 - **Süreç:** pid, Node sürümü, uptime, RSS ve heap kullanımı.
 - **Sürüm:** kurulu JSkelet sürümü ve npm'deki `latest` ile karşılaştırması.
   Yeni bir sürüm varsa **Server** sekmesinde `update` rozeti ve yükseltme
@@ -297,6 +302,9 @@ Rapor katmanı yalnızca development'ta yüklenir, üretim çıktısına hiç gi
 | `/report/clear` | POST | Sayfa ölçümlerini ve sunucu API kayıtlarını sıfırlar |
 | `/prewarm` | POST | Isıtmayı elle tetikler. Gövdede `paths` varsa yalnızca o yollar; ısıtma zaten çalışıyorsa 409. |
 | `/clear` | POST | İstek ve hata günlüklerini sıfırlar |
+| `/cache/clear-html` | POST | Tüm HTML önbelleğini boşaltır; `{ cleared }` döner |
+| `/cache/clear-data` | POST | Veri önbelleğini boşaltır. Gövdede isteğe bağlı `prefix`; `{ cleared }` döner |
+| `/cache/invalidate` | POST | Gövdede `path` (zorunlu, `/` ile başlamalı) ve isteğe bağlı `hard` (varsayılan `true`). Etkilenen girdi sayısıyla `{ count }` döner |
 
 Bu uçların tamamı `mountDevtools()` tarafından yalnızca
 `NODE_ENV=development` iken bağlanır; prod sürecine dinamik import sayesinde
