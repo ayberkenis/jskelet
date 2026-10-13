@@ -122,6 +122,8 @@ export declare function noteVisitWarm(html: string, context: {
  * Açılışta ısıtmayı tetikler. `listen` geri çağrısından çağrılır.
  * `onVisit` modunda klasik zamanlayıcı yok; yine de erken-TTL invalidation
  * drain'i çalışır — soft-bayatlayan sweeper'ın kuyruğu boşalmasın.
+ * `prewarm: false` (`mode: "off"`) on-demand: ziyaret yazımı kalır, hiçbir
+ * arka plan ısıtması kurulmaz; `PREWARM=1` bunu ezmez.
  *
  * @param {{ port: number }} options
  * @returns {void}

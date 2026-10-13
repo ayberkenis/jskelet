@@ -49,6 +49,7 @@ export declare const DEFAULT_DEV_GATE_BYPASS: string[];
  */
 export declare const DEFAULT_PREWARM: {
     enabled: boolean;
+    /** @type {"classic" | "onVisit" | "off"} */
     mode: "classic" | "onVisit" | "off";
     max: number;
     intervalSeconds: number;
