@@ -13,7 +13,7 @@ export { cache, withRequestCache } from "./http/request-cache.js";
 export { clearCookie, getSignedCookie, parseCookies, randomToken, safeEqual, serializeCookie, setCookie, setSignedCookie, } from "./http/cookies.js";
 export { clearSharedCookie, requestIsHttps, resolveSharedCookieDomain, SHARED_COOKIE_WARN_BYTES, writeSharedCookie, } from "./http/shared-cookie.js";
 export { reportUpstreamFailure } from "./server/upstream-tracking.js";
-export { asset, hasAsset, optimizedImage, getSpriteIds } from "./server/assets.js";
+export { asset, hasAsset, optimizedImage, getSpriteIds, applyAssetPrefix, } from "./server/assets.js";
 export { remoteImageUrl, parseAllowedRemoteUrl } from "./server/image-optimizer.js";
 export { ImageResponse, OG_SIZE, buildOgSvg, escapeXml, ogHandler, ogImage, sendOgImage, wrapText, } from "./server/og-image.js";
 export { headHints } from "./server/head-hints.js";

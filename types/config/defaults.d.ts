@@ -421,10 +421,14 @@ export declare const DEFAULT_SECURITY: {
     };
 };
 /**
- * Client bundle (esbuild) ayarları.
+ * Client bundle (esbuild) ayarları + opsiyonel CDN prefix / S3 upload.
  *
  * `groups` / `chunkGroup` esbuild'in native manualChunks'ı olmadığı için
  * framework plugin'i ile uygulanır — ayrıntı `src/build/chunk-groups.mjs`.
+ *
+ * `assets.prefix` HTML'deki `asset()` URL'lerine eklenir (manifest diskte
+ * göreli kalır). `assets.upload` production build sonunda `public/` altındaki
+ * seçili dizinleri S3'e PutObject ile kopyalar; credential env'den okunur.
  */
 export declare const DEFAULT_BUILD: {
     client: {
@@ -442,6 +446,21 @@ export declare const DEFAULT_BUILD: {
          * @type {((id: string) => string | null | undefined) | null}
          */
         chunkGroup: ((id: string) => string | null | undefined) | null;
+    };
+    assets: {
+        /** CDN / CloudFront origin; sonunda `/` yok. Env: `JSKELET_ASSET_PREFIX`. */
+        prefix: string;
+        upload: {
+            enabled: boolean;
+            bucket: null;
+            /** Nesne anahtarı öneki (`bucket/path` split'inden veya config). */
+            keyPrefix: string;
+            region: string;
+            endpoint: null;
+            /** `public/` altı dizin adları. */
+            include: string[];
+            cacheControl: string;
+        };
     };
 };
 /**

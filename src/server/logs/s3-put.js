@@ -2,10 +2,9 @@
  * Minimal S3 PutObject — yalnızca SigV4 + `fetch`.
  *
  * `@aws-sdk/client-s3` taşınmıyor: tek operasyon için SDK'nın maliyeti ve
- * peer yüzeyi gereksiz. Credential zinciri env'den okunur
- * (`JSKELET_S3_ACCESS_KEY_ID` / `JSKELET_S3_SECRET_ACCESS_KEY` /
- * `JSKELET_S3_SESSION_TOKEN`); IAM role / instance metadata yok —
- * container'a key vermeyen kurulumlar için sink zaten açılışta no-op'a düşer.
+ * peer yüzeyi gereksiz. Credential zinciri env'den okunur (`AWS_*` önce,
+ * sonra `JSKELET_S3_*`); IAM role / instance metadata yok — CI'da
+ * `configure-aws-credentials` gibi araçlar key basar.
  */
 import crypto from "node:crypto";
 
@@ -15,7 +14,7 @@ import crypto from "node:crypto";
  *
  * @typedef {{ bucket: string, key: string, body: string | Buffer,
  *   region: string, endpoint?: string | null, credentials: AwsCredentials,
- *   now?: Date }} PutObjectInput
+ *   contentType?: string, cacheControl?: string | null, now?: Date }} PutObjectInput
  */
 
 /**
@@ -145,11 +144,16 @@ export function buildSignedPutObject(input) {
   /** @type {Record<string, string>} */
   const headers = {
     host,
-    "content-type": "application/x-ndjson",
+    // Log sink varsayılanı; asset upload `contentType` geçirir.
+    "content-type": input.contentType ?? "application/x-ndjson",
     "content-length": String(body.length),
     "x-amz-content-sha256": payloadHash,
     "x-amz-date": amzDate,
   };
+
+  if (input.cacheControl) {
+    headers["cache-control"] = input.cacheControl;
+  }
 
   if (input.credentials.sessionToken) {
     headers["x-amz-security-token"] = input.credentials.sessionToken;

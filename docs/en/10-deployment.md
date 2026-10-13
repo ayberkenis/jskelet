@@ -52,7 +52,28 @@ considering in production:
 | `PREWARM_MAX` | Depends on site size | Number of pages warmed at startup |
 | `PREWARM_INTERVAL_SECONDS` | `0` or a long value | If you want to keep never-visited pages warm |
 | `DEV_GATE` + `DEV_TOKEN` | Staging only | Hides an environment that is not public yet. The token alone does not lock the site |
-| `JSKELET_S3_*` | If you write access logs to S3 | Bucket + credentials; details in [07](./07-configuration.md) |
+| `JSKELET_S3_*` / `AWS_*` | If you write access logs or assets to S3 | Credentials; on AWS, `AWS_ACCESS_KEY_ID` etc. are enough. Details in [07](./07-configuration.md) |
+| `JSKELET_ASSETS_BUCKET` | If you publish hashed assets to S3/CloudFront | PutObject at the end of production `jskelet build`; `JSKELET_ASSET_PREFIX` makes HTML emit CDN URLs |
+
+### Publishing assets to S3 / CloudFront
+
+Off by default. In CI or a production build environment:
+
+```bash
+JSKELET_ASSETS_BUCKET=my-app-assets          # or my-app-assets/static
+JSKELET_ASSET_PREFIX=https://dxxxx.cloudfront.net
+AWS_REGION=eu-central-1
+AWS_ACCESS_KEY_ID=…
+AWS_SECRET_ACCESS_KEY=…
+# for temporary credentials:
+# AWS_SESSION_TOKEN=…
+```
+
+When `jskelet build` finishes, files under `public/assets/` (and any other
+`include` directories) are copied to S3; origin copies remain. If upload is on
+and the bucket or credentials are missing, the build fails. Watch /
+`jskelet dev` never upload. If you use CSP, add the CDN origin to
+`script-src` / `style-src` / `img-src` and to `preconnect`.
 
 When a file or S3 sink is enabled in production, the HTTP access log middleware
 mounts automatically (if `http` is in `logs.kinds`). The admin panel ring is

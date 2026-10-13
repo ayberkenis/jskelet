@@ -128,6 +128,18 @@ export async function boot() {
         groups: client.groups ?? {},
         chunkGroup: client.chunkGroup ?? null,
       },
+      assets: {
+        prefix: "",
+        upload: {
+          enabled: false,
+          bucket: null,
+          keyPrefix: "",
+          region: "us-east-1",
+          endpoint: null,
+          include: ["assets"],
+          cacheControl: "public, max-age=31536000, immutable",
+        },
+      },
     },
   };
 

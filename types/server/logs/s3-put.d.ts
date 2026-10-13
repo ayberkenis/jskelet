@@ -10,6 +10,8 @@ export type PutObjectInput = {
     region: string;
     endpoint?: string | null;
     credentials: AwsCredentials;
+    contentType?: string;
+    cacheControl?: string | null;
     now?: Date;
 };
 /**

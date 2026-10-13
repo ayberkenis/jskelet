@@ -1,4 +1,12 @@
 /**
+ * CDN prefix + göreli asset yolu. Zaten mutlak (`https:…`) URL'lere dokunmaz.
+ *
+ * @param {string} prefix Sonunda `/` olmadan (normalize edilmiş).
+ * @param {string} url
+ * @returns {string}
+ */
+export declare function applyAssetPrefix(prefix: string, url: string): string;
+/**
  * @param {string} name Örn. "app.css", "main.js", "sprite.svg"
  * @returns {string}
  */

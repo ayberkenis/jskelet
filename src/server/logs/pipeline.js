@@ -80,7 +80,7 @@ export async function configureLogs(config) {
       );
     } else if (!credentials) {
       console.warn(
-        "[logs] s3.enabled but credentials missing — set JSKELET_S3_ACCESS_KEY_ID and JSKELET_S3_SECRET_ACCESS_KEY",
+        "[logs] s3.enabled but credentials missing — set AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY or JSKELET_S3_*",
       );
     } else {
       const region = logs.s3.region || "auto";

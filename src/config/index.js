@@ -161,7 +161,7 @@ const CONFIG_FILE = "jskelet.config.mjs";
  * @property {{ scan?: string[], dir: string } | false} icons
  * @property {ImagesConfig | false} images
  * @property {string[]} clientEnv Client bundle'a gömülecek env anahtarları.
- * @property {BuildConfig} build Client bundling (esbuild splitting / chunk groups).
+ * @property {BuildConfig} build Client bundling + CDN prefix / S3 asset upload.
  */
 
 /**
@@ -170,8 +170,22 @@ const CONFIG_FILE = "jskelet.config.mjs";
  * @property {Record<string, string[]>} groups
  * @property {((id: string) => string | null | undefined) | null} chunkGroup
  *
+ * @typedef {object} BuildAssetsUploadConfig
+ * @property {boolean} enabled
+ * @property {string | null} bucket
+ * @property {string} keyPrefix
+ * @property {string} region
+ * @property {string | null} endpoint
+ * @property {string[]} include
+ * @property {string} cacheControl
+ *
+ * @typedef {object} BuildAssetsConfig
+ * @property {string} prefix CDN origin (`JSKELET_ASSET_PREFIX`); sonunda `/` yok.
+ * @property {BuildAssetsUploadConfig} upload
+ *
  * @typedef {object} BuildConfig
  * @property {BuildClientConfig} client
+ * @property {BuildAssetsConfig} assets
  */
 
 /**
@@ -514,19 +528,28 @@ function envText(value) {
 }
 
 /**
+ * S3 imza credential'ları. AWS deploy'da standart env önce gelir; R2/MinIO
+ * için `JSKELET_S3_*` yedek. IAM instance/task role (IMDS) desteklenmez —
+ * CI'da `configure-aws-credentials` gibi araçlar zaten `AWS_*` basar.
+ *
  * @returns {{ accessKeyId: string, secretAccessKey: string,
  *   sessionToken: string | null } | null}
  */
 export function readS3CredentialsFromEnv() {
-  const accessKeyId = envText(process.env.JSKELET_S3_ACCESS_KEY_ID);
+  const accessKeyId =
+    envText(process.env.AWS_ACCESS_KEY_ID) ??
+    envText(process.env.JSKELET_S3_ACCESS_KEY_ID);
   const secretAccessKey =
+    envText(process.env.AWS_SECRET_ACCESS_KEY) ??
     envText(process.env.JSKELET_S3_SECRET_ACCESS_KEY) ??
     envText(process.env.JSKELET_S3_ACCESS_SECRET);
   if (!accessKeyId || !secretAccessKey) return null;
   return {
     accessKeyId,
     secretAccessKey,
-    sessionToken: envText(process.env.JSKELET_S3_SESSION_TOKEN),
+    sessionToken:
+      envText(process.env.AWS_SESSION_TOKEN) ??
+      envText(process.env.JSKELET_S3_SESSION_TOKEN),
   };
 }
 
@@ -1152,7 +1175,122 @@ function normalizeSecurity(raw) {
 }
 
 /**
- * Client build ayarları (`build.client`). Bozuk tipler uyarıyla varsayılana düşer.
+ * @returns {BuildClientConfig}
+ */
+function defaultBuildClient() {
+  return {
+    splitting: DEFAULT_BUILD.client.splitting,
+    groups: {},
+    chunkGroup: null,
+  };
+}
+
+/**
+ * CDN prefix + S3 upload (`build.assets`). Credential config'e yazılmaz.
+ *
+ * @param {unknown} raw
+ * @returns {BuildAssetsConfig}
+ */
+export function normalizeBuildAssets(raw) {
+  const source =
+    raw != null && typeof raw === "object" && !Array.isArray(raw)
+      ? /** @type {Record<string, any>} */ (raw)
+      : {};
+
+  if (raw != null && (typeof raw !== "object" || Array.isArray(raw))) {
+    console.warn("[config] build.assets must be an object, ignoring it");
+  }
+
+  const envPrefix = envText(process.env.JSKELET_ASSET_PREFIX);
+  const configPrefix =
+    typeof source.prefix === "string" ? source.prefix.trim() : "";
+  const prefix = (envPrefix ?? configPrefix).replace(/\/+$/, "");
+
+  const uploadRaw =
+    source.upload != null &&
+    typeof source.upload === "object" &&
+    !Array.isArray(source.upload)
+      ? /** @type {Record<string, any>} */ (source.upload)
+      : {};
+
+  if (
+    source.upload != null &&
+    (typeof source.upload !== "object" || Array.isArray(source.upload))
+  ) {
+    console.warn("[config] build.assets.upload must be an object, ignoring it");
+  }
+
+  const envBucket = envText(process.env.JSKELET_ASSETS_BUCKET);
+  const bucketPath = splitS3BucketPath(
+    envBucket ?? envText(uploadRaw.bucket),
+  );
+
+  const configKeyPrefix =
+    typeof uploadRaw.keyPrefix === "string" && uploadRaw.keyPrefix
+      ? uploadRaw.keyPrefix.endsWith("/")
+        ? uploadRaw.keyPrefix
+        : `${uploadRaw.keyPrefix}/`
+      : typeof uploadRaw.prefix === "string" && uploadRaw.prefix
+        ? uploadRaw.prefix.endsWith("/")
+          ? uploadRaw.prefix
+          : `${uploadRaw.prefix}/`
+        : DEFAULT_BUILD.assets.upload.keyPrefix;
+
+  const endpoint =
+    envText(process.env.AWS_ENDPOINT_URL) ??
+    envText(process.env.JSKELET_S3_API_URL) ??
+    envText(uploadRaw.endpoint);
+
+  // Gerçek AWS'te region imza için gerekir; custom endpoint'te `auto` yaygın.
+  const region =
+    envText(uploadRaw.region) ??
+    envText(process.env.AWS_REGION) ??
+    envText(process.env.AWS_DEFAULT_REGION) ??
+    envText(process.env.JSKELET_S3_REGION) ??
+    (endpoint ? "auto" : DEFAULT_BUILD.assets.upload.region);
+
+  /** @type {string[]} */
+  let include = [...DEFAULT_BUILD.assets.upload.include];
+  if (uploadRaw.include != null) {
+    const list = asArray(uploadRaw.include, "build.assets.upload.include")
+      .filter((entry) => typeof entry === "string" && entry.trim())
+      .map((entry) => String(entry).trim().replace(/^\/+|\/+$/g, ""));
+    if (list.length) include = [...new Set(list)];
+    else {
+      console.warn(
+        "[config] build.assets.upload.include has no valid entries, using defaults",
+      );
+    }
+  }
+
+  const cacheControl =
+    typeof uploadRaw.cacheControl === "string" && uploadRaw.cacheControl.trim()
+      ? uploadRaw.cacheControl.trim()
+      : DEFAULT_BUILD.assets.upload.cacheControl;
+
+  // `JSKELET_ASSETS_BUCKET` doluysa config'te `enabled` unutulmuş olsa bile aç.
+  // Açık `enabled: false` ezer.
+  const enabled =
+    uploadRaw.enabled === true ||
+    (uploadRaw.enabled !== false && Boolean(bucketPath.bucket));
+
+  return {
+    prefix,
+    upload: {
+      enabled,
+      bucket: bucketPath.bucket,
+      keyPrefix: bucketPath.prefix ?? configKeyPrefix,
+      region,
+      endpoint,
+      include,
+      cacheControl,
+    },
+  };
+}
+
+/**
+ * Client build ayarları (`build.client` + `build.assets`). Bozuk tipler
+ * uyarıyla varsayılana düşer.
  *
  * @param {unknown} raw
  * @returns {BuildConfig}
@@ -1160,47 +1298,30 @@ function normalizeSecurity(raw) {
 export function normalizeBuild(raw) {
   if (raw == null) {
     return {
-      client: {
-        splitting: DEFAULT_BUILD.client.splitting,
-        groups: {},
-        chunkGroup: null,
-      },
+      client: defaultBuildClient(),
+      assets: normalizeBuildAssets(null),
     };
   }
 
   if (typeof raw !== "object" || Array.isArray(raw)) {
     console.warn("[config] build must be an object, ignoring it");
     return {
-      client: {
-        splitting: DEFAULT_BUILD.client.splitting,
-        groups: {},
-        chunkGroup: null,
-      },
+      client: defaultBuildClient(),
+      assets: normalizeBuildAssets(null),
     };
   }
 
   const source = /** @type {Record<string, any>} */ (raw);
+  const assets = normalizeBuildAssets(source.assets);
   const clientRaw = source.client;
 
   if (clientRaw == null) {
-    return {
-      client: {
-        splitting: DEFAULT_BUILD.client.splitting,
-        groups: {},
-        chunkGroup: null,
-      },
-    };
+    return { client: defaultBuildClient(), assets };
   }
 
   if (typeof clientRaw !== "object" || Array.isArray(clientRaw)) {
     console.warn("[config] build.client must be an object, ignoring it");
-    return {
-      client: {
-        splitting: DEFAULT_BUILD.client.splitting,
-        groups: {},
-        chunkGroup: null,
-      },
-    };
+    return { client: defaultBuildClient(), assets };
   }
 
   const client = /** @type {Record<string, any>} */ (clientRaw);
@@ -1250,7 +1371,7 @@ export function normalizeBuild(raw) {
     );
   }
 
-  return { client: { splitting, groups, chunkGroup } };
+  return { client: { splitting, groups, chunkGroup }, assets };
 }
 
 /**

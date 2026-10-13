@@ -1,11 +1,12 @@
 /**
  * Tek build girişi: fontlar → ikon sprite → CSS → client JS → görseller →
- * manifest → precompress.
+ * manifest → precompress → (opsiyonel) S3 asset upload.
  *
  * Sıra rastgele değil. CSS Tailwind için şablonları tarar, bu yüzden ikon
  * sprite'ından sonra gelir (sprite bir varlık, sınıf üretmez ama manifest
- * anahtarı verir). Precompress en sonda: sıkıştırılacak her şey üretilmiş
- * olmalı.
+ * anahtarı verir). Precompress upload'tan önce: origin hâlâ `.br` üretir;
+ * S3 adımı ham dosyaları kopyalar. Upload yalnızca `build.assets.upload`
+ * açıksa ve watch değilse çalışır.
  *
  * Görevler yalnızca ilgili yapılandırma varsa çalışır. Font tanımlamayan bir
  * proje font adımını hiç görmez; bu, "framework her projeye kendi
@@ -108,6 +109,13 @@ writeManifest(manifest);
 if (!watch) {
   const { precompressAssets } = await import("./tasks/precompress.mjs");
   await task("Precompress", precompressAssets);
+
+  // CDN'e basılacak dosyalar precompress'ten sonra hazır; `.br`/`.gz` yüklenmez.
+  if (config.build?.assets?.upload?.enabled) {
+    const { uploadAssets } = await import("./tasks/assets-upload.mjs");
+    await task("Assets upload", () => uploadAssets(config));
+  }
+
   log.section("output");
   for (const row of manifestRows()) log.line(row);
 }

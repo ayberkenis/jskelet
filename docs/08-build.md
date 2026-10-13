@@ -20,6 +20,7 @@ davranışı burada. Çıktının çalışma anında nasıl servis edildiği
 5. Images         config.images !== false, watch değil ve sharp kurulu ise
 6. Manifest       .jskelet/manifest.json
 7. Precompress    watch değilse
+8. Assets upload  build.assets.upload açıksa (watch değil)
 ```
 
 Şablon derlemesi asset taramasından **önce** biter; istek yolunda parse yoktur.
@@ -30,8 +31,10 @@ Sıra rastgele değil:
 
 - **CSS ikon sprite'ından sonra gelir.** Sprite bir varlıktır ve sınıf üretmez,
   ama manifest anahtarı verir.
-- **Precompress en sonda:** sıkıştırılacak her şey üretilmiş olmalı.
+- **Precompress, upload'tan hemen önce:** origin hâlâ `.br`/`.gz` üretir; S3
+  adımı yalnızca ham dosyaları kopyalar.
 - **Görseller watch turunda hiç çalışmaz:** `sharp` ile yeniden kodlama pahalı.
+- **Assets upload watch'ta yok:** yalnızca production `jskelet build`.
 
 Görevler yalnızca ilgili yapılandırma varsa çalışır. Font tanımlamayan bir proje
 font adımını hiç görmez; bu, "framework her projeye kendi varsayımlarını
@@ -74,7 +77,24 @@ dosya adlarını okunur tutuyor. Hash'li olmaları sayesinde bu dosyalara
 ```
 
 - `asset(name)` manifest'te varsa hash'li URL'i, yoksa `/assets/<name>` döner.
+  `build.assets.prefix` / `JSKELET_ASSET_PREFIX` doluysa bu göreli yolun önüne
+  CDN origin eklenir (manifest diskte göreli kalır).
 - `hasAsset(name)` manifest'te olup olmadığını söyler.
+
+### CDN prefix ve S3 upload
+
+Varsayılan kapalıdır. Açılınca:
+
+1. Production build `public/assets/` (ve `include` listesindeki diğer dizinler)
+   altındaki dosyaları S3'e PutObject ile kopyalar.
+2. Çalışma anında `asset()` / optimize görseller `JSKELET_ASSET_PREFIX` ile
+   absolute CDN URL basar. Entry CDN'deyse esbuild chunk'ları göreli yolla aynı
+   host'a gider.
+
+Credential: `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` (önce), yoksa
+`JSKELET_S3_*`. Bucket: `JSKELET_ASSETS_BUCKET`. Config sözlüğü:
+[07-yapilandirma.md](./07-yapilandirma.md#build). Dağıtım notları:
+[10-dagitim.md](./10-dagitim.md).
 
 Build çalışmadıysa uygulama yine ayağa kalkar: `hasAsset()` false olur, layout
 stylesheet ve script etiketlerini hiç basmaz. `jskelet build` unutulduğunda hata

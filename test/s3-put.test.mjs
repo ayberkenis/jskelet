@@ -70,6 +70,30 @@ test("buildSignedPutObject produces Authorization and deterministic URL", () => 
   assert.match(signed.headers.authorization, /Signature=[a-f0-9]{64}$/);
   assert.equal(signed.headers["x-amz-date"], "20130524T000000Z");
   assert.equal(signed.headers["x-amz-content-sha256"], sha256Hex(signed.body));
+  assert.equal(signed.headers["content-type"], "application/x-ndjson");
+});
+
+test("buildSignedPutObject accepts contentType and cacheControl", () => {
+  const signed = buildSignedPutObject({
+    bucket: "assets",
+    key: "assets/app.css",
+    body: "body{}",
+    region: "us-east-1",
+    contentType: "text/css; charset=utf-8",
+    cacheControl: "public, max-age=31536000, immutable",
+    credentials: {
+      accessKeyId: "AKIAIOSFODNN7EXAMPLE",
+      secretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+    },
+    now: new Date("2013-05-24T00:00:00.000Z"),
+  });
+
+  assert.equal(signed.headers["content-type"], "text/css; charset=utf-8");
+  assert.equal(
+    signed.headers["cache-control"],
+    "public, max-age=31536000, immutable",
+  );
+  assert.match(signed.headers.authorization, /SignedHeaders=.*cache-control/);
 });
 
 test("buildSignedPutObject path-style with custom endpoint", () => {

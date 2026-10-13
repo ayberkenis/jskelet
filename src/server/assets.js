@@ -5,6 +5,10 @@
  * döner ve `hasAsset()` false olur; layout stylesheet/script etiketlerini hiç
  * basmaz. Böylece `jskelet build` unutulduğunda hata yerine stilsiz ama
  * çalışan bir sayfa görürsünüz.
+ *
+ * `build.assets.prefix` / `JSKELET_ASSET_PREFIX` doluysa HTML'e basılan
+ * URL'lere CDN origin eklenir; manifest diskte göreli kalır (çok ortamlı
+ * tek artifact). Dosya sistemi okumaları (`getSpriteIds`) göreli yolu kullanır.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -45,11 +49,44 @@ function state() {
 }
 
 /**
+ * CDN prefix + göreli asset yolu. Zaten mutlak (`https:…`) URL'lere dokunmaz.
+ *
+ * @param {string} prefix Sonunda `/` olmadan (normalize edilmiş).
+ * @param {string} url
+ * @returns {string}
+ */
+export function applyAssetPrefix(prefix, url) {
+  if (!prefix || !url) return url;
+  if (/^[a-z][a-z0-9+.-]*:/i.test(url)) return url;
+  const pathPart = url.startsWith("/") ? url : `/${url}`;
+  return `${prefix.replace(/\/+$/, "")}${pathPart}`;
+}
+
+/** @returns {string} */
+function assetPrefix() {
+  try {
+    return getConfig().build?.assets?.prefix ?? "";
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * Manifest'teki göreli yol (prefix yok) — disk okuma için.
+ *
+ * @param {string} name
+ * @returns {string}
+ */
+function assetPath(name) {
+  return state().manifest[name] ?? `/assets/${name}`;
+}
+
+/**
  * @param {string} name Örn. "app.css", "main.js", "sprite.svg"
  * @returns {string}
  */
 export function asset(name) {
-  return state().manifest[name] ?? `/assets/${name}`;
+  return applyAssetPrefix(assetPrefix(), assetPath(name));
 }
 
 /**
@@ -113,7 +150,20 @@ export function optimizedImage(src) {
     }
   }
 
-  return src ? images[src] : undefined;
+  if (!src) return undefined;
+  const entry = images[src];
+  if (!entry) return undefined;
+
+  const prefix = assetPrefix();
+  if (!prefix) return entry;
+
+  return {
+    ...entry,
+    variants: entry.variants.map((variant) => ({
+      ...variant,
+      url: applyAssetPrefix(prefix, variant.url),
+    })),
+  };
 }
 
 /** @type {{ url: string, ids: Set<string> } | null} */
@@ -128,20 +178,21 @@ let spriteIds = null;
  * @returns {Set<string>}
  */
 export function getSpriteIds() {
-  const url = asset("sprite.svg");
-  if (spriteIds?.url === url) return spriteIds.ids;
+  // Disk yolu göreli olmalı; CDN prefix dosya sisteminde yok.
+  const relative = assetPath("sprite.svg");
+  if (spriteIds?.url === relative) return spriteIds.ids;
 
   /** @type {Set<string>} */
   const ids = new Set();
 
   try {
-    const file = path.join(getConfig().dirs.public, url.replace(/^\//, ""));
+    const file = path.join(getConfig().dirs.public, relative.replace(/^\//, ""));
     const svg = fs.readFileSync(file, "utf8");
     for (const match of svg.matchAll(/<symbol id="([^"]+)"/g)) ids.add(match[1]);
   } catch {
     // Sprite okunamazsa uyarı üretilmez; asıl akış etkilenmez.
   }
 
-  spriteIds = { url, ids };
+  spriteIds = { url: relative, ids };
   return ids;
 }

@@ -8,6 +8,17 @@ one is listed under a **Breaking** heading.
 
 ## [Unreleased]
 
+### Added
+
+- Optional CDN asset publishing: `build.assets.prefix` /
+  `JSKELET_ASSET_PREFIX` prefixes `asset()` and optimised image URLs (manifest
+  stays relative on disk). When `JSKELET_ASSETS_BUCKET` (or
+  `build.assets.upload`) is set, production `jskelet build` PutObjects
+  `public/assets/` (and optional `include` dirs) to S3 after precompress.
+  Credentials prefer standard `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` /
+  `AWS_SESSION_TOKEN`, then `JSKELET_S3_*`. Missing bucket or credentials fail
+  the build; watch mode never uploads. `.br` / `.gz` siblings are skipped.
+
 ### Changed
 
 - Shared cache entries of 1 KB or more are stored as brotli (`JSK\x01`

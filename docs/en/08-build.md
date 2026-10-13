@@ -20,6 +20,7 @@ build is in [09-dev-tools.md](./09-dev-tools.md).
 5. Images         if config.images !== false, not watch, and sharp is installed
 6. Manifest       .jskelet/manifest.json
 7. Precompress    if not watch
+8. Assets upload  if build.assets.upload is on (not watch)
 ```
 
 Template compilation finishes **before** asset scanning; there is no parse on
@@ -30,9 +31,10 @@ The order is not arbitrary:
 
 - **CSS comes after the icon sprite.** The sprite is an asset and produces no
   classes, but it does give a manifest key.
-- **Precompress is last:** everything that gets compressed must already be
-  produced.
+- **Precompress runs just before upload:** the origin still gets `.br`/`.gz`;
+  the S3 step copies only the raw files.
 - **Images never run on a watch pass:** re-encoding with `sharp` is expensive.
+- **Assets upload never runs on watch:** only production `jskelet build`.
 
 Tasks only run if the relevant configuration exists. A project that does not
 define any fonts never sees the font step; this is the build-side counterpart of
@@ -78,8 +80,25 @@ They are passed to templates automatically; in server code,
 ```
 
 - `asset(name)` returns the hashed URL if it is in the manifest, otherwise
-  `/assets/<name>`.
+  `/assets/<name>`. When `build.assets.prefix` / `JSKELET_ASSET_PREFIX` is set,
+  that relative path is prefixed with the CDN origin (the on-disk manifest stays
+  relative).
 - `hasAsset(name)` tells you whether it is in the manifest.
+
+### CDN prefix and S3 upload
+
+Off by default. When enabled:
+
+1. A production build PutObjects files under `public/assets/` (and any other
+   directories in `include`) to S3.
+2. At runtime `asset()` / optimised images emit absolute CDN URLs via
+   `JSKELET_ASSET_PREFIX`. When the entry script is on the CDN, esbuild chunks
+   resolve relatively on the same host.
+
+Credentials: `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` first, else
+`JSKELET_S3_*`. Bucket: `JSKELET_ASSETS_BUCKET`. Config reference:
+[07-configuration.md](./07-configuration.md#build). Deploy notes:
+[10-deployment.md](./10-deployment.md).
 
 If the build has not run, the application still comes up: `hasAsset()` is false
 and the layout never emits the stylesheet and script tags. When `jskelet build`

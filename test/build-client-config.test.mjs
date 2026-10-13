@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { test } from "node:test";
+import { afterEach, test } from "node:test";
 import { normalizeBuild } from "../src/config/index.js";
 import {
   isSafeGroupName,
@@ -17,17 +17,42 @@ import {
   resolvePathMatcher,
 } from "../src/build/chunk-groups.mjs";
 
+const savedEnv = { ...process.env };
+
+afterEach(() => {
+  for (const key of Object.keys(process.env)) {
+    if (!(key in savedEnv)) delete process.env[key];
+  }
+  Object.assign(process.env, savedEnv);
+});
+
+/** Asset env'lerini bu test dosyasında izole tut. */
+function clearAssetEnv() {
+  delete process.env.JSKELET_ASSET_PREFIX;
+  delete process.env.JSKELET_ASSETS_BUCKET;
+  delete process.env.AWS_REGION;
+  delete process.env.AWS_DEFAULT_REGION;
+  delete process.env.AWS_ENDPOINT_URL;
+  delete process.env.JSKELET_S3_REGION;
+  delete process.env.JSKELET_S3_API_URL;
+}
+
 test("normalizeBuild: defaults when empty", () => {
+  clearAssetEnv();
   const build = normalizeBuild(null);
   assert.equal(build.client.splitting, true);
   assert.deepEqual(build.client.groups, {});
   assert.equal(build.client.chunkGroup, null);
+  assert.equal(build.assets.prefix, "");
+  assert.equal(build.assets.upload.enabled, false);
+  assert.deepEqual(build.assets.upload.include, ["assets"]);
 });
 
 test("normalizeBuild: invalid build ignored", () => {
   const build = normalizeBuild("nope");
   assert.equal(build.client.splitting, true);
   assert.deepEqual(build.client.groups, {});
+  assert.equal(build.assets.upload.enabled, false);
 });
 
 test("normalizeBuild: splitting false and groups warn path", () => {
@@ -66,6 +91,29 @@ test("normalizeBuild: chunkGroup must be a function", () => {
     client: { chunkGroup: "nope" },
   });
   assert.equal(build.client.chunkGroup, null);
+});
+
+test("normalizeBuild: assets prefix and upload from env", () => {
+  clearAssetEnv();
+  process.env.JSKELET_ASSET_PREFIX = "https://cdn.example.com/";
+  process.env.JSKELET_ASSETS_BUCKET = "my-bucket/static";
+  process.env.AWS_REGION = "eu-central-1";
+  const build = normalizeBuild({});
+  assert.equal(build.assets.prefix, "https://cdn.example.com");
+  assert.equal(build.assets.upload.enabled, true);
+  assert.equal(build.assets.upload.bucket, "my-bucket");
+  assert.equal(build.assets.upload.keyPrefix, "static/");
+  assert.equal(build.assets.upload.region, "eu-central-1");
+});
+
+test("normalizeBuild: upload enabled false wins over bucket env", () => {
+  clearAssetEnv();
+  process.env.JSKELET_ASSETS_BUCKET = "blocked";
+  const build = normalizeBuild({
+    assets: { upload: { enabled: false } },
+  });
+  assert.equal(build.assets.upload.enabled, false);
+  assert.equal(build.assets.upload.bucket, "blocked");
 });
 
 test("matcher helpers", () => {

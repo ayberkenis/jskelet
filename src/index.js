@@ -43,7 +43,13 @@ export {
   writeSharedCookie,
 } from "./http/shared-cookie.js";
 export { reportUpstreamFailure } from "./server/upstream-tracking.js";
-export { asset, hasAsset, optimizedImage, getSpriteIds } from "./server/assets.js";
+export {
+  asset,
+  hasAsset,
+  optimizedImage,
+  getSpriteIds,
+  applyAssetPrefix,
+} from "./server/assets.js";
 export { remoteImageUrl, parseAllowedRemoteUrl } from "./server/image-optimizer.js";
 export {
   ImageResponse,

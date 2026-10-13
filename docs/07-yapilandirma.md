@@ -95,6 +95,13 @@ export default {
     client: {
       groups: { charts: ["chart.js"] },
     },
+    assets: {
+      prefix: process.env.JSKELET_ASSET_PREFIX,
+      upload: {
+        enabled: Boolean(process.env.JSKELET_ASSETS_BUCKET),
+        bucket: process.env.JSKELET_ASSETS_BUCKET,
+      },
+    },
   },
 
   async headers() {
@@ -592,11 +599,14 @@ Elle URL kurmak için `remoteImageUrl(src, { width })` (`jskelet`).
 
 ## `build`
 
-**Tip:** `{ client?: { splitting?, groups?, chunkGroup? } }` — **Varsayılan:**
-`{ client: { splitting: true, groups: {}, chunkGroup: null } }`
+**Tip:** `{ client?: { splitting?, groups?, chunkGroup? }, assets?: { prefix?, upload? } }`
+— **Varsayılan:**
+`{ client: { splitting: true, groups: {}, chunkGroup: null }, assets: { prefix: "", upload: { enabled: false, … } } }`
 
-Client JS (esbuild) bundling knobs. `fonts` / `icons` / `images` / `clientEnv`
-hâlâ top-level kalır; bu bölüm yalnızca splitting ve chunk gruplaması içindir.
+Client JS (esbuild) bundling knobs ve opsiyonel CDN / S3 asset dağıtımı.
+`fonts` / `icons` / `images` / `clientEnv` hâlâ top-level kalır.
+
+### `build.client`
 
 | Alan | Tip | Varsayılan | Anlamı |
 | --- | --- | --- | --- |
@@ -611,6 +621,28 @@ zayıflar — bir üyeyi kullanan sayfa grubun geri kalanını da indirebilir
 `chunks/chunk.<hash>.js` kalır; grup adı config anahtarıdır, dosya adı değil.
 Ayrıntı: [08-build.md](./08-build.md).
 
+### `build.assets`
+
+CDN origin ve production build sonunda S3 upload. **Kapalıyken hiçbir şey
+değişmez** — asset'ler origin'den servis edilir.
+
+| Alan | Tip | Varsayılan | Anlamı |
+| --- | --- | --- | --- |
+| `assets.prefix` | `string` | `""` | `asset()` / optimize görsel URL öneki (sonunda `/` yok). `JSKELET_ASSET_PREFIX` ezer. Manifest diskte göreli kalır. |
+| `assets.upload.enabled` | `boolean` | `false` | `true` veya `JSKELET_ASSETS_BUCKET` doluysa açılır; açık `false` ezer. |
+| `assets.upload.bucket` | `string \| null` | `null` | Bucket veya `bucket/key/prefix`. `JSKELET_ASSETS_BUCKET` ezer. |
+| `assets.upload.keyPrefix` | `string` | `""` | Yolda verilmediyse nesne anahtarı öneki (`prefix` takma adı da kabul). |
+| `assets.upload.region` | `string` | `us-east-1` | `AWS_REGION` / `AWS_DEFAULT_REGION` / `JSKELET_S3_REGION`; custom endpoint'te varsayılan `auto`. |
+| `assets.upload.endpoint` | `string \| null` | `null` | S3-uyumlu API; `AWS_ENDPOINT_URL` / `JSKELET_S3_API_URL` ezer. |
+| `assets.upload.include` | `string[]` | `["assets"]` | `public/` altı dizinler (`assets`, isteğe `fonts`, …). |
+| `assets.upload.cacheControl` | `string` | `public, max-age=31536000, immutable` | PutObject `Cache-Control`. |
+
+Credential config'e yazılmaz. Öncelik: `AWS_ACCESS_KEY_ID` /
+`AWS_SECRET_ACCESS_KEY` / `AWS_SESSION_TOKEN`, yoksa `JSKELET_S3_*`. Upload açık
+iken bucket veya credential yoksa **build düşer**. Watch turunda upload yok.
+`.br` / `.gz` yüklenmez. Ayrıntı: [08-build.md](./08-build.md),
+[10-dagitim.md](./10-dagitim.md).
+
 ```js
 build: {
   client: {
@@ -621,6 +653,14 @@ build: {
     },
     chunkGroup(id) {
       if (id.includes("node_modules/lodash")) return "vendor";
+    },
+  },
+  assets: {
+    prefix: process.env.JSKELET_ASSET_PREFIX, // https://dxxxx.cloudfront.net
+    upload: {
+      enabled: Boolean(process.env.JSKELET_ASSETS_BUCKET),
+      bucket: process.env.JSKELET_ASSETS_BUCKET, // my-bucket veya my-bucket/static
+      include: ["assets", "fonts"],
     },
   },
 },
@@ -954,7 +994,8 @@ parça silinir.
 | `s3.flushIntervalMs` | `number` | `5000` | Batch flush aralığı |
 | `s3.maxBatch` | `number` | `100` | Bu kadar satırda erken flush |
 
-S3 credential'ları config'e yazılmaz: `JSKELET_S3_ACCESS_KEY_ID`,
+S3 credential'ları config'e yazılmaz. Öncelik: `AWS_ACCESS_KEY_ID` /
+`AWS_SECRET_ACCESS_KEY` / `AWS_SESSION_TOKEN`, yoksa `JSKELET_S3_ACCESS_KEY_ID`,
 `JSKELET_S3_SECRET_ACCESS_KEY`, isteğe bağlı `JSKELET_S3_SESSION_TOKEN`.
 Bucket/region/credential eksikse uyarı basılır ve S3 sink kapanır; site ayağa
 kalkmaya devam eder. Framework `@aws-sdk` taşımaz — PutObject SigV4 ile
@@ -1186,14 +1227,21 @@ basılmaz.
 | `DEV_GATE` | `devGate` | kapalı | `1` gate'i açar, `0` config'te açık olsa da kapatır. `DEV_TOKEN` tek başına açmaz. [09](./09-dev-araclari.md) |
 | `DEV_TOKEN` | `devGate`, `prewarm` | — | Gate açıkken beklenen sır. Yoksa veya gate kapalıysa site açık kalır. Isıtma, gate açıkken token'ı çerez olarak taşır. [09](./09-dev-araclari.md) |
 | `JSKELET_ADMIN` | `createApp` | — | Ayarlıysa yönetim panelini açar; `0` config'te açık olan paneli kapatır. Env config'i ezer, çünkü panel genelde bir arıza sırasında tek seferlik açılır. [06](./06-cache.md) |
+| `JSKELET_ASSET_PREFIX` | `build.assets.prefix` | — | CDN origin; `asset()` URL'lerine eklenir (sonunda `/` yok) |
+| `JSKELET_ASSETS_BUCKET` | `build.assets.upload` | — | Asset upload hedefi: bucket veya `bucket/prefix`. Credential ile birlikte production build sonunda PutObject |
+| `AWS_ACCESS_KEY_ID` | S3 PutObject | — | Standart AWS imza anahtarı (log + asset upload); `JSKELET_S3_*`'dan önce |
+| `AWS_SECRET_ACCESS_KEY` | S3 PutObject | — | Standart AWS imza sırrı |
+| `AWS_SESSION_TOKEN` | S3 PutObject | — | Geçici credential (OIDC / STS) |
+| `AWS_REGION` / `AWS_DEFAULT_REGION` | `build.assets.upload` | — | Asset upload bölgesi |
+| `AWS_ENDPOINT_URL` | `build.assets.upload` | — | S3-uyumlu endpoint (asset upload) |
 | `JSKELET_LOG_BUCKET` | `logs.s3` | — | Log hedefi: bucket ya da `bucket/prefix` yolu. Credential ile birlikte varsa sink otomatik açılır |
 | `JSKELET_S3_BUCKET` | `logs.s3` | — | `JSKELET_LOG_BUCKET` yoksa bucket; `JSKELET_S3_KEY_PREFIX` ile birleşir |
 | `JSKELET_S3_KEY_PREFIX` | `logs.s3` | — | `JSKELET_S3_BUCKET` ile kullanılır (`bucket/prefix`) |
-| `JSKELET_S3_ACCESS_KEY_ID` | `logs.s3` | — | PutObject imzası |
-| `JSKELET_S3_SECRET_ACCESS_KEY` | `logs.s3` | — | İmza sırrı (`JSKELET_S3_ACCESS_SECRET` yedek ad) |
-| `JSKELET_S3_SESSION_TOKEN` | `logs.s3` | — | Geçici credential için isteğe bağlı |
-| `JSKELET_S3_REGION` | `logs.s3` | `auto` | Verilmezse `auto` |
-| `JSKELET_S3_API_URL` | `logs.s3` | — | S3-uyumlu endpoint; `logs.s3.endpoint`'i ezer |
+| `JSKELET_S3_ACCESS_KEY_ID` | S3 PutObject | — | `AWS_*` yoksa PutObject imzası (log + asset) |
+| `JSKELET_S3_SECRET_ACCESS_KEY` | S3 PutObject | — | İmza sırrı (`JSKELET_S3_ACCESS_SECRET` yedek ad) |
+| `JSKELET_S3_SESSION_TOKEN` | S3 PutObject | — | Geçici credential için isteğe bağlı |
+| `JSKELET_S3_REGION` | `logs.s3` / asset upload | `auto` (log) | Log'da verilmezse `auto`; asset upload'ta `AWS_REGION` yoksa |
+| `JSKELET_S3_API_URL` | `logs.s3` / asset upload | — | S3-uyumlu endpoint |
 | `JSKELET_CLOUDFLARE_KEY` | Cloudflare cache yüzeyi | — | API token. Verilene kadar CDN purge'ü ve edge analitiği kapalıdır; config'teki `apiToken`'ı ezer. Token hiçbir cevapta dönmez. [06](./06-cache.md) |
 | `JSKELET_CLOUDFLARE_ZONE_ID` | Cloudflare cache yüzeyi | — | Zone kimliği. Token'la birlikte verilmedikçe hiçbir Cloudflare ucu çağrılmaz |
 | `JSKELET_CLOUDFLARE_HOSTNAME` | Cloudflare cache yüzeyi | — | Purge URL'lerinin kökü. Panel iç bir adresten açılıyorsa gerekir |

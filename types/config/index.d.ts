@@ -221,7 +221,7 @@ export type ResolvedConfig = {
      */
     clientEnv: string[];
     /**
-     * Client bundling (esbuild splitting / chunk groups).
+     * Client bundling + CDN prefix / S3 asset upload.
      */
     build: BuildConfig;
 };
@@ -230,8 +230,25 @@ export type BuildClientConfig = {
     groups: Record<string, string[]>;
     chunkGroup: ((id: string) => string | null | undefined) | null;
 };
+export type BuildAssetsUploadConfig = {
+    enabled: boolean;
+    bucket: string | null;
+    keyPrefix: string;
+    region: string;
+    endpoint: string | null;
+    include: string[];
+    cacheControl: string;
+};
+export type BuildAssetsConfig = {
+    /**
+     * CDN origin (`JSKELET_ASSET_PREFIX`); sonunda `/` yok.
+     */
+    prefix: string;
+    upload: BuildAssetsUploadConfig;
+};
 export type BuildConfig = {
     client: BuildClientConfig;
+    assets: BuildAssetsConfig;
 };
 export type ImagesRemoteConfig = {
     enabled: boolean;
@@ -262,6 +279,10 @@ export declare function splitS3BucketPath(value: string | null): {
     prefix: string | null;
 };
 /**
+ * S3 imza credential'ları. AWS deploy'da standart env önce gelir; R2/MinIO
+ * için `JSKELET_S3_*` yedek. IAM instance/task role (IMDS) desteklenmez —
+ * CI'da `configure-aws-credentials` gibi araçlar zaten `AWS_*` basar.
+ *
  * @returns {{ accessKeyId: string, secretAccessKey: string,
  *   sessionToken: string | null } | null}
  */
@@ -292,7 +313,15 @@ export type SecurityConfig = {
     };
 };
 /**
- * Client build ayarları (`build.client`). Bozuk tipler uyarıyla varsayılana düşer.
+ * CDN prefix + S3 upload (`build.assets`). Credential config'e yazılmaz.
+ *
+ * @param {unknown} raw
+ * @returns {BuildAssetsConfig}
+ */
+export declare function normalizeBuildAssets(raw: unknown): BuildAssetsConfig;
+/**
+ * Client build ayarları (`build.client` + `build.assets`). Bozuk tipler
+ * uyarıyla varsayılana düşer.
  *
  * @param {unknown} raw
  * @returns {BuildConfig}
