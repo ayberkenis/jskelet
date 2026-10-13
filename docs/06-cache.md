@@ -1173,10 +1173,34 @@ loopback yalnızca o host'un anahtarını ısıtır — locale sitelerinde
 `origins: ["http://localhost", "http://tr.localhost"]` gibi çoklu origin
 gerekir.
 
-İki mod **karşılıklı dışlayıcıdır**. `cache().prewarm.onVisit` açıksa klasik
-alanlar (`max`, `priority`, `rotate`, `intervalSeconds`, …) ve
-`hooks.prewarmPaths` birlikte verilemez — config yüklenirken hata fırlar.
-Tersi de geçerli: klasik liste ısıtması kullanıyorsanız `onVisit` yazmayın.
+Üç yüzey **karşılıklı dışlayıcıdır**: klasik (`hooks.prewarmPaths` + alanlar),
+`onVisit` ve on-demand (`prewarm: false`). Birini seçmek diğerini config
+yüklenirken reddeder.
+
+### Mod: on-demand — `prewarm: false`
+
+Arka plan ısıtması yok; yalnızca gerçek trafikle gelen sayfa önbelleğe yazılır.
+TTL `cache().html` (veya route `revalidate`) ile verilir. Redis açıksa L2'ye,
+değilse `.jskelet/cache/<buildId>/` disk L2'ye yazılır — ziyaret yazımı zaten
+böyle çalışır; bu mod klasik turu, `onVisit` link crawl'ını ve TTL öncesi
+early-expiry HTTP rewarm'ı kapatır. `PREWARM=1` bunu ezmez.
+
+```js
+// jskelet.config.mjs
+export default {
+  cache() {
+    return {
+      html: { "/": 60, "/haber/:slug": 300 },
+      redis: { enabled: true, url: process.env.REDIS_URL },
+      prewarm: false,
+    };
+  },
+};
+```
+
+`hooks.prewarmPaths` ile birlikte **yasaktır**. `prewarm: { enabled: false }`
+farklıdır: klasik turu keser ama early-expiry drain açık kalır; tamamen pasif
+mod için `prewarm: false` kullanın.
 
 ### Mod: `onVisit` — ziyaret edilen sayfanın linkleri
 
@@ -1442,12 +1466,13 @@ turunun gerçekten `MISS` → önbellek doldurup doldurmadığını buradan gör
   `cache().vary.host: true` yoksa ilk locale'in HTML'i diğer host'a servis
   edilir. Prewarm yalnızca `127.0.0.1` ile ısınıyorsa `prewarm.origins` ile
   locale host'larını ekleyin.
-- **Isıtma hiç çalışmıyor.** Klasik modda `hooks.prewarmPaths` tanımlı değil,
-  `PREWARM=0` ayarlı ya da `cache().prewarm.enabled === false`. `onVisit`
+- **Isıtma hiç çalışmıyor.** `prewarm: false` (on-demand) bilinçli olarak
+  hiçbir arka plan ısıtması kurmaz. Klasik modda `hooks.prewarmPaths` tanımlı
+  değil, `PREWARM=0` ayarlı ya da `cache().prewarm.enabled === false`. `onVisit`
   modunda `listen` sonrası logda `onVisit mode` satırını ve public cache'li
   bir sayfa gezildiğini doğrulayın.
-- **Config `onVisit` + `max` / `prewarmPaths` ile düşüyor.** İki mod karşılıklı
-  dışlayıcı; yalnızca birini kullanın.
+- **Config `onVisit` / `prewarm: false` + `max` / `prewarmPaths` ile düşüyor.**
+  Üç yüzey karşılıklı dışlayıcı; yalnızca birini kullanın.
 - **Isıtma turu API'yi 429'a sokuyor.** `rps` verilmemiş. `concurrency`
   düşürmek yeterli değil; kotayı koruyan ayar toplam hız. Kalıcı çözüm veri
   önbelleği: ikinci turdan sonra ısıtma upstream'e gitmez.

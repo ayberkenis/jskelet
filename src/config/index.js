@@ -940,17 +940,37 @@ function normalizeOnVisit(raw) {
 }
 
 /**
- * Klasik liste ısıtması ile `onVisit` karşılıklı dışlayıcıdır. İkisini birden
- * yazmak sessizce yanlış moda düşmesin diye yüklemede hata verir.
+ * Klasik liste ısıtması, `onVisit` ve `prewarm: false` (on-demand) karşılıklı
+ * dışlayıcıdır. Yanlış moda sessizce düşülmesin diye yüklemede hata verir.
  *
  * @param {unknown} raw
  * @returns {Record<string, unknown>}
  */
 function normalizePrewarm(raw) {
+  // On-demand: yalnızca ziyaret yazımı. Klasik / onVisit / early-expiry yok.
+  if (raw === false) {
+    return {
+      ...DEFAULT_PREWARM,
+      enabled: false,
+      mode: "off",
+      onVisit: { ...DEFAULT_PREWARM_ON_VISIT, enabled: false },
+    };
+  }
+
+  if (raw != null && (typeof raw !== "object" || Array.isArray(raw))) {
+    throw new Error(
+      "[config] cache().prewarm must be false, or an object " +
+        "(classic settings or { onVisit })",
+    );
+  }
+
   const source =
     raw && typeof raw === "object" && !Array.isArray(raw)
       ? /** @type {Record<string, unknown>} */ ({ ...raw })
       : {};
+
+  // `mode` çözümleme alanı; kullanıcı yazarsa yok sayılır.
+  delete source.mode;
 
   const onVisit = normalizeOnVisit(source.onVisit);
 
@@ -977,12 +997,15 @@ function normalizePrewarm(raw) {
     return {
       ...DEFAULT_PREWARM,
       enabled: true,
+      mode: "onVisit",
       onVisit,
     };
   }
 
   // Klasik mod: `onVisit: false` yazılmış olabilir; diğer alanlar varsayılanlarla
   // birleşir. `onVisit` anahtarı çözülmüş nesnede her zaman durur.
+  // `enabled: false` klasik turu keser ama early-expiry drain açık kalır —
+  // tamamen kapatmak için `prewarm: false` (`mode: "off"`) kullanılır.
   const classic = { ...source };
   delete classic.onVisit;
 
@@ -994,6 +1017,7 @@ function normalizePrewarm(raw) {
   return {
     ...DEFAULT_PREWARM,
     ...classic,
+    mode: "classic",
     onVisit,
   };
 }
@@ -1695,6 +1719,17 @@ export async function loadConfig(options = {}) {
       "[config] hooks.prewarmPaths() cannot be used with cache().prewarm.onVisit. " +
         "On-visit mode warms links from each response; classic mode uses prewarmPaths. " +
         "Choose one.",
+    );
+  }
+
+  if (
+    config.prewarm?.mode === "off" &&
+    typeof config.hooks?.prewarmPaths === "function"
+  ) {
+    throw new Error(
+      "[config] hooks.prewarmPaths() cannot be used with cache().prewarm: false. " +
+        "On-demand mode only caches pages as they are visited; classic mode uses " +
+        "prewarmPaths. Choose one.",
     );
   }
 

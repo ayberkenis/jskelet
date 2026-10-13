@@ -1175,10 +1175,35 @@ traffic. With `vary.host`, the default loopback only warms that host's key —
 locale sites need multiple origins such as
 `origins: ["http://localhost", "http://tr.localhost"]`.
 
-The two modes are **mutually exclusive**. If `cache().prewarm.onVisit` is on,
-classic fields (`max`, `priority`, `rotate`, `intervalSeconds`, …) and
-`hooks.prewarmPaths` must not be set together — config load throws. The reverse
-holds too: if you use classic list warming, do not set `onVisit`.
+Three surfaces are **mutually exclusive**: classic (`hooks.prewarmPaths` +
+fields), `onVisit`, and on-demand (`prewarm: false`). Choosing one rejects the
+others at config load.
+
+### Mode: on-demand — `prewarm: false`
+
+No background warming; only pages hit by real traffic are written to the cache.
+TTL comes from `cache().html` (or the route `revalidate`). With Redis on, the
+entry goes to L2 Redis; otherwise to the `.jskelet/cache/<buildId>/` disk L2 —
+visit writes already work that way; this mode turns off the classic pass,
+`onVisit` link crawling, and early-expiry HTTP refresh before TTL. `PREWARM=1`
+does not override it.
+
+```js
+// jskelet.config.mjs
+export default {
+  cache() {
+    return {
+      html: { "/": 60, "/news/:slug": 300 },
+      redis: { enabled: true, url: process.env.REDIS_URL },
+      prewarm: false,
+    };
+  },
+};
+```
+
+**Forbidden** together with `hooks.prewarmPaths`. `prewarm: { enabled: false }`
+is different: it stops the classic pass but leaves the early-expiry drain on —
+use `prewarm: false` for fully passive mode.
 
 ### Mode: `onVisit` — links from the page just visited
 
@@ -1449,12 +1474,13 @@ filled the cache.
   without `cache().vary.host: true` the first locale's HTML is served to the
   other host. If prewarm only hits `127.0.0.1`, add the locale hosts via
   `prewarm.origins`.
-- **The warm-up never runs.** In classic mode `hooks.prewarmPaths` is not
+- **The warm-up never runs.** `prewarm: false` (on-demand) intentionally
+  installs no background warming. In classic mode `hooks.prewarmPaths` is not
   defined, `PREWARM=0` is set, or `cache().prewarm.enabled === false`. In
   `onVisit` mode check the `onVisit mode` log line after `listen` and that a
   public cacheable page was visited.
-- **Config fails with `onVisit` + `max` / `prewarmPaths`.** The two modes are
-  mutually exclusive; use only one.
+- **Config fails with `onVisit` / `prewarm: false` + `max` / `prewarmPaths`.**
+  The three surfaces are mutually exclusive; use only one.
 - **The warm-up round pushes the API into 429.** No `rps` was given. Lowering
   `concurrency` is not enough; the setting that protects the quota is the total
   rate. The lasting fix is the data cache: after the second round the warm-up

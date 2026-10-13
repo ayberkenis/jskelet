@@ -770,9 +770,9 @@ Ayrıntı: [03-routing.md](./03-routing.md).
 ## `cache()`
 
 **Tip:**
-`() => { html?: Record<string, number>, staleWhileRevalidate?: number, query?: Record<string, string[] | true>, vary?: { host?: boolean, headers?: string[], fn?: (req) => string | null }, maxEntries?: number, data?: object, trackUpstream?: boolean, trackDependencies?: boolean, transientRetry?: object | false, upstream?: object, redis?: object, prewarm?: object }` —
+`() => { html?: Record<string, number>, staleWhileRevalidate?: number, query?: Record<string, string[] | true>, vary?: { host?: boolean, headers?: string[], fn?: (req) => string | null }, maxEntries?: number, data?: object, trackUpstream?: boolean, trackDependencies?: boolean, transientRetry?: object | false, upstream?: object, redis?: object, prewarm?: false | object }` —
 **Varsayılan:**
-`{ html: {}, staleWhileRevalidate: 60, query: {}, vary: { host: false }, maxEntries: 500, data: { maxEntries: 10000, staleFactor: 10 }, trackUpstream: true, trackDependencies: true, transientRetry: { attempts: 1, delayMs: 300 }, upstream: { rate: 0 }, redis: { enabled: false }, prewarm: { enabled: true, max: 400, intervalSeconds: 0, origins: [] } }`
+`{ html: {}, staleWhileRevalidate: 60, query: {}, vary: { host: false }, maxEntries: 500, data: { maxEntries: 10000, staleFactor: 10 }, trackUpstream: true, trackDependencies: true, transientRetry: { attempts: 1, delayMs: 300 }, upstream: { rate: 0 }, redis: { enabled: false }, prewarm: { enabled: true, mode: "classic", max: 400, intervalSeconds: 0, origins: [] } }` (veya `prewarm: false` → `mode: "off"`)
 
 ### `cache().html`
 
@@ -1084,14 +1084,28 @@ tam cevabı olmadığı — [06-cache.md](./06-cache.md) içinde.
 
 ### `cache().prewarm`
 
-İki mod: **klasik** (liste + açılış turu) veya **`onVisit`** (ziyaret edilen
-sayfadaki linkler). Birlikte verilemez — config yüklenirken hata.
+Üç yüzey: **`false`** (on-demand — yalnızca ziyaret yazımı), **klasik** (liste
++ açılış turu) veya **`onVisit`** (ziyaret edilen sayfadaki linkler). Birlikte
+verilemez — config yüklenirken hata. Çözümlenen `prewarm.mode`: `"off"` |
+`"classic"` | `"onVisit"`.
+
+#### On-demand — `prewarm: false`
+
+Arka plan ısıtması yok (klasik tur, `onVisit`, early-expiry HTTP rewarm).
+Ziyaret edilen sayfa `html` TTL'i ile L1 + Redis/disk L2'ye yazılır.
+`PREWARM=1` bunu ezmez. `hooks.prewarmPaths` ile **yasak**.
+`{ enabled: false }` klasik turu keser ama early-expiry açık kalır — tamamen
+pasif mod için `false` kullanın.
+
+```js
+prewarm: false,
+```
 
 #### Klasik alanlar
 
 | Alan | Tip | Varsayılan | Anlamı |
 | --- | --- | --- | --- |
-| `enabled` | `boolean` | `true` | `false` ise ısıtma yapılmaz (`PREWARM=1` ile ezilebilir) |
+| `enabled` | `boolean` | `true` | `false` ise klasik tur yapılmaz (`PREWARM=1` ile ezilebilir); early-expiry drain açık kalır |
 | `max` | `number` | `400` | Bir turda en fazla kaç yol ısıtılır |
 | `concurrency` | `number` | prod 4, dev 1 | Paralel işçi sayısı |
 | `rps` | `number` | prod `0`, dev 4 | Saniyedeki en fazla ısıtma isteği; `0` sınırsız. Upstream kotasını koruyan ayar bu. Dev'deki varsayılan fren, ısıtmanın sayfa isteklerini bekletmemesi için. |
@@ -1135,8 +1149,8 @@ prewarm: {
 }
 ```
 
-`hooks.prewarmPaths` ve klasik alanlar (`max`, `priority`, …) `onVisit` ile
-**yasaktır**. Ayrıntı: [06-cache.md](./06-cache.md).
+`hooks.prewarmPaths` ve klasik alanlar (`max`, `priority`, …) `onVisit` veya
+`prewarm: false` ile **yasaktır**. Ayrıntı: [06-cache.md](./06-cache.md).
 
 Sayısal alanların her biri aynı adı taşıyan ortam değişkeniyle ezilebilir; env
 önceliklidir. Ayrıntı: [06-cache.md](./06-cache.md).
@@ -1154,7 +1168,7 @@ varsayılanına döner ve uyarır — sayfa düşmez.
 | `layoutContext` | `({ pathname, metadata }) => object` | Layout local'leri; `lang`, `structuredData`, `extraHead`, `bodyClass` özel yorumlanır | [04](./04-render-ve-sablonlar.md) |
 | `notFound` | `() => object \| null` | 404 sayfa tanımı; `null` ise framework'ün hata sayfası | [03](./03-routing.md) |
 | `error` | `({ status, error }) => object \| string \| null` | 404 dışındaki hata sayfaları (ve `notFound` yoksa 404); sayfa tanımı ya da doğrudan HTML | [03](./03-routing.md) |
-| `prewarmPaths` | `() => string[]` | Klasik ısıtmada ısıtılacak yollar; tanımlı değilse klasik tur kurulmaz. `onVisit` ile birlikte **yasak** | [06](./06-cache.md) |
+| `prewarmPaths` | `() => string[]` | Klasik ısıtmada ısıtılacak yollar; tanımlı değilse klasik tur kurulmaz. `onVisit` ve `prewarm: false` ile **yasak** | [06](./06-cache.md) |
 
 ```js
 hooks: {
@@ -1247,7 +1261,7 @@ basılmaz.
 | `JSKELET_CLOUDFLARE_KEY` | Cloudflare cache yüzeyi | — | API token. Verilene kadar CDN purge'ü ve edge analitiği kapalıdır; config'teki `apiToken`'ı ezer. Token hiçbir cevapta dönmez. [06](./06-cache.md) |
 | `JSKELET_CLOUDFLARE_ZONE_ID` | Cloudflare cache yüzeyi | — | Zone kimliği. Token'la birlikte verilmedikçe hiçbir Cloudflare ucu çağrılmaz |
 | `JSKELET_CLOUDFLARE_HOSTNAME` | Cloudflare cache yüzeyi | — | Purge URL'lerinin kökü. Panel iç bir adresten açılıyorsa gerekir |
-| `PREWARM` | `startPrewarm` | — | `0` ısıtmayı kapatır; `1` config'teki `enabled: false`'u ezip açar |
+| `PREWARM` | `startPrewarm` | — | `0` ısıtmayı kapatır; `1` config'teki `enabled: false`'u ezip açar. `prewarm: false` (on-demand) ezilmez |
 | `PREWARM_MAX` | `prewarm` | `400` | En fazla kaç yol ısıtılır |
 | `PREWARM_CONCURRENCY` | `prewarm` | prod 4, dev 1 | Paralel işçi sayısı |
 | `PREWARM_RPS` | `prewarm` | `0` | Saniyedeki en fazla ısıtma isteği; `0` sınırsız |

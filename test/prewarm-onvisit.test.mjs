@@ -24,6 +24,7 @@ const PATHS_CONFLICT = path.join(
 
 test("onVisit config loads without classic prewarm fields", async () => {
   const config = await loadConfig({ root: ON_VISIT, force: true });
+  assert.equal(config.prewarm.mode, "onVisit");
   assert.equal(config.prewarm.onVisit.enabled, true);
   assert.equal(config.prewarm.onVisit.perPage, 5);
   assert.equal(config.prewarm.onVisit.concurrency, 2);

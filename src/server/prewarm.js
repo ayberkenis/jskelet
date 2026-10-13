@@ -928,6 +928,8 @@ async function drainVisitWarm() {
  * Açılışta ısıtmayı tetikler. `listen` geri çağrısından çağrılır.
  * `onVisit` modunda klasik zamanlayıcı yok; yine de erken-TTL invalidation
  * drain'i çalışır — soft-bayatlayan sweeper'ın kuyruğu boşalmasın.
+ * `prewarm: false` (`mode: "off"`) on-demand: ziyaret yazımı kalır, hiçbir
+ * arka plan ısıtması kurulmaz; `PREWARM=1` bunu ezmez.
  *
  * @param {{ port: number }} options
  * @returns {void}
@@ -935,12 +937,14 @@ async function drainVisitWarm() {
 export function startPrewarm({ port }) {
   const config = getConfig();
   if (process.env.PREWARM === "0") return;
+  // On-demand: L1/L2 ziyaretle dolar; classic / onVisit / early-expiry yok.
+  if (config.prewarm?.mode === "off") return;
 
   const origins = resolvePrewarmOrigins(port);
   const origin = origins[0];
 
   // Klasik `prewarmPaths` olmasa da TTL öncesi soft-bayatlayan girdiler
-  // HTTP ile ısıtılsın. `PREWARM=0` yukarıda her şeyi keser.
+  // HTTP ile ısıtılsın. `PREWARM=0` / `mode: "off"` yukarıda her şeyi keser.
   startEarlyExpirySweep();
   startExpiryWarmDrain(origins);
 

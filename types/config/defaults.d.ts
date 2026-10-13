@@ -40,12 +40,16 @@ export declare const DEFAULT_STATIC: {
 /** Dev gate'in hiçbir koşulda kapatmadığı yollar. */
 export declare const DEFAULT_DEV_GATE_BYPASS: string[];
 /**
- * Klasik (liste tabanlı) prewarm ayarları. `onVisit` modu bunlarla birlikte
- * kullanılamaz — ya açılış/`prewarmPaths` turu, ya ziyaret edilen sayfadaki
- * linkleri ısıtma.
+ * Klasik (liste tabanlı) prewarm ayarları. `onVisit` ve `prewarm: false`
+ * (on-demand) ile birlikte kullanılamaz — ya açılış/`prewarmPaths` turu, ya
+ * ziyaret edilen sayfadaki linkleri ısıtma, ya yalnızca ziyaret yazımı.
+ *
+ * `mode` çözümleme sonucu: `"classic"` | `"onVisit"` | `"off"`.
+ * `prewarm: false` → `"off"` (erken TTL ısıtması dahil hiçbir arka plan yok).
  */
 export declare const DEFAULT_PREWARM: {
     enabled: boolean;
+    mode: "classic" | "onVisit" | "off";
     max: number;
     intervalSeconds: number;
     /** Paralel ısıtma isteği; dev'de sunucu tek süreç olduğu için düşürülür. */

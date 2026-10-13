@@ -17,6 +17,12 @@ one is listed under a **Breaking** heading.
 
 ### Added
 
+- On-demand HTML cache via `cache().prewarm: false`: visited pages still
+  write to L1 and Redis/disk L2 with the usual `html` TTLs, but classic
+  prewarm, `onVisit` link warming, and early-expiry HTTP refresh stay off
+  (`PREWARM=1` does not override). Mutually exclusive with
+  `hooks.prewarmPaths`. Resolved `prewarm.mode` is `"off"` | `"classic"` |
+  `"onVisit"`.
 - When `build.assets.prefix` is set, the CSS build rewrites root-absolute
   `url()` paths under `static.prefixes` (e.g. `/fonts/…`) to the CDN
   prefix so they match the S3 key (`…/js/fonts/…`). Default upload

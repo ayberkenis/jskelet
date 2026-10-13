@@ -784,9 +784,9 @@ Details: [03-routing.md](./03-routing.md).
 ## `cache()`
 
 **Type:**
-`() => { html?: Record<string, number>, staleWhileRevalidate?: number, query?: Record<string, string[] | true>, vary?: { host?: boolean, headers?: string[], fn?: (req) => string | null }, maxEntries?: number, data?: object, trackUpstream?: boolean, trackDependencies?: boolean, transientRetry?: object | false, upstream?: object, redis?: object, prewarm?: object }` —
+`() => { html?: Record<string, number>, staleWhileRevalidate?: number, query?: Record<string, string[] | true>, vary?: { host?: boolean, headers?: string[], fn?: (req) => string | null }, maxEntries?: number, data?: object, trackUpstream?: boolean, trackDependencies?: boolean, transientRetry?: object | false, upstream?: object, redis?: object, prewarm?: false | object }` —
 **Default:**
-`{ html: {}, staleWhileRevalidate: 60, query: {}, vary: { host: false }, maxEntries: 500, data: { maxEntries: 10000, staleFactor: 10 }, trackUpstream: true, trackDependencies: true, transientRetry: { attempts: 1, delayMs: 300 }, upstream: { rate: 0 }, redis: { enabled: false }, prewarm: { enabled: true, max: 400, intervalSeconds: 0, origins: [] } }`
+`{ html: {}, staleWhileRevalidate: 60, query: {}, vary: { host: false }, maxEntries: 500, data: { maxEntries: 10000, staleFactor: 10 }, trackUpstream: true, trackDependencies: true, transientRetry: { attempts: 1, delayMs: 300 }, upstream: { rate: 0 }, redis: { enabled: false }, prewarm: { enabled: true, mode: "classic", max: 400, intervalSeconds: 0, origins: [] } }` (or `prewarm: false` → `mode: "off"`)
 
 ### `cache().html`
 
@@ -1106,14 +1106,28 @@ edges hold this page" has no exact answer — is in
 
 ### `cache().prewarm`
 
-Two modes: **classic** (list + startup pass) or **`onVisit`** (links from the
-page just visited). They cannot be combined — config load throws.
+Three surfaces: **`false`** (on-demand — visit writes only), **classic** (list
++ startup pass), or **`onVisit`** (links from the page just visited). They
+cannot be combined — config load throws. Resolved `prewarm.mode`: `"off"` |
+`"classic"` | `"onVisit"`.
+
+#### On-demand — `prewarm: false`
+
+No background warming (classic pass, `onVisit`, early-expiry HTTP refresh).
+Visited pages still write to L1 + Redis/disk L2 with the `html` TTLs.
+`PREWARM=1` does not override. **Forbidden** with `hooks.prewarmPaths`.
+`{ enabled: false }` stops the classic pass but leaves early-expiry on — use
+`false` for fully passive mode.
+
+```js
+prewarm: false,
+```
 
 #### Classic fields
 
 | Field | Type | Default | Meaning |
 | --- | --- | --- | --- |
-| `enabled` | `boolean` | `true` | If `false`, no prewarming happens (can be overridden with `PREWARM=1`) |
+| `enabled` | `boolean` | `true` | If `false`, no classic pass (`PREWARM=1` can override); early-expiry drain stays on |
 | `max` | `number` | `400` | At most how many paths are prewarmed per pass |
 | `concurrency` | `number` | prod 4, dev 1 | Number of parallel workers |
 | `rps` | `number` | prod `0`, dev 4 | At most how many prewarm requests per second; `0` is unlimited. This is the setting that protects the upstream quota. The default brake in dev keeps prewarming from holding page requests up. |
@@ -1158,7 +1172,7 @@ prewarm: {
 ```
 
 `hooks.prewarmPaths` and classic fields (`max`, `priority`, …) are **forbidden**
-with `onVisit`. Details: [06-caching.md](./06-caching.md).
+with `onVisit` or `prewarm: false`. Details: [06-caching.md](./06-caching.md).
 
 Each numeric field can be overridden by an environment variable of the same
 name; env takes precedence. Details: [06-caching.md](./06-caching.md).
@@ -1176,7 +1190,7 @@ its own default and warns — the page does not go down.
 | `layoutContext` | `({ pathname, metadata }) => object` | Layout locals; `lang`, `structuredData`, `extraHead` and `bodyClass` get special treatment | [04](./04-rendering.md) |
 | `notFound` | `() => object \| null` | 404 page definition; if `null`, the framework's error page | [03](./03-routing.md) |
 | `error` | `({ status, error }) => object \| string \| null` | Error pages other than 404 (and 404 when there is no `notFound`); a page definition or HTML directly | [03](./03-routing.md) |
-| `prewarmPaths` | `() => string[]` | Paths for classic prewarm; if omitted, the classic pass is never set up. **Forbidden** with `onVisit` | [06](./06-caching.md) |
+| `prewarmPaths` | `() => string[]` | Paths for classic prewarm; if omitted, the classic pass is never set up. **Forbidden** with `onVisit` and `prewarm: false` | [06](./06-caching.md) |
 
 ```js
 hooks: {
@@ -1270,7 +1284,7 @@ and no warning is printed.
 | `JSKELET_CLOUDFLARE_KEY` | Cloudflare cache surface | — | API token. Until it is set, CDN purging and edge analytics stay off; it overrides `apiToken` in the config. The token is never returned in a response. [06](./06-caching.md) |
 | `JSKELET_CLOUDFLARE_ZONE_ID` | Cloudflare cache surface | — | Zone identifier. No Cloudflare endpoint is called unless it is set alongside the token |
 | `JSKELET_CLOUDFLARE_HOSTNAME` | Cloudflare cache surface | — | The root for purge URLs. Required when the panel is opened over an internal address |
-| `PREWARM` | `startPrewarm` | — | `0` turns prewarming off; `1` overrides `enabled: false` in the config and turns it on |
+| `PREWARM` | `startPrewarm` | — | `0` turns prewarming off; `1` overrides `enabled: false` in the config and turns it on. Does not override `prewarm: false` (on-demand) |
 | `PREWARM_MAX` | `prewarm` | `400` | At most how many paths are prewarmed |
 | `PREWARM_CONCURRENCY` | `prewarm` | prod 4, dev 1 | Number of parallel workers |
 | `PREWARM_RPS` | `prewarm` | `0` | At most how many prewarm requests per second; `0` is unlimited |
