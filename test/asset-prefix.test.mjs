@@ -6,7 +6,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, test } from "node:test";
-import { applyAssetPrefix } from "../src/server/assets.js";
+import { applyAssetPrefix, asset } from "../src/server/assets.js";
 import {
   assetsUploadSkipReason,
   contentTypeFor,
@@ -14,7 +14,8 @@ import {
   uploadAssets,
 } from "../src/build/tasks/assets-upload.mjs";
 import { initBuildPaths } from "../src/build/paths.mjs";
-import { readS3CredentialsFromEnv } from "../src/config/index.js";
+import { loadConfig, readS3CredentialsFromEnv } from "../src/config/index.js";
+import { icon } from "../src/views/helpers/tags.js";
 
 const savedEnv = { ...process.env };
 
@@ -39,6 +40,47 @@ test("applyAssetPrefix joins origin and path", () => {
     applyAssetPrefix("https://cdn.example.com", "https://other/x.js"),
     "https://other/x.js",
   );
+});
+
+test("asset({ origin: \"document\" }) skips CDN prefix; icon() uses it for sprite", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "jskelet-asset-origin-"));
+  try {
+    fs.mkdirSync(path.join(root, ".jskelet"), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, ".jskelet", "manifest.json"),
+      JSON.stringify({
+        "app.css": "/assets/app.abc123.css",
+        "sprite.svg": "/assets/sprite.def456.svg",
+      }),
+    );
+    fs.writeFileSync(
+      path.join(root, "jskelet.config.mjs"),
+      `export default {
+        build: { assets: { prefix: "https://cdn.example.com" } },
+      };\n`,
+    );
+
+    await loadConfig({ root, force: true });
+
+    assert.equal(
+      asset("app.css"),
+      "https://cdn.example.com/assets/app.abc123.css",
+    );
+    assert.equal(
+      asset("app.css", { origin: "cdn" }),
+      "https://cdn.example.com/assets/app.abc123.css",
+    );
+    assert.equal(
+      asset("sprite.svg", { origin: "document" }),
+      "/assets/sprite.def456.svg",
+    );
+
+    const html = icon({ name: "House" });
+    assert.match(html, /href="\/assets\/sprite\.def456\.svg#house-regular"/);
+    assert.doesNotMatch(html, /cdn\.example\.com/);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test("readS3CredentialsFromEnv prefers AWS_* over JSKELET_S3_*", () => {

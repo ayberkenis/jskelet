@@ -17,6 +17,10 @@ one is listed under a **Breaking** heading.
 
 ### Added
 
+- `asset(name, { origin: "document" })` skips `build.assets.prefix` and
+  returns the site-origin `/assets/…` path. `icon()` always resolves the
+  sprite this way so SVG `<use href>` keeps working when other assets are
+  on a CDN (the origin still serves `public/assets/`).
 - Dev overlay **API** tab (between Performance and Server): outbound
   `fetch` calls for the current page — browser and SSR — with host
   rollup, duration, status, and a detail pane on click (component,

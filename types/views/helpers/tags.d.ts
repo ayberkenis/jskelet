@@ -60,6 +60,11 @@ export declare function preloadImage({ href, imagesrcset, imagesizes }: {
 /**
  * Phosphor ikonları — build zamanı üretilen SVG sprite'tan `<use>`.
  * `weight` sprite id'sine dahildir (regular/bold/fill).
+ *
+ * Sprite URL'si her zaman site origin'indedir (`asset(..., { origin:
+ * "document" })`). `<use href>` çapraz origin SVG yüklemez; CDN prefix
+ * açıkken bile `public/assets/sprite.<hash>.svg` aynı host'tan gelir.
+ *
  * @param {{ name: string, size?: number | string, weight?: string,
  *   class?: string, attrs?: Record<string, unknown> }} props
  * @returns {string}

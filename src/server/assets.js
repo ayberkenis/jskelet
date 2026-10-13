@@ -9,6 +9,11 @@
  * `build.assets.prefix` doluysa HTML'e basılan URL'lere CDN origin eklenir;
  * manifest diskte göreli kalır. Dosya sistemi okumaları (`getSpriteIds`)
  * göreli yolu kullanır.
+ *
+ * Bazı varlıklar bilinçli olarak site origin'inde kalır: SVG `<use href>`
+ * çapraz origin sprite yüklemez. `asset(name, { origin: "document" })`
+ * prefix'i atlar; `icon()` sprite için bunu kullanır. Origin hâlâ
+ * `public/assets/` servis eder.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -17,7 +22,7 @@ import { getConfig } from "../config/index.js";
 
 const isDev = process.env.NODE_ENV === "development";
 
-/** @type {{ manifest: Record<string, string> } | null} */
+/** @type {{ manifest: Record<string, string>, generated: string } | null} */
 let cached = null;
 let warned = false;
 
@@ -38,13 +43,15 @@ function load() {
     }
   }
 
-  return { manifest };
+  return { manifest, generated };
 }
 
 function state() {
   // Dev'de her istekte yeniden okunur (watch build hash'leri değiştirir);
-  // prod'da bir kez.
-  if (isDev || !cached) cached = load();
+  // prod'da bir kez. `generated` yolu değiştiyse (test / başka kök) de
+  // yenilenir — aksi hâlde eski manifest takılı kalır.
+  const generated = getConfig().dirs.generated;
+  if (isDev || !cached || cached.generated !== generated) cached = load();
   return cached;
 }
 
@@ -82,11 +89,22 @@ function assetPath(name) {
 }
 
 /**
+ * @typedef {{ origin?: "cdn" | "document" }} AssetOptions
+ */
+
+/**
+ * Manifest'teki hash'li (veya yedek) URL.
+ *
  * @param {string} name Örn. "app.css", "main.js", "sprite.svg"
+ * @param {AssetOptions} [options]
+ *   `origin: "document"` → `build.assets.prefix` uygulanmaz; site
+ *   origin'indeki `/assets/…` yolu döner (varsayılan `"cdn"`).
  * @returns {string}
  */
-export function asset(name) {
-  return applyAssetPrefix(assetPrefix(), assetPath(name));
+export function asset(name, options = {}) {
+  const relative = assetPath(name);
+  if (options.origin === "document") return relative;
+  return applyAssetPrefix(assetPrefix(), relative);
 }
 
 /**

@@ -80,6 +80,10 @@ dosya adlarını okunur tutuyor. Hash'li olmaları sayesinde bu dosyalara
 - `asset(name)` manifest'te varsa hash'li URL'i, yoksa `/assets/<name>` döner.
   `build.assets.prefix` doluysa bu göreli yolun önüne CDN origin eklenir
   (manifest diskte göreli kalır).
+- `asset(name, { origin: "document" })` prefix'i atlar; site origin'indeki
+  `/assets/…` yolunu döner. SVG `<use href>` çapraz origin sprite
+  yüklemediği için `icon()` sprite'ı her zaman böyle çözer — origin hâlâ
+  `public/assets/` servis eder.
 - `hasAsset(name)` manifest'te olup olmadığını söyler.
 
 ### CDN prefix ve S3 upload
@@ -91,7 +95,8 @@ env → ECS task role → EC2 IMDS zincirinden. Açılınca:
    altındaki dosyaları S3'e PutObject ile kopyalar.
 2. Çalışma anında `asset()` / optimize görseller `build.assets.prefix` ile
    absolute CDN URL basar. Entry CDN'deyse esbuild chunk'ları göreli yolla aynı
-   host'a gider.
+   host'a gider. `icon()` sprite'ı ve `asset(name, { origin: "document" })`
+   site origin'inde kalır.
 
 Bucket adı noktalı olabilir (`static.ornek.com`); `https://…` şeması
 `prefix`'e yazılır. Config sözlüğü: [07-yapilandirma.md](./07-yapilandirma.md#build).
@@ -457,7 +462,9 @@ karşılaşmaması.
 - **Bazı Tailwind sınıfları çalışmıyor.** `@source` direktifi eksik olan bir
   dizinde yazılmışlar.
 - **İkon boş görünüyor.** Sprite'ta o sembol yok; dev'de `[icon] missing from sprite`
-  uyarısına bakın.
+  uyarısına bakın. CDN prefix açıkken sprite bilerek site origin'inde kalır
+  (`asset("sprite.svg", { origin: "document" })`); origin `public/assets/`
+  servis etmiyorsa `<use>` boş kalır.
 - **Island'lar hiç açılmıyor.** `main.js` manifest'te yok (entry dizini boş ya
   da build atlanmış) veya bir build hatası var.
 - **Dev'de sayfa aniden stilsiz kaldı.** Manifest ile diskteki dosya

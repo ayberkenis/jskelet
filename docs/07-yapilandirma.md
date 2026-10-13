@@ -629,7 +629,7 @@ değişmez** — asset'ler origin'den servis edilir.
 
 | Alan | Tip | Varsayılan | Anlamı |
 | --- | --- | --- | --- |
-| `assets.prefix` | `string` | `""` | CDN origin; `asset()` URL öneki (sonunda `/` yok). Yalnızca config. Manifest diskte göreli kalır. |
+| `assets.prefix` | `string` | `""` | CDN origin; `asset()` URL öneki (sonunda `/` yok). Yalnızca config. Manifest diskte göreli kalır. `asset(name, { origin: "document" })` ve `icon()` sprite'ı öneksiz kalır. |
 | `assets.upload.enabled` | `boolean` | `false` | `true` veya config'te `bucket` doluysa açılır; açık `false` ezer. |
 | `assets.upload.bucket` | `string \| null` | `null` | **S3 bucket adı** (`static.ornek.com` gibi noktalı adlar geçerli; PutObject path-style kullanır) veya `bucket/key/prefix`. `https://…` şeması kabul edilmez — o `prefix`. |
 | `assets.upload.keyPrefix` | `string` | `""` | Nesne anahtarı öneki; bucket yolunda verilmişse o kazanır (`prefix` takma adı da kabul). |

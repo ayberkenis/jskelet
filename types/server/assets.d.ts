@@ -6,11 +6,22 @@
  * @returns {string}
  */
 export declare function applyAssetPrefix(prefix: string, url: string): string;
+export type AssetOptions = {
+    origin?: "cdn" | "document";
+};
 /**
+ * @typedef {{ origin?: "cdn" | "document" }} AssetOptions
+ */
+/**
+ * Manifest'teki hash'li (veya yedek) URL.
+ *
  * @param {string} name Örn. "app.css", "main.js", "sprite.svg"
+ * @param {AssetOptions} [options]
+ *   `origin: "document"` → `build.assets.prefix` uygulanmaz; site
+ *   origin'indeki `/assets/…` yolu döner (varsayılan `"cdn"`).
  * @returns {string}
  */
-export declare function asset(name: string): string;
+export declare function asset(name: string, options?: AssetOptions): string;
 /**
  * @param {string} name
  * @returns {boolean}

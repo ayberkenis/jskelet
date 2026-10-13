@@ -83,6 +83,10 @@ They are passed to templates automatically; in server code,
 - `asset(name)` returns the hashed URL if it is in the manifest, otherwise
   `/assets/<name>`. When `build.assets.prefix` is set, that relative path is
   prefixed with the CDN origin (the on-disk manifest stays relative).
+- `asset(name, { origin: "document" })` skips the prefix and returns the
+  site-origin `/assets/…` path. SVG `<use href>` cannot load a cross-origin
+  sprite, so `icon()` always resolves the sprite this way — the origin still
+  serves `public/assets/`.
 - `hasAsset(name)` tells you whether it is in the manifest.
 
 ### CDN prefix and S3 upload
@@ -94,7 +98,8 @@ resolve from env → ECS task role → EC2 IMDS. When enabled:
    directories in `include`) to S3.
 2. At runtime `asset()` / optimised images emit absolute CDN URLs via
    `build.assets.prefix`. When the entry script is on the CDN, esbuild chunks
-   resolve relatively on the same host.
+   resolve relatively on the same host. The `icon()` sprite and
+   `asset(name, { origin: "document" })` stay on the document origin.
 
 Bucket names may include dots (`static.example.com`); put `https://…` in
 `prefix`. Config reference: [07-configuration.md](./07-configuration.md#build).
@@ -473,7 +478,9 @@ directly does not end up facing an unstyled page.
 - **Some Tailwind classes do not work.** They were written in a directory whose
   `@source` directive is missing.
 - **An icon looks empty.** That symbol is not in the sprite; in dev, look for the
-  `[icon] missing from sprite` warning.
+  `[icon] missing from sprite` warning. With a CDN prefix the sprite stays on
+  the document origin on purpose (`asset("sprite.svg", { origin: "document" })`);
+  if the origin does not serve `public/assets/`, `<use>` stays blank.
 - **The islands never open.** `main.js` is not in the manifest (the entry
   directory is empty or the build was skipped) or there is a build error.
 - **The page suddenly went unstyled in dev.** The manifest and the file on disk
