@@ -20,6 +20,12 @@ export declare function readS3CredentialsFromEcs(): Promise<AwsCredentials | nul
  */
 export declare function readS3CredentialsFromImds(): Promise<AwsCredentials | null>;
 /**
+ * Credential neden bulunamadı — upload skip satırı için.
+ *
+ * @returns {string}
+ */
+export declare function s3CredentialsMissingReason(): string;
+/**
  * Env → ECS task role → EC2 instance profile.
  *
  * @returns {Promise<AwsCredentials | null>}
