@@ -12,7 +12,10 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import { resolveS3Credentials } from "../../server/logs/s3-credentials.js";
+import {
+  resolveS3Credentials,
+  s3CredentialsMissingReason,
+} from "../../server/logs/s3-credentials.js";
 import { putObject } from "../../server/logs/s3-put.js";
 import * as log from "../../log.mjs";
 import { paths } from "../paths.mjs";
@@ -127,7 +130,7 @@ export async function uploadAssets(config, options = {}) {
   const resolve = options.resolveCredentials ?? resolveS3Credentials;
   const credentials = await resolve();
   if (!upload.bucket || !credentials) {
-    log.detail("skipped (credentials missing)");
+    log.detail(`skipped (${s3CredentialsMissingReason()})`);
     return;
   }
 

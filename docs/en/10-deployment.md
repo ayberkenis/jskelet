@@ -56,34 +56,40 @@ considering in production:
 
 ### Publishing assets to S3 / CloudFront
 
-Off by default. Prefix + bucket in config; credentials only in CI:
+Off by default. Prefix + bucket in config; credentials from env keys **or** an
+IAM role:
 
 ```js
-// jskelet.config.mjs
+// jskelet.config.mjs — wire your app env vars here
 build: {
   assets: {
-    prefix: "https://static.example.com/js",
+    prefix: process.env.NEXT_PUBLIC_STATIC_ASSETS_BASE_URL, // https://static.…
     upload: {
-      bucket: "static.example.com", // or "static.example.com/js"
+      bucket: process.env.S3_BUCKET_NAME, // static.example.com
       keyPrefix: "js",
-      region: "eu-central-1",
+      region: process.env.AWS_REGION || "eu-central-1",
+      endpoint: process.env.AWS_S3_ENDPOINT || undefined,
     },
   },
 },
 ```
 
-```bash
-# CI / local: explicit keys. On ECS/EC2 a task/instance role is enough — no keys required.
-AWS_ACCESS_KEY_ID=…
-AWS_SECRET_ACCESS_KEY=…
-# AWS_SESSION_TOKEN=…
-```
+**When does the task role work?** The ECS task role /
+`AWS_CONTAINER_CREDENTIALS_RELATIVE_URI` exist only while the **task is
+running**. A `RUN jskelet build` inside Docker or a CI build agent has no such
+URI → `skipped (credentials missing (no env keys, no ECS task role …))`. The AWS
+SDK seeing the role at runtime does not mean the build step sees it.
 
-When `jskelet build` finishes, files under `public/assets/` (and any other
-`include` directories) are copied to S3; origin copies remain. If the bucket or
-credentials are missing, the step logs `skipped (…)` with the reason and the
-build continues. Watch / `jskelet dev` never upload. If you use CSP, add the CDN
-origin to `script-src` / `style-src` / `img-src` and to `preconnect`.
+Practical options:
+
+1. **Build with a CI role** (CodeBuild / GitHub OIDC) — no static keys; upload
+   finishes in the job.
+2. **Compile in the image**, run upload at ECS start (task role is present then).
+3. Temporary `AWS_*` keys in CI (not preferred).
+
+When `jskelet build` finishes, `public/assets/` is copied to S3; origin copies
+remain. Missing bucket/credentials log `skipped (…)`. Watch / `jskelet dev`
+never upload. Add the CDN origin to CSP.
 
 When a file or S3 sink is enabled in production, the HTTP access log middleware
 mounts automatically (if `http` is in `logs.kinds`). The admin panel ring is

@@ -55,34 +55,41 @@ ayarlamayı düşünmeniz gerekenler:
 
 ### Asset'leri S3 / CloudFront'a basmak
 
-Varsayılan kapalıdır. Config'te prefix + bucket; CI'da yalnızca credential:
+Varsayılan kapalıdır. Config'te prefix + bucket; credential env key **veya**
+IAM role:
 
 ```js
-// jskelet.config.mjs
+// jskelet.config.mjs — uygulama env'lerini buraya bağla
 build: {
   assets: {
-    prefix: "https://static.ornek.com/js",
+    prefix: process.env.NEXT_PUBLIC_STATIC_ASSETS_BASE_URL, // https://static.…
     upload: {
-      bucket: "static.ornek.com", // veya "static.ornek.com/js"
+      bucket: process.env.S3_BUCKET_NAME, // static.investvio.com
       keyPrefix: "js",
-      region: "eu-central-1",
+      region: process.env.AWS_REGION || "eu-central-1",
+      endpoint: process.env.AWS_S3_ENDPOINT || undefined,
     },
   },
 },
 ```
 
-```bash
-# CI / local: explicit keys. ECS/EC2'de task/instance role yeter — key şart değil.
-AWS_ACCESS_KEY_ID=…
-AWS_SECRET_ACCESS_KEY=…
-# AWS_SESSION_TOKEN=…
-```
+**Task role ne zaman çalışır?** ECS task role /
+`AWS_CONTAINER_CREDENTIALS_RELATIVE_URI` yalnızca **görev çalışırken** vardır.
+Dockerfile içindeki `RUN jskelet build` veya CI build agent'ında bu URI
+yoktur → `skipped (credentials missing (no env keys, no ECS task role …))`.
+AWS SDK'nın runtime'da rolü görmesi, build adımının rolü görmesi demek değildir.
 
-`jskelet build` bitince `public/assets/` (ve config'te `include` edilen
-dizinler) S3'e kopyalanır; origin'deki dosyalar da durur. Bucket veya
-credential yoksa adım `skipped (…)` ile sebep basar, build devam eder. Watch /
-`jskelet dev` upload yapmaz. CSP kullanıyorsanız CDN origin'ini `script-src` /
-`style-src` / `img-src` ve `preconnect` listesine ekleyin.
+Pratik seçenekler:
+
+1. **CI'da rol ile build** (CodeBuild / GitHub OIDC) — static key yok, upload
+   build job'unda biter.
+2. **Image'da yalnızca derle**, upload'u ECS start'ta ayrı koş (task role o an
+   vardır).
+3. CI'da geçici `AWS_*` key (tercih edilmez).
+
+`jskelet build` bitince `public/assets/` S3'e kopyalanır; origin kopyası durur.
+Bucket/credential yoksa adım `skipped (…)` basar. Watch / `jskelet dev` upload
+yapmaz. CSP'ye CDN origin ekleyin.
 
 Production'da dosya veya S3 sink açıldığında HTTP access log middleware
 otomatik mount edilir (`logs.kinds` içinde `http` varsa). Admin paneli ring'i

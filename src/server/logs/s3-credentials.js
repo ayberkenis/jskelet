@@ -16,7 +16,9 @@ import process from "node:process";
  *   sessionToken: string | null }} AwsCredentials
  */
 
-const METADATA_TIMEOUT_MS = 400;
+// Local'de IMDS yokken hızlı vazgeç; ECS'te URI varken biraz daha sabır.
+const IMDS_TIMEOUT_MS = 400;
+const ECS_TIMEOUT_MS = 2_000;
 const ECS_METADATA_HOST = "http://169.254.170.2";
 const EC2_METADATA_HOST = "http://169.254.169.254";
 
@@ -72,7 +74,7 @@ function fromAwsCredentialJson(data) {
  * @param {number} [timeoutMs]
  * @returns {Promise<unknown | null>}
  */
-async function fetchJson(url, init = {}, timeoutMs = METADATA_TIMEOUT_MS) {
+async function fetchJson(url, init = {}, timeoutMs = IMDS_TIMEOUT_MS) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -92,7 +94,7 @@ async function fetchJson(url, init = {}, timeoutMs = METADATA_TIMEOUT_MS) {
  * @param {number} [timeoutMs]
  * @returns {Promise<string | null>}
  */
-async function fetchText(url, init = {}, timeoutMs = METADATA_TIMEOUT_MS) {
+async function fetchText(url, init = {}, timeoutMs = IMDS_TIMEOUT_MS) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -125,7 +127,7 @@ export async function readS3CredentialsFromEcs() {
     readTokenFile(process.env.AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE);
   if (token) headers.Authorization = token;
 
-  const data = await fetchJson(url, { headers });
+  const data = await fetchJson(url, { headers }, ECS_TIMEOUT_MS);
   if (!data || typeof data !== "object") return null;
   return fromAwsCredentialJson(/** @type {Record<string, unknown>} */ (data));
 }
@@ -177,6 +179,21 @@ export async function readS3CredentialsFromImds() {
   );
   if (!data || typeof data !== "object") return null;
   return fromAwsCredentialJson(/** @type {Record<string, unknown>} */ (data));
+}
+
+/**
+ * Credential neden bulunamadı — upload skip satırı için.
+ *
+ * @returns {string}
+ */
+export function s3CredentialsMissingReason() {
+  if (
+    envText(process.env.AWS_CONTAINER_CREDENTIALS_RELATIVE_URI) ||
+    envText(process.env.AWS_CONTAINER_CREDENTIALS_FULL_URI)
+  ) {
+    return "credentials missing (ECS metadata failed)";
+  }
+  return "credentials missing (no env keys, no ECS task role — upload needs runtime/CI role, not docker build)";
 }
 
 /**

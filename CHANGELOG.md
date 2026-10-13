@@ -19,9 +19,11 @@ one is listed under a **Breaking** heading.
   `JSKELET_S3_*`, then ECS task-role / EC2 instance-profile metadata). The
   Assets upload step always appears on production builds; when off it logs a
   one-line reason (`skipped (no build.assets.upload.bucket)`,
-  `skipped (credentials missing)`, …). A URL in `upload.bucket` is rejected
-  with a warning (CDN origin belongs in `prefix`). Watch mode never uploads.
-  `.br` / `.gz` siblings are skipped.
+  `skipped (credentials missing (no env keys, no ECS task role …))`, …).
+  Docker/`RUN jskelet build` has no task role — upload needs CI role or a
+  runtime upload. A URL in `upload.bucket` is rejected with a warning (CDN
+  origin belongs in `prefix`). Watch mode never uploads. `.br` / `.gz`
+  siblings are skipped.
 
 ### Changed
 
