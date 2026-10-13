@@ -16,8 +16,10 @@ one is listed under a **Breaking** heading.
   `build.assets.upload`) is set, production `jskelet build` PutObjects
   `public/assets/` (and optional `include` dirs) to S3 after precompress.
   Credentials prefer standard `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` /
-  `AWS_SESSION_TOKEN`, then `JSKELET_S3_*`. Missing bucket or credentials fail
-  the build; watch mode never uploads. `.br` / `.gz` siblings are skipped.
+  `AWS_SESSION_TOKEN`, then `JSKELET_S3_*`. The Assets upload step always
+  appears on production builds; when off it logs a one-line reason
+  (`skipped (no JSKELET_ASSETS_BUCKET)`, `skipped (credentials missing)`, …).
+  Watch mode never uploads. `.br` / `.gz` siblings are skipped.
 
 ### Changed
 

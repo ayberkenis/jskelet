@@ -20,7 +20,7 @@ build is in [09-dev-tools.md](./09-dev-tools.md).
 5. Images         if config.images !== false, not watch, and sharp is installed
 6. Manifest       .jskelet/manifest.json
 7. Precompress    if not watch
-8. Assets upload  if build.assets.upload is on (not watch)
+8. Assets upload  if not watch (logs `skipped (reason)` when off)
 ```
 
 Template compilation finishes **before** asset scanning; there is no parse on
@@ -34,7 +34,8 @@ The order is not arbitrary:
 - **Precompress runs just before upload:** the origin still gets `.br`/`.gz`;
   the S3 step copies only the raw files.
 - **Images never run on a watch pass:** re-encoding with `sharp` is expensive.
-- **Assets upload never runs on watch:** only production `jskelet build`.
+- **Assets upload never runs on watch:** only production `jskelet build`; when
+  off the step still prints (`skipped (no JSKELET_ASSETS_BUCKET)`, etc.).
 
 Tasks only run if the relevant configuration exists. A project that does not
 define any fonts never sees the font step; this is the build-side counterpart of

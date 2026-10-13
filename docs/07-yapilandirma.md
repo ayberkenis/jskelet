@@ -638,10 +638,11 @@ değişmez** — asset'ler origin'den servis edilir.
 | `assets.upload.cacheControl` | `string` | `public, max-age=31536000, immutable` | PutObject `Cache-Control`. |
 
 Credential config'e yazılmaz. Öncelik: `AWS_ACCESS_KEY_ID` /
-`AWS_SECRET_ACCESS_KEY` / `AWS_SESSION_TOKEN`, yoksa `JSKELET_S3_*`. Upload açık
-iken bucket veya credential yoksa **build düşer**. Watch turunda upload yok.
-`.br` / `.gz` yüklenmez. Ayrıntı: [08-build.md](./08-build.md),
-[10-dagitim.md](./10-dagitim.md).
+`AWS_SECRET_ACCESS_KEY` / `AWS_SESSION_TOKEN`, yoksa `JSKELET_S3_*`. Production
+build'de Assets upload adımı her zaman görünür; kapalıysa
+`skipped (no JSKELET_ASSETS_BUCKET)` / `skipped (credentials missing)` gibi tek
+satır sebep basılır (build düşmez). Watch turunda adım yok. `.br` / `.gz`
+yüklenmez. Ayrıntı: [08-build.md](./08-build.md), [10-dagitim.md](./10-dagitim.md).
 
 ```js
 build: {

@@ -20,7 +20,7 @@ davranışı burada. Çıktının çalışma anında nasıl servis edildiği
 5. Images         config.images !== false, watch değil ve sharp kurulu ise
 6. Manifest       .jskelet/manifest.json
 7. Precompress    watch değilse
-8. Assets upload  build.assets.upload açıksa (watch değil)
+8. Assets upload  watch değilse (kapalıysa `skipped (sebep)`)
 ```
 
 Şablon derlemesi asset taramasından **önce** biter; istek yolunda parse yoktur.
@@ -34,7 +34,8 @@ Sıra rastgele değil:
 - **Precompress, upload'tan hemen önce:** origin hâlâ `.br`/`.gz` üretir; S3
   adımı yalnızca ham dosyaları kopyalar.
 - **Görseller watch turunda hiç çalışmaz:** `sharp` ile yeniden kodlama pahalı.
-- **Assets upload watch'ta yok:** yalnızca production `jskelet build`.
+- **Assets upload watch'ta yok:** yalnızca production `jskelet build`; kapalıysa
+  yine satır basılır (`skipped (no JSKELET_ASSETS_BUCKET)` vb.).
 
 Görevler yalnızca ilgili yapılandırma varsa çalışır. Font tanımlamayan bir proje
 font adımını hiç görmez; bu, "framework her projeye kendi varsayımlarını

@@ -2,8 +2,8 @@
  * Production build sonunda hash'li varlıkları S3'e PutObject ile kopyalar.
  *
  * Watch turunda çalışmaz (çağıran sorumlu). Credential env'den gelir
- * (`AWS_*` önce, `JSKELET_S3_*` yedek). Bucket yoksa veya credential yoksa
- * build düşer — CDN prefix ile boş bucket'a deploy olmasın diye.
+ * (`AWS_*` önce, `JSKELET_S3_*` yedek). Bucket / credential yoksa veya upload
+ * kapalıysa adım yine görünür: `skipped (…)` ile sebep basılır, build düşmez.
  *
  * `.br` / `.gz` kardeşleri yüklenmez: edge kendi sıkıştırmasını yapsın;
  * origin precompress Express için kalır.
@@ -12,6 +12,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { readS3CredentialsFromEnv } from "../../config/index.js";
 import { putObject } from "../../server/logs/s3-put.js";
+import * as log from "../../log.mjs";
 import { paths } from "../paths.mjs";
 
 const CONCURRENCY = 8;
@@ -87,27 +88,46 @@ function resolveIncludeDir(name) {
 }
 
 /**
+ * Upload yapılmayacaksa kısa sebep; yapılacaksa `null`.
+ *
  * @param {import('../../config/index.js').ResolvedConfig} config
- * @param {{ put?: typeof putObject }} [options]
- * @returns {Promise<string>} Özet satır (log.task için)
+ * @returns {string | null}
  */
-export async function uploadAssets(config, options = {}) {
+export function assetsUploadSkipReason(config) {
   const upload = config.build?.assets?.upload;
-  if (!upload?.enabled) return "skipped";
 
-  if (!upload.bucket) {
-    throw new Error(
-      "[assets] upload enabled but no bucket — set JSKELET_ASSETS_BUCKET " +
-        "or build.assets.upload.bucket",
-    );
+  if (!upload?.enabled) {
+    // Bucket yoksa asıl eksik env'i söyle — `enabled: false` çoğu zaman
+    // bucket tanımlanmadığı için dolaylıdır.
+    if (!upload?.bucket) return "no JSKELET_ASSETS_BUCKET";
+    return "build.assets.upload.enabled is false";
   }
 
+  if (!upload.bucket) return "no JSKELET_ASSETS_BUCKET";
+
+  if (!readS3CredentialsFromEnv()) return "credentials missing";
+
+  return null;
+}
+
+/**
+ * @param {import('../../config/index.js').ResolvedConfig} config
+ * @param {{ put?: typeof putObject }} [options]
+ * @returns {Promise<void>}
+ */
+export async function uploadAssets(config, options = {}) {
+  const reason = assetsUploadSkipReason(config);
+  if (reason) {
+    log.detail(`skipped (${reason})`);
+    return;
+  }
+
+  const upload = config.build.assets.upload;
   const credentials = readS3CredentialsFromEnv();
-  if (!credentials) {
-    throw new Error(
-      "[assets] upload enabled but credentials missing — set " +
-        "AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY or JSKELET_S3_*",
-    );
+  // skipReason null iken credential ve bucket vardır; TS/akış için daralt.
+  if (!upload.bucket || !credentials) {
+    log.detail("skipped (credentials missing)");
+    return;
   }
 
   const put = options.put ?? putObject;
@@ -131,7 +151,10 @@ export async function uploadAssets(config, options = {}) {
     }
   }
 
-  if (!jobs.length) return "0 files";
+  if (!jobs.length) {
+    log.detail("0 files");
+    return;
+  }
 
   let uploaded = 0;
   let index = 0;
@@ -163,5 +186,5 @@ export async function uploadAssets(config, options = {}) {
 
   const target = `${upload.bucket}/${keyPrefix}`.replace(/\/+/g, "/");
   const via = upload.endpoint ? ` @ ${upload.endpoint}` : "";
-  return `${uploaded} → s3://${target}${via}`;
+  log.detail(`${uploaded} → s3://${target}${via}`);
 }

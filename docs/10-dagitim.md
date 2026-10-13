@@ -70,9 +70,9 @@ AWS_SECRET_ACCESS_KEY=…
 
 `jskelet build` bitince `public/assets/` (ve config'te `include` edilen
 dizinler) S3'e kopyalanır; origin'deki dosyalar da durur. Bucket veya
-credential eksikken upload açıksa build düşer. Watch / `jskelet dev` upload
-yapmaz. CSP kullanıyorsanız CDN origin'ini `script-src` / `style-src` /
-`img-src` ve `preconnect` listesine ekleyin.
+credential yoksa adım `skipped (…)` ile sebep basar, build devam eder. Watch /
+`jskelet dev` upload yapmaz. CSP kullanıyorsanız CDN origin'ini `script-src` /
+`style-src` / `img-src` ve `preconnect` listesine ekleyin.
 
 Production'da dosya veya S3 sink açıldığında HTTP access log middleware
 otomatik mount edilir (`logs.kinds` içinde `http` varsa). Admin paneli ring'i

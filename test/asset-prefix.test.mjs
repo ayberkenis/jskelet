@@ -8,6 +8,7 @@ import path from "node:path";
 import { afterEach, test } from "node:test";
 import { applyAssetPrefix } from "../src/server/assets.js";
 import {
+  assetsUploadSkipReason,
   contentTypeFor,
   listFilesRecursive,
   uploadAssets,
@@ -82,18 +83,11 @@ test("contentTypeFor and listFilesRecursive skip br/gz", () => {
   }
 });
 
-test("uploadAssets puts objects with content-type and cache-control", async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "jskelet-up-"));
+/** @returns {import('../src/config/index.js').ResolvedConfig} */
+function uploadConfig(root, upload) {
   const publicDir = path.join(root, "public");
   const assetsDir = path.join(publicDir, "assets");
-  fs.mkdirSync(assetsDir, { recursive: true });
-  fs.writeFileSync(path.join(assetsDir, "app.abc.css"), "body{}");
-
-  process.env.AWS_ACCESS_KEY_ID = "AKIA";
-  process.env.AWS_SECRET_ACCESS_KEY = "secret";
-
-  /** @type {import('../src/config/index.js').ResolvedConfig} */
-  const config = {
+  return {
     root,
     loaded: true,
     dirs: {
@@ -111,31 +105,83 @@ test("uploadAssets puts objects with content-type and cache-control", async () =
     build: {
       client: { splitting: true, groups: {}, chunkGroup: null },
       assets: {
-        prefix: "https://cdn.example.com",
+        prefix: "",
         upload: {
-          enabled: true,
-          bucket: "app-assets",
-          keyPrefix: "static/",
-          region: "eu-central-1",
+          enabled: false,
+          bucket: null,
+          keyPrefix: "",
+          region: "us-east-1",
           endpoint: null,
           include: ["assets"],
           cacheControl: "public, max-age=31536000, immutable",
+          ...upload,
         },
       },
     },
   };
+}
+
+test("assetsUploadSkipReason explains why upload is off", () => {
+  delete process.env.AWS_ACCESS_KEY_ID;
+  delete process.env.AWS_SECRET_ACCESS_KEY;
+  delete process.env.JSKELET_S3_ACCESS_KEY_ID;
+  delete process.env.JSKELET_S3_SECRET_ACCESS_KEY;
+
+  const root = "/tmp/jskelet-skip";
+  assert.equal(
+    assetsUploadSkipReason(uploadConfig(root, { enabled: false, bucket: null })),
+    "no JSKELET_ASSETS_BUCKET",
+  );
+  assert.equal(
+    assetsUploadSkipReason(
+      uploadConfig(root, { enabled: false, bucket: "kept" }),
+    ),
+    "build.assets.upload.enabled is false",
+  );
+  assert.equal(
+    assetsUploadSkipReason(
+      uploadConfig(root, { enabled: true, bucket: "app-assets" }),
+    ),
+    "credentials missing",
+  );
+
+  process.env.AWS_ACCESS_KEY_ID = "AKIA";
+  process.env.AWS_SECRET_ACCESS_KEY = "secret";
+  assert.equal(
+    assetsUploadSkipReason(
+      uploadConfig(root, { enabled: true, bucket: "app-assets" }),
+    ),
+    null,
+  );
+});
+
+test("uploadAssets puts objects with content-type and cache-control", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "jskelet-up-"));
+  const publicDir = path.join(root, "public");
+  const assetsDir = path.join(publicDir, "assets");
+  fs.mkdirSync(assetsDir, { recursive: true });
+  fs.writeFileSync(path.join(assetsDir, "app.abc.css"), "body{}");
+
+  process.env.AWS_ACCESS_KEY_ID = "AKIA";
+  process.env.AWS_SECRET_ACCESS_KEY = "secret";
+
+  const config = uploadConfig(root, {
+    enabled: true,
+    bucket: "app-assets",
+    keyPrefix: "static/",
+    region: "eu-central-1",
+  });
 
   initBuildPaths(config);
 
   /** @type {import('../src/server/logs/s3-put.js').PutObjectInput[]} */
   const puts = [];
-  const summary = await uploadAssets(config, {
+  await uploadAssets(config, {
     put: async (input) => {
       puts.push(input);
     },
   });
 
-  assert.match(summary, /1 → s3:\/\/app-assets\/static\//);
   assert.equal(puts.length, 1);
   assert.equal(puts[0].bucket, "app-assets");
   assert.equal(puts[0].key, "static/assets/app.abc.css");

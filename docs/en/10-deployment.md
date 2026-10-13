@@ -70,10 +70,10 @@ AWS_SECRET_ACCESS_KEY=…
 ```
 
 When `jskelet build` finishes, files under `public/assets/` (and any other
-`include` directories) are copied to S3; origin copies remain. If upload is on
-and the bucket or credentials are missing, the build fails. Watch /
-`jskelet dev` never upload. If you use CSP, add the CDN origin to
-`script-src` / `style-src` / `img-src` and to `preconnect`.
+`include` directories) are copied to S3; origin copies remain. If the bucket or
+credentials are missing, the step logs `skipped (…)` with the reason and the
+build continues. Watch / `jskelet dev` never upload. If you use CSP, add the CDN
+origin to `script-src` / `style-src` / `img-src` and to `preconnect`.
 
 When a file or S3 sink is enabled in production, the HTTP access log middleware
 mounts automatically (if `http` is in `logs.kinds`). The admin panel ring is

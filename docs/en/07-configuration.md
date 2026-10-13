@@ -652,9 +652,12 @@ changes** — assets stay on the origin.
 
 Credentials are not written in the config. Preference order:
 `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_SESSION_TOKEN`, then
-`JSKELET_S3_*`. When upload is on, a missing bucket or credentials **fails the
-build**. No upload on watch passes. `.br` / `.gz` siblings are not uploaded.
-Details: [08-build.md](./08-build.md), [10-deployment.md](./10-deployment.md).
+`JSKELET_S3_*`. On a production build the Assets upload step always appears;
+when off it logs a one-line reason such as
+`skipped (no JSKELET_ASSETS_BUCKET)` or `skipped (credentials missing)` (the
+build does not fail). No upload on watch passes. `.br` / `.gz` siblings are not
+uploaded. Details: [08-build.md](./08-build.md),
+[10-deployment.md](./10-deployment.md).
 
 ```js
 build: {

@@ -110,8 +110,9 @@ if (!watch) {
   const { precompressAssets } = await import("./tasks/precompress.mjs");
   await task("Precompress", precompressAssets);
 
+  // Her production build'de satır görünür; kapalıysa `skipped (sebep)`.
   // CDN'e basılacak dosyalar precompress'ten sonra hazır; `.br`/`.gz` yüklenmez.
-  if (config.build?.assets?.upload?.enabled) {
+  {
     const { uploadAssets } = await import("./tasks/assets-upload.mjs");
     await task("Assets upload", () => uploadAssets(config));
   }
