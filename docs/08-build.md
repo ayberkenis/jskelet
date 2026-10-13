@@ -35,7 +35,7 @@ Sıra rastgele değil:
   adımı yalnızca ham dosyaları kopyalar.
 - **Görseller watch turunda hiç çalışmaz:** `sharp` ile yeniden kodlama pahalı.
 - **Assets upload watch'ta yok:** yalnızca production `jskelet build`; kapalıysa
-  yine satır basılır (`skipped (no JSKELET_ASSETS_BUCKET)` vb.).
+  yine satır basılır (`skipped (no build.assets.upload.bucket)` vb.).
 
 Görevler yalnızca ilgili yapılandırma varsa çalışır. Font tanımlamayan bir proje
 font adımını hiç görmez; bu, "framework her projeye kendi varsayımlarını
@@ -78,24 +78,24 @@ dosya adlarını okunur tutuyor. Hash'li olmaları sayesinde bu dosyalara
 ```
 
 - `asset(name)` manifest'te varsa hash'li URL'i, yoksa `/assets/<name>` döner.
-  `build.assets.prefix` / `JSKELET_ASSET_PREFIX` doluysa bu göreli yolun önüne
-  CDN origin eklenir (manifest diskte göreli kalır).
+  `build.assets.prefix` doluysa bu göreli yolun önüne CDN origin eklenir
+  (manifest diskte göreli kalır).
 - `hasAsset(name)` manifest'te olup olmadığını söyler.
 
 ### CDN prefix ve S3 upload
 
-Varsayılan kapalıdır. Açılınca:
+Varsayılan kapalıdır. Prefix / bucket / keyPrefix config'te; yalnızca
+credential env'den (`AWS_*`, yoksa `JSKELET_S3_*`). Açılınca:
 
 1. Production build `public/assets/` (ve `include` listesindeki diğer dizinler)
    altındaki dosyaları S3'e PutObject ile kopyalar.
-2. Çalışma anında `asset()` / optimize görseller `JSKELET_ASSET_PREFIX` ile
+2. Çalışma anında `asset()` / optimize görseller `build.assets.prefix` ile
    absolute CDN URL basar. Entry CDN'deyse esbuild chunk'ları göreli yolla aynı
    host'a gider.
 
-Credential: `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` (önce), yoksa
-`JSKELET_S3_*`. Bucket: `JSKELET_ASSETS_BUCKET`. Config sözlüğü:
-[07-yapilandirma.md](./07-yapilandirma.md#build). Dağıtım notları:
-[10-dagitim.md](./10-dagitim.md).
+Bucket adı noktalı olabilir (`static.ornek.com`); `https://…` şeması
+`prefix`'e yazılır. Config sözlüğü: [07-yapilandirma.md](./07-yapilandirma.md#build).
+Dağıtım notları: [10-dagitim.md](./10-dagitim.md).
 
 Build çalışmadıysa uygulama yine ayağa kalkar: `hasAsset()` false olur, layout
 stylesheet ve script etiketlerini hiç basmaz. `jskelet build` unutulduğunda hata

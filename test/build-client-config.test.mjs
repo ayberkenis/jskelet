@@ -26,19 +26,7 @@ afterEach(() => {
   Object.assign(process.env, savedEnv);
 });
 
-/** Asset env'lerini bu test dosyasında izole tut. */
-function clearAssetEnv() {
-  delete process.env.JSKELET_ASSET_PREFIX;
-  delete process.env.JSKELET_ASSETS_BUCKET;
-  delete process.env.AWS_REGION;
-  delete process.env.AWS_DEFAULT_REGION;
-  delete process.env.AWS_ENDPOINT_URL;
-  delete process.env.JSKELET_S3_REGION;
-  delete process.env.JSKELET_S3_API_URL;
-}
-
 test("normalizeBuild: defaults when empty", () => {
-  clearAssetEnv();
   const build = normalizeBuild(null);
   assert.equal(build.client.splitting, true);
   assert.deepEqual(build.client.groups, {});
@@ -93,12 +81,17 @@ test("normalizeBuild: chunkGroup must be a function", () => {
   assert.equal(build.client.chunkGroup, null);
 });
 
-test("normalizeBuild: assets prefix and upload from env", () => {
-  clearAssetEnv();
-  process.env.JSKELET_ASSET_PREFIX = "https://cdn.example.com/";
-  process.env.JSKELET_ASSETS_BUCKET = "my-bucket/static";
-  process.env.AWS_REGION = "eu-central-1";
-  const build = normalizeBuild({});
+test("normalizeBuild: assets prefix and upload from config only", () => {
+  const build = normalizeBuild({
+    assets: {
+      prefix: "https://cdn.example.com/",
+      upload: {
+        bucket: "my-bucket/static",
+        region: "eu-central-1",
+        keyPrefix: "ignored-when-bucket-has-path",
+      },
+    },
+  });
   assert.equal(build.assets.prefix, "https://cdn.example.com");
   assert.equal(build.assets.upload.enabled, true);
   assert.equal(build.assets.upload.bucket, "my-bucket");
@@ -106,14 +99,36 @@ test("normalizeBuild: assets prefix and upload from env", () => {
   assert.equal(build.assets.upload.region, "eu-central-1");
 });
 
-test("normalizeBuild: upload enabled false wins over bucket env", () => {
-  clearAssetEnv();
-  process.env.JSKELET_ASSETS_BUCKET = "blocked";
+test("normalizeBuild: upload enabled false wins over config bucket", () => {
   const build = normalizeBuild({
-    assets: { upload: { enabled: false } },
+    assets: { upload: { enabled: false, bucket: "blocked" } },
   });
   assert.equal(build.assets.upload.enabled, false);
   assert.equal(build.assets.upload.bucket, "blocked");
+});
+
+test("normalizeBuild: dotted bucket names are fine; https URL is rejected", () => {
+  const ok = normalizeBuild({
+    assets: {
+      prefix: "https://static.investvio.dev/js",
+      upload: { bucket: "static.investvio.dev/js", region: "eu-central-1" },
+    },
+  });
+  assert.equal(ok.assets.upload.bucket, "static.investvio.dev");
+  assert.equal(ok.assets.upload.keyPrefix, "js/");
+  assert.equal(ok.assets.upload.enabled, true);
+  assert.equal(ok.assets.prefix, "https://static.investvio.dev/js");
+
+  const bad = normalizeBuild({
+    assets: {
+      prefix: "https://static.investvio.com/js",
+      upload: { bucket: "https://static.investvio.com/js", keyPrefix: "js" },
+    },
+  });
+  assert.equal(bad.assets.upload.bucket, null);
+  assert.equal(bad.assets.upload.enabled, false);
+  assert.equal(bad.assets.prefix, "https://static.investvio.com/js");
+  assert.equal(bad.assets.upload.keyPrefix, "js/");
 });
 
 test("matcher helpers", () => {

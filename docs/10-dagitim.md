@@ -51,17 +51,27 @@ ayarlamayı düşünmeniz gerekenler:
 | `PREWARM_MAX` | Site boyutuna göre | Açılışta ısıtılacak sayfa sayısı |
 | `PREWARM_INTERVAL_SECONDS` | `0` ya da uzun bir değer | Hiç ziyaret edilmeyen sayfaları sıcak tutmak isterseniz |
 | `DEV_GATE` + `DEV_TOKEN` | Yalnızca staging'de | Yayına açılmamış ortamı gizler. Token tek başına siteyi kilitlemez |
-| `JSKELET_S3_*` / `AWS_*` | Access log veya asset'leri S3'e yazıyorsanız | Credential; AWS deploy'da `AWS_ACCESS_KEY_ID` vb. yeter. Ayrıntı [07](./07-yapilandirma.md) |
-| `JSKELET_ASSETS_BUCKET` | Hash'li asset'leri S3/CloudFront'a basıyorsanız | Production `jskelet build` sonunda PutObject; `JSKELET_ASSET_PREFIX` ile HTML CDN URL basar |
+| `JSKELET_S3_*` / `AWS_*` | Access log veya asset'leri S3'e yazıyorsanız | Yalnızca credential; bucket/prefix `jskelet.config.mjs` → `build.assets`. Ayrıntı [07](./07-yapilandirma.md) |
 
 ### Asset'leri S3 / CloudFront'a basmak
 
-Varsayılan kapalıdır. CI veya prod build ortamında:
+Varsayılan kapalıdır. Config'te prefix + bucket; CI'da yalnızca credential:
+
+```js
+// jskelet.config.mjs
+build: {
+  assets: {
+    prefix: "https://static.ornek.com/js",
+    upload: {
+      bucket: "static.ornek.com", // veya "static.ornek.com/js"
+      keyPrefix: "js",
+      region: "eu-central-1",
+    },
+  },
+},
+```
 
 ```bash
-JSKELET_ASSETS_BUCKET=my-app-assets          # veya my-app-assets/static
-JSKELET_ASSET_PREFIX=https://dxxxx.cloudfront.net
-AWS_REGION=eu-central-1
 AWS_ACCESS_KEY_ID=…
 AWS_SECRET_ACCESS_KEY=…
 # geçici credential ise:

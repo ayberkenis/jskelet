@@ -52,17 +52,27 @@ considering in production:
 | `PREWARM_MAX` | Depends on site size | Number of pages warmed at startup |
 | `PREWARM_INTERVAL_SECONDS` | `0` or a long value | If you want to keep never-visited pages warm |
 | `DEV_GATE` + `DEV_TOKEN` | Staging only | Hides an environment that is not public yet. The token alone does not lock the site |
-| `JSKELET_S3_*` / `AWS_*` | If you write access logs or assets to S3 | Credentials; on AWS, `AWS_ACCESS_KEY_ID` etc. are enough. Details in [07](./07-configuration.md) |
-| `JSKELET_ASSETS_BUCKET` | If you publish hashed assets to S3/CloudFront | PutObject at the end of production `jskelet build`; `JSKELET_ASSET_PREFIX` makes HTML emit CDN URLs |
+| `JSKELET_S3_*` / `AWS_*` | If you write access logs or assets to S3 | Credentials only; bucket/prefix live in `jskelet.config.mjs` → `build.assets`. Details in [07](./07-configuration.md) |
 
 ### Publishing assets to S3 / CloudFront
 
-Off by default. In CI or a production build environment:
+Off by default. Prefix + bucket in config; credentials only in CI:
+
+```js
+// jskelet.config.mjs
+build: {
+  assets: {
+    prefix: "https://static.example.com/js",
+    upload: {
+      bucket: "static.example.com", // or "static.example.com/js"
+      keyPrefix: "js",
+      region: "eu-central-1",
+    },
+  },
+},
+```
 
 ```bash
-JSKELET_ASSETS_BUCKET=my-app-assets          # or my-app-assets/static
-JSKELET_ASSET_PREFIX=https://dxxxx.cloudfront.net
-AWS_REGION=eu-central-1
 AWS_ACCESS_KEY_ID=…
 AWS_SECRET_ACCESS_KEY=…
 # for temporary credentials:

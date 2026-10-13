@@ -6,9 +6,9 @@
  * basmaz. Böylece `jskelet build` unutulduğunda hata yerine stilsiz ama
  * çalışan bir sayfa görürsünüz.
  *
- * `build.assets.prefix` / `JSKELET_ASSET_PREFIX` doluysa HTML'e basılan
- * URL'lere CDN origin eklenir; manifest diskte göreli kalır (çok ortamlı
- * tek artifact). Dosya sistemi okumaları (`getSpriteIds`) göreli yolu kullanır.
+ * `build.assets.prefix` doluysa HTML'e basılan URL'lere CDN origin eklenir;
+ * manifest diskte göreli kalır. Dosya sistemi okumaları (`getSpriteIds`)
+ * göreli yolu kullanır.
  */
 import fs from "node:fs";
 import path from "node:path";

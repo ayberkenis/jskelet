@@ -498,10 +498,11 @@ export const DEFAULT_BUILD = {
     chunkGroup: null,
   },
   assets: {
-    /** CDN / CloudFront origin; sonunda `/` yok. Env: `JSKELET_ASSET_PREFIX`. */
+    /** CDN / CloudFront origin; sonunda `/` yok. Yalnızca config. */
     prefix: "",
     upload: {
       enabled: false,
+      /** S3 bucket adı (CDN URL değil). Yalnızca config; credential env'den. */
       bucket: null,
       /** Nesne anahtarı öneki (`bucket/path` split'inden veya config). */
       keyPrefix: "",

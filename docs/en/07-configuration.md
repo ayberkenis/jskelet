@@ -100,10 +100,11 @@ export default {
       groups: { charts: ["chart.js"] },
     },
     assets: {
-      prefix: process.env.JSKELET_ASSET_PREFIX,
+      prefix: "https://static.example.com/js",
       upload: {
-        enabled: Boolean(process.env.JSKELET_ASSETS_BUCKET),
-        bucket: process.env.JSKELET_ASSETS_BUCKET,
+        bucket: "static.example.com", // S3 bucket name (dots are fine)
+        keyPrefix: "js",
+        region: "eu-central-1",
       },
     },
   },
@@ -641,23 +642,22 @@ changes** — assets stay on the origin.
 
 | Field | Type | Default | Meaning |
 | --- | --- | --- | --- |
-| `assets.prefix` | `string` | `""` | Prefix for `asset()` / optimised image URLs (no trailing `/`). `JSKELET_ASSET_PREFIX` overrides. The on-disk manifest stays relative. |
-| `assets.upload.enabled` | `boolean` | `false` | Turns on when `true` or when `JSKELET_ASSETS_BUCKET` is set; explicit `false` wins. |
-| `assets.upload.bucket` | `string \| null` | `null` | Bucket or `bucket/key/prefix`. `JSKELET_ASSETS_BUCKET` overrides. |
-| `assets.upload.keyPrefix` | `string` | `""` | Object key prefix when not given in the path (`prefix` is accepted as an alias). |
-| `assets.upload.region` | `string` | `us-east-1` | `AWS_REGION` / `AWS_DEFAULT_REGION` / `JSKELET_S3_REGION`; defaults to `auto` with a custom endpoint. |
-| `assets.upload.endpoint` | `string \| null` | `null` | S3-compatible API; `AWS_ENDPOINT_URL` / `JSKELET_S3_API_URL` overrides. |
+| `assets.prefix` | `string` | `""` | CDN origin; prefix for `asset()` URLs (no trailing `/`). Config only. The on-disk manifest stays relative. |
+| `assets.upload.enabled` | `boolean` | `false` | Turns on when `true` or when `bucket` is set in config; explicit `false` wins. |
+| `assets.upload.bucket` | `string \| null` | `null` | **S3 bucket name** (dotted names like `static.example.com` are fine) or `bucket/key/prefix`. A `https://…` scheme is rejected — that belongs in `prefix`. |
+| `assets.upload.keyPrefix` | `string` | `""` | Object key prefix; a path on the bucket wins (`prefix` is accepted as an alias). |
+| `assets.upload.region` | `string` | `us-east-1` | Config; defaults to `auto` when `endpoint` is set. |
+| `assets.upload.endpoint` | `string \| null` | `null` | S3-compatible API (R2 / MinIO); config. |
 | `assets.upload.include` | `string[]` | `["assets"]` | Directories under `public/` (`assets`, optionally `fonts`, …). |
 | `assets.upload.cacheControl` | `string` | `public, max-age=31536000, immutable` | PutObject `Cache-Control`. |
 
-Credentials are not written in the config. Preference order:
-`AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_SESSION_TOKEN`, then
-`JSKELET_S3_*`. On a production build the Assets upload step always appears;
-when off it logs a one-line reason such as
-`skipped (no JSKELET_ASSETS_BUCKET)` or `skipped (credentials missing)` (the
-build does not fail). No upload on watch passes. `.br` / `.gz` siblings are not
-uploaded. Details: [08-build.md](./08-build.md),
-[10-deployment.md](./10-deployment.md).
+**Only credentials come from the environment:** `AWS_ACCESS_KEY_ID` /
+`AWS_SECRET_ACCESS_KEY` / `AWS_SESSION_TOKEN` (else `JSKELET_S3_*`). Prefix,
+bucket, region, etc. are written in the config. On a production build the Assets
+upload step always appears; when off it logs a one-line reason such as
+`skipped (no build.assets.upload.bucket)` or `skipped (credentials missing)`.
+No upload on watch passes. `.br` / `.gz` siblings are not uploaded. Details:
+[08-build.md](./08-build.md), [10-deployment.md](./10-deployment.md).
 
 ```js
 build: {
@@ -672,10 +672,12 @@ build: {
     },
   },
   assets: {
-    prefix: process.env.JSKELET_ASSET_PREFIX, // https://dxxxx.cloudfront.net
+    // HTML: /assets/app.css → https://static.example.com/js/assets/app.css
+    prefix: "https://static.example.com/js",
     upload: {
-      enabled: Boolean(process.env.JSKELET_ASSETS_BUCKET),
-      bucket: process.env.JSKELET_ASSETS_BUCKET, // my-bucket or my-bucket/static
+      bucket: "static.example.com", // or "static.example.com/js" → keyPrefix js/
+      keyPrefix: "js",              // S3 key: js/assets/…
+      region: "eu-central-1",
       include: ["assets", "fonts"],
     },
   },
@@ -1252,13 +1254,9 @@ and no warning is printed.
 | `DEV_GATE` | `devGate` | off | `1` turns the gate on, `0` turns it off even when config enabled it. `DEV_TOKEN` alone does not turn it on. [09](./09-dev-tools.md) |
 | `DEV_TOKEN` | `devGate`, `prewarm` | — | The secret expected while the gate is on. If it is missing, or the gate is off, the site stays public. Prewarming carries the token as a cookie only while the gate is on. [09](./09-dev-tools.md) |
 | `JSKELET_ADMIN` | `createApp` | — | When set, turns the admin panel on; `0` turns off a panel enabled in the config. The env wins because the panel is usually opened once during an incident. [06](./06-caching.md) |
-| `JSKELET_ASSET_PREFIX` | `build.assets.prefix` | — | CDN origin prepended to `asset()` URLs (no trailing `/`) |
-| `JSKELET_ASSETS_BUCKET` | `build.assets.upload` | — | Asset upload target: bucket or `bucket/prefix`. With credentials, production build PutObject |
 | `AWS_ACCESS_KEY_ID` | S3 PutObject | — | Standard AWS signing key (logs + asset upload); before `JSKELET_S3_*` |
 | `AWS_SECRET_ACCESS_KEY` | S3 PutObject | — | Standard AWS signing secret |
 | `AWS_SESSION_TOKEN` | S3 PutObject | — | Temporary credentials (OIDC / STS) |
-| `AWS_REGION` / `AWS_DEFAULT_REGION` | `build.assets.upload` | — | Asset upload region |
-| `AWS_ENDPOINT_URL` | `build.assets.upload` | — | S3-compatible endpoint (asset upload) |
 | `JSKELET_LOG_BUCKET` | `logs.s3` | — | Log target: bucket or `bucket/prefix` path. With credentials, the sink turns on automatically |
 | `JSKELET_S3_BUCKET` | `logs.s3` | — | Bucket when `JSKELET_LOG_BUCKET` is unset; joins with `JSKELET_S3_KEY_PREFIX` |
 | `JSKELET_S3_KEY_PREFIX` | `logs.s3` | — | Used with `JSKELET_S3_BUCKET` (`bucket/prefix`) |

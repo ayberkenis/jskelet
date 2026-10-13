@@ -10,16 +10,17 @@ one is listed under a **Breaking** heading.
 
 ### Added
 
-- Optional CDN asset publishing: `build.assets.prefix` /
-  `JSKELET_ASSET_PREFIX` prefixes `asset()` and optimised image URLs (manifest
-  stays relative on disk). When `JSKELET_ASSETS_BUCKET` (or
-  `build.assets.upload`) is set, production `jskelet build` PutObjects
-  `public/assets/` (and optional `include` dirs) to S3 after precompress.
-  Credentials prefer standard `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` /
-  `AWS_SESSION_TOKEN`, then `JSKELET_S3_*`. The Assets upload step always
-  appears on production builds; when off it logs a one-line reason
-  (`skipped (no JSKELET_ASSETS_BUCKET)`, `skipped (credentials missing)`, …).
-  Watch mode never uploads. `.br` / `.gz` siblings are skipped.
+- Optional CDN asset publishing via `build.assets`: `prefix` rewrites
+  `asset()` / optimised image URLs (manifest stays relative on disk);
+  `upload.bucket` / `keyPrefix` / `region` / `endpoint` come from config only.
+  Production `jskelet build` PutObjects `public/assets/` (and optional
+  `include` dirs) after precompress. Only credentials are read from env
+  (`AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_SESSION_TOKEN`, then
+  `JSKELET_S3_*`). The Assets upload step always appears on production builds;
+  when off it logs a one-line reason (`skipped (no build.assets.upload.bucket)`,
+  `skipped (credentials missing)`, …). A URL in `upload.bucket` is rejected
+  with a warning (CDN origin belongs in `prefix`). Watch mode never uploads.
+  `.br` / `.gz` siblings are skipped.
 
 ### Changed
 

@@ -96,10 +96,11 @@ export default {
       groups: { charts: ["chart.js"] },
     },
     assets: {
-      prefix: process.env.JSKELET_ASSET_PREFIX,
+      prefix: "https://static.ornek.com/js",
       upload: {
-        enabled: Boolean(process.env.JSKELET_ASSETS_BUCKET),
-        bucket: process.env.JSKELET_ASSETS_BUCKET,
+        bucket: "static.ornek.com", // S3 bucket adı (noktalı olabilir)
+        keyPrefix: "js",
+        region: "eu-central-1",
       },
     },
   },
@@ -628,21 +629,22 @@ değişmez** — asset'ler origin'den servis edilir.
 
 | Alan | Tip | Varsayılan | Anlamı |
 | --- | --- | --- | --- |
-| `assets.prefix` | `string` | `""` | `asset()` / optimize görsel URL öneki (sonunda `/` yok). `JSKELET_ASSET_PREFIX` ezer. Manifest diskte göreli kalır. |
-| `assets.upload.enabled` | `boolean` | `false` | `true` veya `JSKELET_ASSETS_BUCKET` doluysa açılır; açık `false` ezer. |
-| `assets.upload.bucket` | `string \| null` | `null` | Bucket veya `bucket/key/prefix`. `JSKELET_ASSETS_BUCKET` ezer. |
-| `assets.upload.keyPrefix` | `string` | `""` | Yolda verilmediyse nesne anahtarı öneki (`prefix` takma adı da kabul). |
-| `assets.upload.region` | `string` | `us-east-1` | `AWS_REGION` / `AWS_DEFAULT_REGION` / `JSKELET_S3_REGION`; custom endpoint'te varsayılan `auto`. |
-| `assets.upload.endpoint` | `string \| null` | `null` | S3-uyumlu API; `AWS_ENDPOINT_URL` / `JSKELET_S3_API_URL` ezer. |
+| `assets.prefix` | `string` | `""` | CDN origin; `asset()` URL öneki (sonunda `/` yok). Yalnızca config. Manifest diskte göreli kalır. |
+| `assets.upload.enabled` | `boolean` | `false` | `true` veya config'te `bucket` doluysa açılır; açık `false` ezer. |
+| `assets.upload.bucket` | `string \| null` | `null` | **S3 bucket adı** (`static.ornek.com` gibi noktalı adlar geçerli) veya `bucket/key/prefix`. `https://…` şeması kabul edilmez — o `prefix`. |
+| `assets.upload.keyPrefix` | `string` | `""` | Nesne anahtarı öneki; bucket yolunda verilmişse o kazanır (`prefix` takma adı da kabul). |
+| `assets.upload.region` | `string` | `us-east-1` | Config; custom `endpoint` varken varsayılan `auto`. |
+| `assets.upload.endpoint` | `string \| null` | `null` | S3-uyumlu API (R2 / MinIO); config. |
 | `assets.upload.include` | `string[]` | `["assets"]` | `public/` altı dizinler (`assets`, isteğe `fonts`, …). |
 | `assets.upload.cacheControl` | `string` | `public, max-age=31536000, immutable` | PutObject `Cache-Control`. |
 
-Credential config'e yazılmaz. Öncelik: `AWS_ACCESS_KEY_ID` /
-`AWS_SECRET_ACCESS_KEY` / `AWS_SESSION_TOKEN`, yoksa `JSKELET_S3_*`. Production
-build'de Assets upload adımı her zaman görünür; kapalıysa
-`skipped (no JSKELET_ASSETS_BUCKET)` / `skipped (credentials missing)` gibi tek
-satır sebep basılır (build düşmez). Watch turunda adım yok. `.br` / `.gz`
-yüklenmez. Ayrıntı: [08-build.md](./08-build.md), [10-dagitim.md](./10-dagitim.md).
+**Yalnızca credential env'den gelir:** `AWS_ACCESS_KEY_ID` /
+`AWS_SECRET_ACCESS_KEY` / `AWS_SESSION_TOKEN` (yoksa `JSKELET_S3_*`). Prefix,
+bucket, region vb. config'te yazılır. Production build'de Assets upload adımı
+her zaman görünür; kapalıysa `skipped (no build.assets.upload.bucket)` /
+`skipped (credentials missing)` gibi tek satır sebep basılır. Watch'ta adım
+yok. `.br` / `.gz` yüklenmez. Ayrıntı: [08-build.md](./08-build.md),
+[10-dagitim.md](./10-dagitim.md).
 
 ```js
 build: {
@@ -657,10 +659,12 @@ build: {
     },
   },
   assets: {
-    prefix: process.env.JSKELET_ASSET_PREFIX, // https://dxxxx.cloudfront.net
+    // HTML: /assets/app.css → https://static.ornek.com/js/assets/app.css
+    prefix: "https://static.ornek.com/js",
     upload: {
-      enabled: Boolean(process.env.JSKELET_ASSETS_BUCKET),
-      bucket: process.env.JSKELET_ASSETS_BUCKET, // my-bucket veya my-bucket/static
+      bucket: "static.ornek.com", // veya "static.ornek.com/js" → keyPrefix js/
+      keyPrefix: "js",            // S3 key: js/assets/…
+      region: "eu-central-1",
       include: ["assets", "fonts"],
     },
   },
@@ -1228,13 +1232,9 @@ basılmaz.
 | `DEV_GATE` | `devGate` | kapalı | `1` gate'i açar, `0` config'te açık olsa da kapatır. `DEV_TOKEN` tek başına açmaz. [09](./09-dev-araclari.md) |
 | `DEV_TOKEN` | `devGate`, `prewarm` | — | Gate açıkken beklenen sır. Yoksa veya gate kapalıysa site açık kalır. Isıtma, gate açıkken token'ı çerez olarak taşır. [09](./09-dev-araclari.md) |
 | `JSKELET_ADMIN` | `createApp` | — | Ayarlıysa yönetim panelini açar; `0` config'te açık olan paneli kapatır. Env config'i ezer, çünkü panel genelde bir arıza sırasında tek seferlik açılır. [06](./06-cache.md) |
-| `JSKELET_ASSET_PREFIX` | `build.assets.prefix` | — | CDN origin; `asset()` URL'lerine eklenir (sonunda `/` yok) |
-| `JSKELET_ASSETS_BUCKET` | `build.assets.upload` | — | Asset upload hedefi: bucket veya `bucket/prefix`. Credential ile birlikte production build sonunda PutObject |
 | `AWS_ACCESS_KEY_ID` | S3 PutObject | — | Standart AWS imza anahtarı (log + asset upload); `JSKELET_S3_*`'dan önce |
 | `AWS_SECRET_ACCESS_KEY` | S3 PutObject | — | Standart AWS imza sırrı |
 | `AWS_SESSION_TOKEN` | S3 PutObject | — | Geçici credential (OIDC / STS) |
-| `AWS_REGION` / `AWS_DEFAULT_REGION` | `build.assets.upload` | — | Asset upload bölgesi |
-| `AWS_ENDPOINT_URL` | `build.assets.upload` | — | S3-uyumlu endpoint (asset upload) |
 | `JSKELET_LOG_BUCKET` | `logs.s3` | — | Log hedefi: bucket ya da `bucket/prefix` yolu. Credential ile birlikte varsa sink otomatik açılır |
 | `JSKELET_S3_BUCKET` | `logs.s3` | — | `JSKELET_LOG_BUCKET` yoksa bucket; `JSKELET_S3_KEY_PREFIX` ile birleşir |
 | `JSKELET_S3_KEY_PREFIX` | `logs.s3` | — | `JSKELET_S3_BUCKET` ile kullanılır (`bucket/prefix`) |

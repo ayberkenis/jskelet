@@ -130,7 +130,7 @@ test("assetsUploadSkipReason explains why upload is off", () => {
   const root = "/tmp/jskelet-skip";
   assert.equal(
     assetsUploadSkipReason(uploadConfig(root, { enabled: false, bucket: null })),
-    "no JSKELET_ASSETS_BUCKET",
+    "no build.assets.upload.bucket",
   );
   assert.equal(
     assetsUploadSkipReason(

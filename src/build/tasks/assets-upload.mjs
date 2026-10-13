@@ -97,13 +97,13 @@ export function assetsUploadSkipReason(config) {
   const upload = config.build?.assets?.upload;
 
   if (!upload?.enabled) {
-    // Bucket yoksa asıl eksik env'i söyle — `enabled: false` çoğu zaman
+    // Bucket yoksa asıl eksik alanı söyle — `enabled: false` çoğu zaman
     // bucket tanımlanmadığı için dolaylıdır.
-    if (!upload?.bucket) return "no JSKELET_ASSETS_BUCKET";
+    if (!upload?.bucket) return "no build.assets.upload.bucket";
     return "build.assets.upload.enabled is false";
   }
 
-  if (!upload.bucket) return "no JSKELET_ASSETS_BUCKET";
+  if (!upload.bucket) return "no build.assets.upload.bucket";
 
   if (!readS3CredentialsFromEnv()) return "credentials missing";
 

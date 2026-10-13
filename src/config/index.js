@@ -180,7 +180,7 @@ const CONFIG_FILE = "jskelet.config.mjs";
  * @property {string} cacheControl
  *
  * @typedef {object} BuildAssetsConfig
- * @property {string} prefix CDN origin (`JSKELET_ASSET_PREFIX`); sonunda `/` yok.
+ * @property {string} prefix CDN origin (`build.assets.prefix`); sonunda `/` yok.
  * @property {BuildAssetsUploadConfig} upload
  *
  * @typedef {object} BuildConfig
@@ -1186,7 +1186,34 @@ function defaultBuildClient() {
 }
 
 /**
- * CDN prefix + S3 upload (`build.assets`). Credential config'e yazılmaz.
+ * Asset upload bucket'ı. CDN URL buraya yazılmaz — o `build.assets.prefix`.
+ *
+ * @param {unknown} value
+ * @returns {{ bucket: string | null, prefix: string | null }}
+ */
+function normalizeAssetsBucket(value) {
+  const text = typeof value === "string" ? value.trim() : "";
+  if (!text) return { bucket: null, prefix: null };
+
+  // Noktalı bucket adları geçerli (`static.investvio.com`). Reddedilen yalnızca
+  // şemalı URL — CDN origin `build.assets.prefix`'te kalır.
+  if (/^https?:\/\//i.test(text)) {
+    console.warn(
+      "[config] build.assets.upload.bucket looks like a URL — use the S3 " +
+        "bucket name without a scheme (e.g. \"static.investvio.com\" or " +
+        "\"static.investvio.com/js\"); put https://… in build.assets.prefix",
+    );
+    return { bucket: null, prefix: null };
+  }
+
+  return splitS3BucketPath(text);
+}
+
+/**
+ * CDN prefix + S3 upload (`build.assets`).
+ *
+ * Prefix / bucket / keyPrefix / region / endpoint **yalnızca config**'ten.
+ * Credential env'den (`AWS_*`, yoksa `JSKELET_S3_*`) — config'e yazılmaz.
  *
  * @param {unknown} raw
  * @returns {BuildAssetsConfig}
@@ -1201,10 +1228,9 @@ export function normalizeBuildAssets(raw) {
     console.warn("[config] build.assets must be an object, ignoring it");
   }
 
-  const envPrefix = envText(process.env.JSKELET_ASSET_PREFIX);
-  const configPrefix =
-    typeof source.prefix === "string" ? source.prefix.trim() : "";
-  const prefix = (envPrefix ?? configPrefix).replace(/\/+$/, "");
+  const prefix = (
+    typeof source.prefix === "string" ? source.prefix.trim() : ""
+  ).replace(/\/+$/, "");
 
   const uploadRaw =
     source.upload != null &&
@@ -1220,10 +1246,7 @@ export function normalizeBuildAssets(raw) {
     console.warn("[config] build.assets.upload must be an object, ignoring it");
   }
 
-  const envBucket = envText(process.env.JSKELET_ASSETS_BUCKET);
-  const bucketPath = splitS3BucketPath(
-    envBucket ?? envText(uploadRaw.bucket),
-  );
+  const bucketPath = normalizeAssetsBucket(uploadRaw.bucket);
 
   const configKeyPrefix =
     typeof uploadRaw.keyPrefix === "string" && uploadRaw.keyPrefix
@@ -1236,17 +1259,15 @@ export function normalizeBuildAssets(raw) {
           : `${uploadRaw.prefix}/`
         : DEFAULT_BUILD.assets.upload.keyPrefix;
 
-  const endpoint =
-    envText(process.env.AWS_ENDPOINT_URL) ??
-    envText(process.env.JSKELET_S3_API_URL) ??
-    envText(uploadRaw.endpoint);
+  // Bucket yolundaki önek (`my-bucket/js`) `keyPrefix`'i ezer — tek alanda
+  // hem kova hem klasör vermek için.
+  const keyPrefix = bucketPath.prefix ?? configKeyPrefix;
+
+  const endpoint = envText(uploadRaw.endpoint);
 
   // Gerçek AWS'te region imza için gerekir; custom endpoint'te `auto` yaygın.
   const region =
     envText(uploadRaw.region) ??
-    envText(process.env.AWS_REGION) ??
-    envText(process.env.AWS_DEFAULT_REGION) ??
-    envText(process.env.JSKELET_S3_REGION) ??
     (endpoint ? "auto" : DEFAULT_BUILD.assets.upload.region);
 
   /** @type {string[]} */
@@ -1268,8 +1289,7 @@ export function normalizeBuildAssets(raw) {
       ? uploadRaw.cacheControl.trim()
       : DEFAULT_BUILD.assets.upload.cacheControl;
 
-  // `JSKELET_ASSETS_BUCKET` doluysa config'te `enabled` unutulmuş olsa bile aç.
-  // Açık `enabled: false` ezer.
+  // Config'te bucket varsa `enabled` unutulmuş olsa bile aç. Açık `false` ezer.
   const enabled =
     uploadRaw.enabled === true ||
     (uploadRaw.enabled !== false && Boolean(bucketPath.bucket));
@@ -1279,7 +1299,7 @@ export function normalizeBuildAssets(raw) {
     upload: {
       enabled,
       bucket: bucketPath.bucket,
-      keyPrefix: bucketPath.prefix ?? configKeyPrefix,
+      keyPrefix,
       region,
       endpoint,
       include,
