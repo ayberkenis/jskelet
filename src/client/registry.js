@@ -16,6 +16,8 @@
  * `data-island-idle` görünür olsa bile sayfa sakinleşene (load + boş zaman)
  * kadar bekletir. İlk ekranda görünen ama kritik olmayan ağır modüller
  * (ör. grafik kütüphanesi çeken mini grafik) LCP ile yarışmasın diye.
+ * Gizli (zero-box) host'larda da aynı yol kullanılır — `hydrate()` onları
+ * `mountWhenReady` ile bağlar, hemen `mountIsland` çağırmaz.
  *
  * `data-island-props` JSON ise parse edilip props olarak geçer.
  */
@@ -263,10 +265,18 @@ export function hydrate(root = document) {
   const boxed = pending.map((node) => node.getClientRects().length > 0);
 
   pending.forEach((node, i) => {
-    // `hidden` bir drawer/dialog'un düzen kutusu yoktur ve IntersectionObserver
-    // onu asla bildirmez; bu yüzden gizli olanlar doğrudan bağlanır.
-    if ("islandEager" in node.dataset || !boxed[i]) {
+    // `data-island-eager`: görünürlük / idle yok — hemen bağla.
+    if ("islandEager" in node.dataset) {
       mountIsland(node);
+      return;
+    }
+
+    // `hidden` drawer/dialog'un düzen kutusu yoktur; IntersectionObserver
+    // onu asla bildirmez. Gözlemciye vermek yerine bağlarız, ama yol
+    // `mountWhenReady` — `data-island-idle` olan gizli host'lar `load` +
+    // boş zamana kadar bekler (LCP ile yarışmasın).
+    if (!boxed[i]) {
+      mountWhenReady(node);
       return;
     }
 

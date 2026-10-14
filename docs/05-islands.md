@@ -108,10 +108,14 @@ ve doğrudan boş zamana kaydırılır.
 `hidden` bir drawer ya da dialog'un düzen kutusu yoktur ve
 `IntersectionObserver` onu **asla** bildirmez. Bu yüzden `hydrate()` ölçümleri
 tek seferde okur (`getClientRects().length > 0`) ve kutusu olmayan elementleri
-gözlemciye vermek yerine doğrudan bağlar. Ölçümlerin tek seferde okunması da
-bilinçli: araya yazma girmediği için tek reflow olur.
+gözlemciye vermek yerine `mountWhenReady()` ile bağlar — yani
+`data-island-idle` gizli host'ta da geçerlidir (`load` + boş zaman); idle
+olmayanlar boş zamana kaydırılır. Ölçümlerin tek seferde okunması bilinçli:
+araya yazma girmediği için tek reflow olur. `data-island-eager` hâlâ hemen
+bağlanır.
 
-Pratik sonucu: bir modal'ı `hidden` başlatabilirsiniz, island'ı yine bağlanır.
+Pratik sonucu: bir modal'ı `hidden` başlatabilirsiniz, island'ı yine bağlanır;
+ağır bir gizli host için `data-island-idle` LCP ile yarışmayı keser.
 
 ## `client/` dizini
 

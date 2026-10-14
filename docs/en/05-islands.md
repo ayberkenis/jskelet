@@ -111,12 +111,16 @@ skipped and it is deferred straight to idle time.
 
 A `hidden` drawer or dialog has no layout box, and `IntersectionObserver`
 **never** reports it. That is why `hydrate()` reads its measurements in one go
-(`getClientRects().length > 0`) and mounts elements without a box directly
-instead of handing them to the observer. Reading the measurements in one go is
-deliberate too: since no write comes in between there is only a single reflow.
+(`getClientRects().length > 0`) and mounts zero-box elements via
+`mountWhenReady()` instead of handing them to the observer — so
+`data-island-idle` still applies on a hidden host (`load` plus idle time);
+non-idle hosts are deferred to idle time. Reading the measurements in one go
+is deliberate: since no write comes in between there is only a single reflow.
+`data-island-eager` still mounts immediately.
 
 The practical consequence: you can start a modal as `hidden` and its island
-will still mount.
+will still mount; use `data-island-idle` on a heavy hidden host so it does not
+compete with LCP.
 
 ## The `client/` directory
 

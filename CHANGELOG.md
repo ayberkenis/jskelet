@@ -62,6 +62,10 @@ one is listed under a **Breaking** heading.
 
 ### Fixed
 
+- `hydrate()` mounts zero-box hosts (`hidden` / no layout box) through
+  `mountWhenReady()` instead of calling `mountIsland()` immediately, so
+  `data-island-idle` on a hidden host still waits for `load` plus idle time.
+  `data-island-eager` is unchanged (mounts right away).
 - S3 PutObject uses path-style URLs for bucket names that contain dots
   (e.g. `static.investvio.dev`). Virtual-hosted
   `bucket.s3.region.amazonaws.com` fails TLS because the cert only covers
