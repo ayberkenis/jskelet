@@ -1,3 +1,16 @@
+export type RenderEngine = {
+    helpers: Record<string, unknown>;
+    options: Record<string, unknown>;
+    viewsDir: string;
+    viewRoots: string[];
+    layout: string;
+    compiled: Map<string, (data: object, helpers: object) => string>;
+    loading: Map<string, Promise<(data: object, helpers: object) => string | null>>;
+    manifest: Record<string, string>;
+    templatesDir: string;
+    bust: string;
+    layoutRender: ((data: object, helpers: object) => string) | null;
+};
 /**
  * Listen öncesi: motor + asset manifest ısınır (sayfa prewarm değil).
  *

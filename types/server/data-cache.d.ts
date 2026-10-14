@@ -3,6 +3,7 @@ export type DataEntry = {
     expiresAt: number;
     staleUntil: number;
     bytes: number;
+    produceMs: number;
 };
 /**
  * Süreç ömrü boyunca biriken sayaçlar.

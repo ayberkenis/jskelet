@@ -147,6 +147,7 @@ export type ResolvedConfig = {
     transientRetry: {
         attempts: number;
         delayMs: number;
+        background?: boolean;
     };
     /**
      * Opsiyonel Redis ikinci kademesi.

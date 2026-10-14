@@ -16,6 +16,8 @@
  * `data-island-idle` görünür olsa bile sayfa sakinleşene (load + boş zaman)
  * kadar bekletir. İlk ekranda görünen ama kritik olmayan ağır modüller
  * (ör. grafik kütüphanesi çeken mini grafik) LCP ile yarışmasın diye.
+ * Gizli (zero-box) host'larda da aynı yol kullanılır — `hydrate()` onları
+ * `mountWhenReady` ile bağlar, hemen `mountIsland` çağırmaz.
  *
  * `data-island-props` JSON ise parse edilip props olarak geçer.
  */

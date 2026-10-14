@@ -50,10 +50,8 @@ export type HtmlEntry = {
  */
 export declare function earlyRefreshLeadMs(produceMs: number, ttlMs: number): number;
 /**
- * Sıkıştırılmış gövde `install()`'dan sonra, ilk brotli/gzip yanıtında
- * girdinin `encoded` haritasına eklenir. Sayacı delta ile büyütmek, o sıra
- * LRU'dan düşmüş bir haritaya yazınca bir daha inmeyen bir artık bırakır;
- * store'dan yeniden okumak o artığı taşımaz.
+ * Bayt sayacını store'dan yeniden hesaplar. Testler elle `encoded` doldurunca
+ * çağırır; hot path `rememberHtmlEncoding` delta kullanır.
  *
  * @returns {void}
  */
@@ -202,7 +200,8 @@ export declare function isHtmlCacheFresh(pathname: string, req?: {
 export declare function isHtmlCacheKeyFresh(key: string): boolean;
 /**
  * Girdide en fazla bir sıkıştırılmış gövde durur. Yeni kodlama eskisinin
- * yerini alır; ham HTML kalır. Bayt sayacı `noteHtmlCacheGrowth` ile işlenir.
+ * yerini alır; ham HTML kalır. Bayt sayacı delta ile güncellenir — harita
+ * LRU'dan düşmüşse (store'da yok) sayaç oynatılmaz.
  *
  * @param {Map<string, Buffer>} encoded
  * @param {string} encoding
