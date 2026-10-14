@@ -74,6 +74,12 @@ The expression language is intentionally small (access, compare, ternary,
 `.length`). No assignments, object literals, or arbitrary calls — keep logic in
 controllers or JS components.
 
+The compiler merges adjacent static HTML into fewer `+=` ops and strips
+**template indentation**: whitespace-only text nodes that contain a newline are
+dropped; a space/tab-only gap between siblings stays as a single space (inline
+separation). Inside `pre`, `textarea`, `script`, `style`, and `code`, whitespace
+is left unchanged.
+
 #### Template or component?
 
 When moving off EJS, draw the line early:
@@ -198,10 +204,14 @@ Points to watch:
 | `lang` | `string` | `context.lang` → `brand.lang` → `"en"` |
 | `devtools` | `boolean` | `NODE_ENV === "development"` |
 | `devBasePath` | `string` | `brand.devBasePath`, defaults to `/__jskelet/dev` |
-| `asset`, `hasAsset` | function | Manifest access |
-| html/tags helpers | function | `esc`, `attrs`, `cx`, `cn`, `jsonScript`, `link`, `image`, `icon`, `preloadImage`, `toKebab` |
-| exports of `views/components/**` | function | Automatic registration |
+| `asset`, `hasAsset` | function | Manifest access (EJS local; in `.jsk` the second `helpers` argument / built-in tags) |
+| html/tags helpers | function | `esc`, `attrs`, `cx`, `cn`, `jsonScript`, `link`, `image`, `icon`, `preloadImage`, `toKebab` — same split |
+| exports of `views/components/**` | function | Automatic registration (PascalCase tags or EJS locals) |
 | every field returned by `hooks.layoutContext()` | — | Becomes a local directly |
+
+Because a `.jsk` layout receives `(data, helpers)`, the framework does not copy
+the helpers object into `data` on every render; EJS layouts still get bare
+helper names as locals.
 
 The empty default for `pathname` is deliberate: writing `"/"` leads to the kind
 of bug where every page thinks it is the home page and renders the logo as an

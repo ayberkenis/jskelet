@@ -3,6 +3,7 @@
  */
 import fs from "node:fs";
 import path from "node:path";
+import process from "node:process";
 import { parseTemplate } from "./parse.js";
 import { codegen, normalizeIncludeId } from "./codegen.js";
 import { CompileError } from "./errors.js";
@@ -97,7 +98,9 @@ export async function compileAll(config, _options = {}) {
 }
 
 /**
- * Manifest yoksa veya herhangi bir `.jsk` daha yeniyse yeniden derler.
+ * Manifest yoksa veya (dev'de) herhangi bir `.jsk` daha yeniyse yeniden derler.
+ * Production'da manifest varsa mtime taraması atlanır — `jskelet build` CI
+ * güvencesi; ilk istekte yüzlerce `statSync` cold start'ı şişirmesin.
  * Dev sunucu restart'ında build watch kaçırmış olsa bile şablonlar güncel kalır.
  *
  * @param {{ root: string, dirs: Record<string, string> }} config
@@ -112,6 +115,12 @@ export async function ensureTemplatesCompiled(config) {
 
   const outDir = path.join(config.dirs.generated, "templates");
   const manifestPath = path.join(outDir, "manifest.json");
+  const isProd = process.env.NODE_ENV === "production";
+
+  if (fs.existsSync(manifestPath) && isProd) {
+    return { count: jskFiles.size, rebuilt: false };
+  }
+
   let needs = !fs.existsSync(manifestPath);
 
   if (!needs) {

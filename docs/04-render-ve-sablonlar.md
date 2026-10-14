@@ -73,6 +73,12 @@ controller data → import edilmiş render(data, helpers) → HTML
 Atama, object literal ve rastgele fonksiyon çağrısı yok — mantık controller
 veya JS bileşende kalır.
 
+Derleyici bitişik statik HTML’i tek literal’de birleştirir ve **şablon
+girintisini** düşürür: satır sonu içeren salt-whitespace metin düğümleri
+çıktıya girmez; etiketler arasında yalnızca boşluk/tab varsa tek boşluk
+kalır (inline aralık). `pre`, `textarea`, `script`, `style` ve `code`
+içinde whitespace olduğu gibi korunur.
+
 #### Şablon mu, bileşen mi?
 
 EJS’den geçerken sınırı erken çizmek işe yarar:
@@ -199,10 +205,14 @@ Dikkat edilecek noktalar:
 | `lang` | `string` | `context.lang` → `brand.lang` → `"en"` |
 | `devtools` | `boolean` | `NODE_ENV === "development"` |
 | `devBasePath` | `string` | `brand.devBasePath`, varsayılan `/__jskelet/dev` |
-| `asset`, `hasAsset` | fonksiyon | Manifest erişimi |
-| html/tags yardımcıları | fonksiyon | `esc`, `attrs`, `cx`, `cn`, `jsonScript`, `link`, `image`, `icon`, `preloadImage`, `toKebab` |
-| `views/components/**` export'ları | fonksiyon | Otomatik kayıt |
+| `asset`, `hasAsset` | fonksiyon | Manifest erişimi (EJS local; `.jsk`’de ikinci `helpers` argümanı / yerleşik etiketler) |
+| html/tags yardımcıları | fonksiyon | `esc`, `attrs`, `cx`, `cn`, `jsonScript`, `link`, `image`, `icon`, `preloadImage`, `toKebab` — aynı ayrım |
+| `views/components/**` export'ları | fonksiyon | Otomatik kayıt (PascalCase etiket veya EJS local) |
 | `hooks.layoutContext()` çıktısındaki her alan | — | Doğrudan local olur |
+
+`.jsk` layout `(data, helpers)` aldığı için framework helpers nesnesini her
+render’da `data`’ya kopyalamaz; EJS layout hâlâ bare helper adlarını local
+olarak alır.
 
 `pathname`'in boş varsayılanı bilinçli: `"/"` yazmak her sayfayı ana sayfa
 sanıp logoyu `<h1>` olarak bastıran türde hatalara yol açıyor.

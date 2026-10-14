@@ -114,6 +114,41 @@ describe("jsk compile", () => {
     );
   });
 
+  it("collapses template indentation and coalesces static HTML", async () => {
+    const html = await renderCompiled(
+      `<section>
+  <h1>{{ title }}</h1>
+  <p>Hi</p>
+</section>
+`,
+      { title: "T" },
+    );
+    assert.equal(html, `<section><h1>T</h1><p>Hi</p></section>`);
+
+    const { code } = compileSource(
+      `<div>
+  <span>a</span>
+</div>`,
+      { viewId: "pages/ws" },
+    );
+    // Bitişik statikler tek += literal'inde (birden fazla s += "\\n" yok).
+    const staticAppends = [...code.matchAll(/s \+= "/g)];
+    assert.equal(staticAppends.length, 1);
+  });
+
+  it("keeps a single space between inline siblings", async () => {
+    const html = await renderCompiled(
+      `<p><span>a</span> <span>b</span></p>`,
+      {},
+    );
+    assert.equal(html, `<p><span>a</span> <span>b</span></p>`);
+  });
+
+  it("preserves whitespace inside pre", async () => {
+    const html = await renderCompiled(`<pre>\n  x\n</pre>`, {});
+    assert.equal(html, `<pre>\n  x\n</pre>`);
+  });
+
   it("compileAll writes modules and manifest", async () => {
     const root = mkdtempSync(path.join(tmpdir(), "jsk-app-"));
     mkdirSync(path.join(root, "views", "pages"), { recursive: true });

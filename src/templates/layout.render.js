@@ -6,36 +6,17 @@
  */
 export function render(data, helpers) {
   let s = "";
-  s += "\r\n";
   s += "<!DOCTYPE html>";
-  s += "\r\n";
   s += "<html" + helpers.attrs({"lang": data.lang}) + ">";
-  s += "\r\n  ";
-  s += "<head>";
-  s += "\r\n    ";
-  s += "<meta charset=\"utf-8\">";
-  s += "\r\n    ";
-  s += "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">";
-  s += "\r\n    ";
+  s += "<head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">";
   s += (data.extraHead ?? "");
-  s += "\r\n    ";
   s += (helpers.Stylesheets({ "styles": data.styles }) ?? "");
-  s += "\r\n    ";
   s += (data.headMeta ?? "");
-  s += "\r\n    ";
   s += (helpers.JsonLd({ "items": data.structuredData }) ?? "");
-  s += "\r\n  ";
   s += "</head>";
-  s += "\r\n  ";
   s += "<body" + helpers.attrs({"class": data.bodyClass}) + ">";
-  s += "\r\n    ";
   s += (data.body ?? "");
-  s += "\r\n    ";
   s += (helpers.BodyScripts({ "entries": data.entries, "devtools": data.devtools, "devBasePath": data.devBasePath }) ?? "");
-  s += "\r\n  ";
-  s += "</body>";
-  s += "\r\n";
-  s += "</html>";
-  s += "\r\n";
+  s += "</body></html>";
   return s;
 }

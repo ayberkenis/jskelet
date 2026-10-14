@@ -161,11 +161,21 @@ async function loadCompiledTemplates(config, helpers) {
   const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
   const bust = isDev ? `?t=${Date.now()}` : "";
 
-  for (const [viewId, rel] of Object.entries(manifest)) {
-    const file = path.join(templatesDir, rel);
-    if (!fs.existsSync(file)) continue;
-    const mod = await import(pathToFileURL(file).href + bust);
-    if (typeof mod.render !== "function") continue;
+  // Paralel import — sıralı await cold start'ı şişiriyordu.
+  const entries = await Promise.all(
+    Object.entries(manifest).map(async ([viewId, rel]) => {
+      const file = path.join(templatesDir, rel);
+      try {
+        const mod = await import(pathToFileURL(file).href + bust);
+        return /** @type {const} */ ([viewId, mod]);
+      } catch {
+        return /** @type {const} */ ([viewId, null]);
+      }
+    }),
+  );
+
+  for (const [viewId, mod] of entries) {
+    if (!mod || typeof mod.render !== "function") continue;
     compiled.set(viewId, mod.render);
 
     // `components/*.jsk` → helpers.PascalName
@@ -259,8 +269,9 @@ export async function renderPage(page) {
     hook("layoutContext", {}, { pathname: page.pathname ?? "", metadata }),
   ]);
 
-  const locals = {
-    ...helpers,
+  // Layout local'leri. `.jsk` `(data, helpers)` aldığı için helpers'ı data'ya
+  // kopyalamak gereksiz allocation; EJS layout hâlâ bare helper adları bekler.
+  const pageLocals = {
     ...context,
     metadata,
     // Boş varsayılan bilinçli: "/" yazmak her sayfayı ana sayfa sanıp
@@ -286,7 +297,7 @@ export async function renderPage(page) {
   };
 
   if (layoutRender) {
-    return layoutRender(locals, helpers);
+    return layoutRender(pageLocals, helpers);
   }
 
   if (layout.endsWith(".jsk")) {
@@ -296,7 +307,7 @@ export async function renderPage(page) {
     );
   }
 
-  return renderEjsFile(layout, locals, options);
+  return renderEjsFile(layout, { ...helpers, ...pageLocals }, options);
 }
 
 /**

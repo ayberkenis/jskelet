@@ -43,7 +43,8 @@ function collect(dir, out = []) {
 }
 
 /**
- * Tek bir `components/` dizinini yükler.
+ * Modülleri paralel import eder; export uygulama sırası dosya listesiyle
+ * aynı kalır (barrel önce, sonra sıralı bileşenler).
  *
  * @param {string} dir
  * @param {Record<string, unknown>} components
@@ -59,12 +60,16 @@ async function loadDir(dir, components, origin) {
     ...collect(dir).sort(),
   ];
 
-  for (const file of files) {
-    const isBarrel = path.basename(file) === BARREL;
-    // Kimlik mutlak yol — çoklu components kökünde göreli ad çakışmasın.
-    const fileId = isBarrel ? BARREL : file.split(path.sep).join("/");
-    const module = await import(pathToFileURL(file).href);
+  const loaded = await Promise.all(
+    files.map(async (file) => {
+      const isBarrel = path.basename(file) === BARREL;
+      const fileId = isBarrel ? BARREL : file.split(path.sep).join("/");
+      const module = await import(pathToFileURL(file).href);
+      return { fileId, module };
+    }),
+  );
 
+  for (const { fileId, module } of loaded) {
     for (const [name, value] of Object.entries(module)) {
       if (name === "default") continue;
 

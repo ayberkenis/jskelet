@@ -8,6 +8,25 @@ one is listed under a **Breaking** heading.
 
 ## [Unreleased]
 
+### Changed
+
+- `.jsk` codegen merges adjacent static HTML into fewer `+=` ops and drops
+  template indentation (newline-only whitespace). A lone space between
+  inline siblings is kept; `pre` / `textarea` / `script` / `style` / `code`
+  preserve whitespace. Framework default `layout.render.js` regenerated.
+- `.jsk` page layout no longer copies the full helpers object into `data`
+  each render (EJS layouts still receive helpers as locals).
+- `esc()` skips the regex replace when the string has no special characters;
+  `attrs()` builds the attribute string without an intermediate array.
+- Compiled templates and JS components load with parallel `import` on first
+  render; production skips the `.jsk` mtime scan when a template manifest
+  already exists.
+- `icon()` caches the sprite URL in production; `Image` `fill` without an
+  extra `class` skips `twMerge`; `optimizedImage()` materializes CDN-prefixed
+  variant URLs once at load time.
+- `scripts/measure-ssr.mjs` microbench for fixture `renderView` /
+  `renderPage` and live cache MISS/HIT timings against a running app.
+
 ### Fixed
 
 - S3 PutObject uses path-style URLs for bucket names that contain dots

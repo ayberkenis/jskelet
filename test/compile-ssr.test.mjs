@@ -61,7 +61,9 @@ describe("jsk SSR", () => {
       { async: false, rmWhitespace: true },
     );
 
-    const norm = (s) => s.replace(/\s+/g, " ").trim();
+    // `.jsk` şablon girintisini düşürür; EJS `rmWhitespace` etiketler arası
+    // tek boşluk bırakabilir — karşılaştırma etiket arası boşluğu da siler.
+    const norm = (s) => s.replace(/>\s+</g, "><").replace(/\s+/g, " ").trim();
     assert.equal(norm(jsk), norm(ejsHtml));
   });
 });

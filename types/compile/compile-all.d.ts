@@ -12,7 +12,9 @@ export declare function compileAll(config: {
     outDir: string;
 }>;
 /**
- * Manifest yoksa veya herhangi bir `.jsk` daha yeniyse yeniden derler.
+ * Manifest yoksa veya (dev'de) herhangi bir `.jsk` daha yeniyse yeniden derler.
+ * Production'da manifest varsa mtime taraması atlanır — `jskelet build` CI
+ * güvencesi; ilk istekte yüzlerce `statSync` cold start'ı şişirmesin.
  * Dev sunucu restart'ında build watch kaçırmış olsa bile şablonlar güncel kalır.
  *
  * @param {{ root: string, dirs: Record<string, string> }} config

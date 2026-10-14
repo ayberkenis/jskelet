@@ -151,6 +151,55 @@ export function getBuildId() {
 /** @type {Record<string, OptimizedImage> | null} */
 let images = null;
 
+/** Prefix uygulanmış kopya — her `optimizedImage` çağrısında map/spread yok. */
+/** @type {Record<string, OptimizedImage> | null} */
+let imagesPrefixed = null;
+
+/** @type {string | null} */
+let imagesPrefix = null;
+
+/**
+ * `images.json` yükler; CDN prefix varsa varyant URL'lerini bir kez materialize eder.
+ * @returns {Record<string, OptimizedImage>}
+ */
+function loadImages() {
+  const prefix = assetPrefix();
+  if (!isDev && images && imagesPrefix === prefix) {
+    return imagesPrefixed ?? images;
+  }
+
+  /** @type {Record<string, OptimizedImage>} */
+  let raw = {};
+  try {
+    const file = path.join(getConfig().dirs.generated, "images.json");
+    raw = JSON.parse(fs.readFileSync(file, "utf8")).images ?? {};
+  } catch {
+    raw = {};
+  }
+
+  images = raw;
+  imagesPrefix = prefix;
+
+  if (!prefix) {
+    imagesPrefixed = raw;
+    return raw;
+  }
+
+  /** @type {Record<string, OptimizedImage>} */
+  const prefixed = {};
+  for (const [key, entry] of Object.entries(raw)) {
+    prefixed[key] = {
+      ...entry,
+      variants: entry.variants.map((variant) => ({
+        ...variant,
+        url: applyAssetPrefix(prefix, variant.url),
+      })),
+    };
+  }
+  imagesPrefixed = prefixed;
+  return prefixed;
+}
+
 /**
  * `build/tasks/images.mjs` çıktısı: kaynak yolundan webp varyantlarına.
  * Build çalışmadıysa boş kalır ve görseller orijinalleriyle servis edilir.
@@ -159,29 +208,9 @@ let images = null;
  * @returns {OptimizedImage | undefined}
  */
 export function optimizedImage(src) {
-  if (isDev || !images) {
-    try {
-      const file = path.join(getConfig().dirs.generated, "images.json");
-      images = JSON.parse(fs.readFileSync(file, "utf8")).images ?? {};
-    } catch {
-      images = {};
-    }
-  }
-
+  const table = loadImages();
   if (!src) return undefined;
-  const entry = images[src];
-  if (!entry) return undefined;
-
-  const prefix = assetPrefix();
-  if (!prefix) return entry;
-
-  return {
-    ...entry,
-    variants: entry.variants.map((variant) => ({
-      ...variant,
-      url: applyAssetPrefix(prefix, variant.url),
-    })),
-  };
+  return table[src];
 }
 
 /** @type {{ url: string, ids: Set<string> } | null} */

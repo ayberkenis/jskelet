@@ -24,6 +24,12 @@ const isDev = process.env.NODE_ENV === "development";
 /** Aynı eksik ikon için tek uyarı. */
 const warnedIcons = new Set();
 
+/** `fill` Image varsayılan sınıfları — `cn`/`twMerge` olmadan sabit. */
+const IMAGE_FILL_CLASS = "absolute inset-0 h-full w-full object-cover";
+
+/** Sprite URL process ömründe bir kez çözülür (hash değişince process yenilenir). */
+let cachedSpritePath = /** @type {string | null} */ (null);
+
 /**
  * `SeoLink` karşılığı: title otomatik doldurulur.
  * @param {{ href: string, text?: string, html?: string, class?: string,
@@ -101,14 +107,19 @@ export function image(props) {
     (optimized && optimized.variants.length > 1) ||
     (remote && remote.srcset);
 
+  // `fill` + ek sınıf yoksa twMerge'e girme; ek sınıf varsa çakışma çözümü gerekir.
+  const fillClass = fill
+    ? className
+      ? cn(IMAGE_FILL_CLASS, className)
+      : IMAGE_FILL_CLASS
+    : className;
+
   const attributes = attrs({
     src: largest?.url ?? remote?.src ?? src,
     alt: alt ?? "",
     width: fill ? undefined : (width ?? optimized?.width),
     height: fill ? undefined : (height ?? optimized?.height),
-    class: fill
-      ? cn("absolute inset-0 h-full w-full object-cover", className)
-      : className,
+    class: fillClass,
     sizes: responsive
       ? (sizes ?? (optimized ? defaultSizes(optimized) : remote?.sizes))
       : sizes,
@@ -213,7 +224,13 @@ export function icon(props) {
     attrs: extra = {},
   } = props;
 
-  const spritePath = asset("sprite.svg", { origin: "document" });
+  // Prod'da hash deploy ile birlikte değişir (process yenilenir); dev'de
+  // watch rebuild sprite yolunu güncelleyebildiği için her seferinde çözülür.
+  let spritePath = cachedSpritePath;
+  if (spritePath == null || isDev) {
+    spritePath = asset("sprite.svg", { origin: "document" });
+    if (!isDev) cachedSpritePath = spritePath;
+  }
   const id = `${toKebab(name)}-${weight}`;
 
   if (isDev && !warnedIcons.has(id)) {

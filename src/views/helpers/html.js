@@ -9,6 +9,11 @@ const ESCAPE_MAP = {
   "'": "&#39;",
 };
 
+/** Kaçış gerektiren karakter var mı — yoksa `replace` callback'ine girilmez. */
+const NEEDS_ESCAPE = /[&<>"']/;
+/** Tüm eşleşmeleri değiştirmek için ayrı global kopya (`test` lastIndex'i kirletmesin). */
+const ESCAPE_ALL = /[&<>"']/g;
+
 /**
  * Metin içeriği ve attribute değerleri için kaçış.
  * @param {unknown} value
@@ -16,7 +21,9 @@ const ESCAPE_MAP = {
  */
 export function esc(value) {
   if (value == null || value === false) return "";
-  return String(value).replace(/[&<>"']/g, (char) => ESCAPE_MAP[char]);
+  const str = typeof value === "string" ? value : String(value);
+  if (!NEEDS_ESCAPE.test(str)) return str;
+  return str.replace(ESCAPE_ALL, (char) => ESCAPE_MAP[char]);
 }
 
 /**
@@ -41,16 +48,17 @@ export function jsonScript(value) {
  * @returns {string}
  */
 export function attrs(attrs) {
-  const parts = [];
+  // Dizi + join yerine doğrudan birikim: tipik etiket 2–6 attribute.
+  let out = "";
   for (const [key, value] of Object.entries(attrs)) {
     if (value == null || value === false) continue;
     if (value === true) {
-      parts.push(key);
+      out += ` ${key}`;
       continue;
     }
-    parts.push(`${key}="${esc(value)}"`);
+    out += ` ${key}="${esc(value)}"`;
   }
-  return parts.length ? ` ${parts.join(" ")}` : "";
+  return out;
 }
 
 /**
