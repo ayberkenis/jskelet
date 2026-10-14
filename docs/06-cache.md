@@ -560,39 +560,40 @@ geçici bir kota sorunu TTL boyunca "bu sayfa yok" cevabına dönüşür. Arama 
 için bu kalıcı bir kayıp.
 
 Framework bu durumu ayırır: render sırasında **geçici** bir upstream hatası
-varsa `notFound()` 404 olarak servis edilmez. Sırayla:
+varsa `notFound()` 404 olarak servis edilmez. Varsayılan (`background: true`):
 
-1. Sayfa kısa bir beklemeden sonra **yeniden denenir** (varsayılan bir kez,
-   300 ms sonra). Deneme kendi upstream ve istek içi cache bağlamında koşar;
-   ilk turun hatası da memoize edilmiş boş cevabı da ikinci turu etkilemez.
-2. İkinci tur sayfayı üretebilirse ziyaretçi **gerçek içeriği** görür ve çıktı
-   normal şekilde önbelleğe girer. Isıtma günlükleri bunun sık olduğunu
-   gösteriyor: aynı yol saniyeler sonra 200 dönüyor.
-3. Denemeler tükendiyse yanıt `503` olur — önbelleğe girmez, `Retry-After`
-   taşır, sonraki istek yine gerçek içeriği üretebilir.
+1. Ziyaretçiye hemen önbelleğe girmeyen bir `503` + `Retry-After` gider.
+2. Aynı yol arka planda yeniden denenir (varsayılan bir kez, 300 ms sonra).
+   Deneme kendi upstream ve istek içi cache bağlamında koşar; ilk turun hatası
+   da memoize edilmiş boş cevabı da ikinci turu etkilemez. Başarılı olursa
+   sonraki istek L1/L2 HIT alır.
+3. `background: false` eski senkron döngüyü açar: önce bekle + dene, başarısızsa
+   503; başarılıysa ziyaretçi gerçek içeriği görür.
 
 | Render sırasında | `notFound()` sonucu |
 | --- | --- |
-| Geçici hata var (`429`, `5xx`, ağ hatası) | Tekrar dene → başarılıysa sayfa; hâlâ olmuyorsa `503`, `Retry-After: 30`, `no-store` |
+| Geçici hata + `background: true` (varsayılan) | Hemen `503`, `Retry-After: 30`, `no-store`; retry arka planda |
+| Geçici hata + `background: false` | Tekrar dene → başarılıysa sayfa; değilse `503` |
 | Tekrar denemede upstream sağlam cevap verip "yok" dedi | Normal `404` |
 | Kalıcı hata var (`404`, `403`…) ya da hata yok | Normal `404`, tekrar denenmez |
 
 Log satırları:
 
 ```
-[render] /haber/x returned notFound() while upstream is failing (429 /api/...), retrying (1/1)
+[render] /haber/x returned notFound() while upstream is failing (429 /api/...), retrying in background (1×)
 [render] /haber/x could not be produced, upstream is still failing (429 /api/...), serving an uncached 503 instead of a 404
 ```
 
 Yani **var olan bir sayfa hiçbir koşulda 404'e dönüşmez**: ya gerçek içerik
-gelir, ya önbelleğe girmeyen bir 503. Hiçbir şey "yok" olarak dondurulmaz.
+gelir (senkron retry veya sonraki istek), ya önbelleğe girmeyen bir 503.
+Hiçbir şey "yok" olarak dondurulmaz.
 
 Tekrar denemenin maliyeti upstream'e binen ikinci bir istek turudur; bu yüzden
 varsayılan tek deneme. Ayar `cache().transientRetry`:
 
 ```js
 cache: {
-  transientRetry: { attempts: 2, delayMs: 500 },
+  transientRetry: { attempts: 2, delayMs: 500, background: true },
 }
 ```
 
@@ -886,9 +887,10 @@ bir sonraki yazışta siler. `clearHtmlCache()` ve invalidation dosyayı da dü�
   bile geçerli olan bu kural paylaşımlı kademede daha da kritik: sızması, bir
   kullanıcının HTML'ini tüm kümeye servis etmek olur. `degraded` render ve 200
   dışındaki durum kodları da paylaşılmaz.
-- **Sıkıştırılmış gövdeler varsayılan olarak yerel kalır.** `storeEncoded: true`
-  ile açılabilir, ama girdi başına boyutu iki-üç katına çıkarır; brotli'yi
-  yeniden üretmek çoğu zaman Redis'ten indirmekten ucuzdur.
+- **Sıkıştırılmış gövdeler varsayılan olarak paylaşılır.** `storeEncoded`
+  (varsayılan `true`) soğuk replica'nın L2 HIT'te yeniden brotli ödemesini
+  önler; girdi başına boyutu iki-üç katına çıkarır. L2 boyutunu kısıtlamak
+  için `storeEncoded: false` verin.
 - **Yumuşak invalidation Redis kopyasını siler.** Bayatlatmanın Redis karşılığı
   her anahtar için oku-değiştir-yaz turu demek ve bir webhook binlerce anahtarı
   birden düşürüyor. Silmenin bedeli, o yolu hiç görmemiş bir kopyanın bir kez

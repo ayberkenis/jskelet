@@ -14,7 +14,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { getConfig } from "../config/index.js";
 import { getBuildId } from "./assets.js";
-import { decodeCacheValue, encodeCacheValue } from "./cache-blob.js";
+import { decodeCacheValueAsync, encodeCacheValue } from "./cache-blob.js";
 import { redisShares } from "./redis.js";
 
 /** @type {string | null} `null` → config'den çöz. Testler mutlak yol verir. */
@@ -137,7 +137,7 @@ export async function diskGetJson(kind, key) {
   try {
     const framed = unframe(await fs.readFile(file));
     if (!framed) return null;
-    return decodeCacheValue(framed.body);
+    return decodeCacheValueAsync(framed.body);
   } catch {
     return null;
   }

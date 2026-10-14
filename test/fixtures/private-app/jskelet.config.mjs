@@ -12,5 +12,8 @@ export default {
     // temsil edilsin ki `cache-query.test.mjs` her dalı sınayabilsin.
     query: { "/search": ["q", "page"], "/all": true, "/ignore": [] },
     prewarm: { enabled: false },
+    // Senkron retry sözleşmesini sınayan testler için; prod varsayılanı
+    // `background: true` (hemen 503).
+    transientRetry: { attempts: 1, delayMs: 300, background: false },
   }),
 };

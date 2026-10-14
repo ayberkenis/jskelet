@@ -15,17 +15,18 @@ route(controller)
  └─ produce()
      ├─ controller(ctx)  → sayfa tanımı
      └─ renderPage(page)
-         ├─ hooks.metadata(page) + page.metadata      → metadata
          ├─ Promise.all([
-         │     renderView(page.view, { …data, metadata }),   → body
-         │     hooks.layoutContext({ pathname, metadata }),  → context
+         │     renderView(page.view, { …data, page.metadata }),  → body
+         │     hooks.metadata(page) + page.metadata              → metadata
+         │       └─ hooks.layoutContext({ pathname, metadata })  → context
          │   ])
          └─ layout (.jsk derlenmiş veya .ejs)  → tam HTML
 ```
 
-Layout bağlamı ve gövde **paralel** üretilir. Sebebi ölçümden geliyor:
-navigasyon çoğu projede upstream'den geliyor ve gövde render'ıyla sırayla
-beklemek her sayfaya gereksiz gecikme ekliyor.
+Gövde, `hooks.metadata` + `layoutContext` zinciriyle **paralel** üretilir.
+Şablon locals'ında `metadata` önce controller'ın `page.metadata`'sıdır; layout
+birleşik (hook + sayfa) metadata'yı alır. Navigasyon çoğu projede upstream'den
+gelir — gövdeyi metadata zincirinin bitmesini bekletmek her MISS'e gecikme ekler.
 
 ## `.jsk` — build-time derlenmiş şablonlar
 

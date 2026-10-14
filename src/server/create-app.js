@@ -247,6 +247,11 @@ export async function startServer(options = {}) {
 
   const app = await createApp(options);
 
+  // İlk istek TTFB'sine binmesin: şablon motoru + asset manifest burada ısınır.
+  // Sayfa prewarm değildir.
+  const { warmRenderEngine } = await import("./render.js");
+  await warmRenderEngine();
+
   // Varsayılan `::`, `0.0.0.0` değil: ikisi de "tüm arayüzler" demek, ama
   // yalnızca IPv6 soketi çift yığın çalışır ve `localhost`un `::1`e çözüldüğü
   // durumu da kapsar. Tarayıcılar `localhost` için önce `::1` deniyor; sıradan

@@ -9,7 +9,7 @@
 import assert from "node:assert/strict";
 import path from "node:path";
 import { afterEach, before, test } from "node:test";
-import { loadConfig } from "../src/config/index.js";
+import { getConfig, loadConfig } from "../src/config/index.js";
 import { clearHtmlCache, getHtmlCacheSize } from "../src/server/html-cache.js";
 import { route } from "../src/server/render.js";
 import { notFound } from "../src/http/control-flow.js";
@@ -119,6 +119,28 @@ test("notFound() during a transient upstream failure serves an uncached 503", as
   assert.equal(res.getHeader("retry-after"), "30");
   assert.equal(res.getHeader("cache-control"), "private, no-store");
   assert.equal(getHtmlCacheSize(), 0, "geçici hata önbelleğe yazılmamalı");
+});
+
+test("background transient retry returns 503 without waiting", async () => {
+  getConfig().transientRetry.background = true;
+  let calls = 0;
+  try {
+    const handler = route(async () => {
+      calls += 1;
+      reportUpstreamFailure({ status: 429, path: "/api/haber/bg" });
+      notFound();
+    });
+
+    const t0 = Date.now();
+    const res = await run(handler, "/haber/bg");
+    const elapsed = Date.now() - t0;
+
+    assert.equal(res.statusCode, 503);
+    assert.equal(calls, 1, "yanıt öncesi ikinci tur beklenmemeli");
+    assert.ok(elapsed < 250, `503 gecikmeden dönmeli, elapsed=${elapsed}`);
+  } finally {
+    getConfig().transientRetry.background = false;
+  }
 });
 
 test("a genuine notFound() still serves 404", async () => {

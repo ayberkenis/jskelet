@@ -5,7 +5,7 @@
  * controller'lar bu yüzeyi kullanır. Alt yollardan (`jskelet/server`)
  * ithal etmek de mümkün; buradaki liste "kararlı" sayılan yüzeydir.
  */
-export { route, fragment, renderPage, renderView, renderNotFound, } from "./server/render.js";
+export { route, fragment, renderPage, renderView, renderNotFound, warmRenderEngine, resetRenderEngine, } from "./server/render.js";
 export { renderStatusPage, statusFromError } from "./server/status-page.js";
 export { createApp, startServer } from "./server/create-app.js";
 export { notFound, redirect, permanentRedirect, seeOther, isNotFoundError, isRedirectError, NotFoundError, RedirectError, } from "./http/control-flow.js";

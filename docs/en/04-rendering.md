@@ -16,17 +16,19 @@ route(controller)
  └─ produce()
      ├─ controller(ctx)  → page definition
      └─ renderPage(page)
-         ├─ hooks.metadata(page) + page.metadata      → metadata
          ├─ Promise.all([
-         │     renderView(page.view, { …data, metadata }),   → body
-         │     hooks.layoutContext({ pathname, metadata }),  → context
+         │     renderView(page.view, { …data, page.metadata }),  → body
+         │     hooks.metadata(page) + page.metadata              → metadata
+         │       └─ hooks.layoutContext({ pathname, metadata })  → context
          │   ])
          └─ layout (.jsk compiled or .ejs)  → full HTML
 ```
 
-The layout context and the body are produced **in parallel**. The reason comes
-from measurement: in most projects navigation comes from upstream, and waiting
-for it in sequence with the body render adds needless latency to every page.
+The body runs **in parallel** with the `hooks.metadata` + `layoutContext`
+chain. Template locals see the controller's `page.metadata` first; the layout
+receives the merged (hook + page) metadata. Navigation often comes from
+upstream — waiting for the metadata chain before starting the body adds latency
+to every MISS.
 
 ## `.jsk` — build-time compiled templates
 

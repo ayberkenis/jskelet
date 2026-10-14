@@ -49,6 +49,33 @@ function collect(dir) {
   return files;
 }
 
+/**
+ * @param {Buffer} source
+ * @param {object} options
+ * @returns {Promise<Buffer>}
+ */
+function brotli(source, options) {
+  return new Promise((resolve, reject) => {
+    zlib.brotliCompress(source, options, (error, out) => {
+      if (error) reject(error);
+      else resolve(out);
+    });
+  });
+}
+
+/**
+ * @param {Buffer} source
+ * @returns {Promise<Buffer>}
+ */
+function gzip(source) {
+  return new Promise((resolve, reject) => {
+    zlib.gzip(source, { level: 9 }, (error, out) => {
+      if (error) reject(error);
+      else resolve(out);
+    });
+  });
+}
+
 export async function precompressAssets() {
   // Önceki turdan kalan kopyalar kaynak değişince bayatlamasın.
   for (const file of collect(paths.assets)) {
@@ -57,21 +84,34 @@ export async function precompressAssets() {
     }
   }
 
+  const candidates = collect(paths.assets).filter((file) => {
+    try {
+      return fs.statSync(file).size >= MIN_BYTES;
+    } catch {
+      return false;
+    }
+  });
+
+  const results = await Promise.all(
+    candidates.map(async (file) => {
+      const source = await fs.promises.readFile(file);
+      if (source.length < MIN_BYTES) return { count: 0, saved: 0 };
+
+      const [br, gz] = await Promise.all([brotli(source, BROTLI_OPTIONS), gzip(source)]);
+      await Promise.all([
+        fs.promises.writeFile(`${file}.br`, br),
+        fs.promises.writeFile(`${file}.gz`, gz),
+      ]);
+
+      return { count: 1, saved: source.length - br.length };
+    }),
+  );
+
   let count = 0;
   let saved = 0;
-
-  for (const file of collect(paths.assets)) {
-    const source = fs.readFileSync(file);
-    if (source.length < MIN_BYTES) continue;
-
-    const br = zlib.brotliCompressSync(source, BROTLI_OPTIONS);
-    const gz = zlib.gzipSync(source, { level: 9 });
-
-    fs.writeFileSync(`${file}.br`, br);
-    fs.writeFileSync(`${file}.gz`, gz);
-
-    count += 1;
-    saved += source.length - br.length;
+  for (const row of results) {
+    count += row.count;
+    saved += row.saved;
   }
 
   log.detail(`${count} files, ${log.size(saved)}`);

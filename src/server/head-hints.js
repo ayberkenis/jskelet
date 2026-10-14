@@ -24,15 +24,27 @@ let cached = null;
 export function preconnectHints() {
   if (cached != null) return cached;
 
-  cached = getConfig()
-    .preconnect.map((origin) => {
-      try {
-        return `<link rel="preconnect" href="${esc(new URL(origin).origin)}">`;
-      } catch {
-        console.warn(`[head] invalid preconnect URL, skipped: ${origin}`);
-        return "";
-      }
-    })
+  /** @type {Set<string>} */
+  const origins = new Set();
+
+  for (const origin of getConfig().preconnect) {
+    try {
+      origins.add(new URL(origin).origin);
+    } catch {
+      console.warn(`[head] invalid preconnect URL, skipped: ${origin}`);
+    }
+  }
+
+  // CDN asset prefix config'e yazılmadan da preconnect alsın.
+  try {
+    const prefix = getConfig().build?.assets?.prefix;
+    if (prefix) origins.add(new URL(prefix).origin);
+  } catch {
+    /* geçersiz prefix — config zaten uyarmış olabilir */
+  }
+
+  cached = [...origins]
+    .map((origin) => `<link rel="preconnect" href="${esc(origin)}">`)
     .join("");
 
   return cached;

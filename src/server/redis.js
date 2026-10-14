@@ -22,7 +22,7 @@ import crypto from "node:crypto";
 import { DEFAULT_REDIS } from "../config/defaults.js";
 import { tryImportFromApp } from "../build/resolve-peer.mjs";
 import { getBuildId } from "./assets.js";
-import { decodeCacheValue, encodeCacheValue } from "./cache-blob.js";
+import { decodeCacheValueAsync, encodeCacheValue } from "./cache-blob.js";
 
 /**
  * @typedef {import('../config/index.js').RedisConfig} RedisConfig
@@ -295,7 +295,7 @@ export async function redisGetJson(key) {
     const raw =
       typeof client.getBuffer === "function" ? await client.getBuffer(key) : await client.get(key);
     noteSuccess();
-    return raw == null ? null : decodeCacheValue(raw);
+    return raw == null ? null : await decodeCacheValueAsync(raw);
   } catch (error) {
     noteFailure("get", error);
     return null;

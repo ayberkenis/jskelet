@@ -140,7 +140,7 @@ const CONFIG_FILE = "jskelet.config.mjs";
  * @property {Record<string, unknown>} data Upstream veri önbelleği ayarları.
  * @property {boolean} trackUpstream `fetch` sarılıp geçici hatalar otomatik bildirilsin mi.
  * @property {boolean} trackDependencies Render'ın okuduğu veri anahtarları kaydedilsin mi.
- * @property {{ attempts: number, delayMs: number }} transientRetry
+ * @property {{ attempts: number, delayMs: number, background?: boolean }} transientRetry
  * @property {RedisConfig} redis Opsiyonel Redis ikinci kademesi.
  * @property {typeof DEFAULT_UPSTREAM_LIMIT} upstream Upstream hız freni.
  * @property {LogsConfig} logs Kalıcı log sink'leri (dosya + S3).
@@ -348,7 +348,7 @@ function normalizeRedis(raw) {
     keyPrefix: String(source.keyPrefix ?? DEFAULT_REDIS.keyPrefix),
     html: source.html !== false,
     data: source.data !== false,
-    storeEncoded: source.storeEncoded === true,
+    storeEncoded: source.storeEncoded !== false,
     events: source.events !== false,
     commandTimeoutMs:
       Number.isFinite(timeout) && timeout > 0
@@ -738,7 +738,7 @@ function normalizeVary(raw) {
  *   staleWhileRevalidate: number,
  *   data: Record<string, unknown>, trackUpstream: boolean,
  *   trackDependencies: boolean,
- *   transientRetry: { attempts: number, delayMs: number },
+ *   transientRetry: { attempts: number, delayMs: number, background?: boolean },
  *   redis: RedisConfig,
  *   upstream: typeof DEFAULT_UPSTREAM_LIMIT,
  *   cloudflare: typeof DEFAULT_CLOUDFLARE,

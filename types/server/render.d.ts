@@ -1,4 +1,10 @@
 /**
+ * Listen öncesi: motor + asset manifest ısınır (sayfa prewarm değil).
+ *
+ * @returns {Promise<void>}
+ */
+export declare function warmRenderEngine(): Promise<void>;
+/**
  * Uygulama geliştirirken bileşen dosyaları değişince kayıt yenilenmeli.
  * Dev sunucusu süreci yeniden başlattığı için normalde gerekmez; gömülü
  * kullanımlar (test, script) için dışa açık.

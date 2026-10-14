@@ -53,6 +53,9 @@ export function encodeCacheValue(value) {
 }
 
 /**
+ * Senkron çözücü — küçük test / senkron yollar için. Hot path
+ * `decodeCacheValueAsync` kullanır (event loop'u brotli ile bloklamaz).
+ *
  * @param {Buffer | string} raw
  * @returns {unknown}
  */
@@ -67,4 +70,34 @@ export function decodeCacheValue(raw) {
 
   const text = Buffer.isBuffer(raw) ? raw.toString("utf8") : raw;
   return JSON.parse(text);
+}
+
+/**
+ * @param {Buffer | string} raw
+ * @returns {Promise<unknown>}
+ */
+export function decodeCacheValueAsync(raw) {
+  if (
+    Buffer.isBuffer(raw) &&
+    raw.length > CACHE_MAGIC.length &&
+    raw.subarray(0, CACHE_MAGIC.length).equals(CACHE_MAGIC)
+  ) {
+    const body = raw.subarray(CACHE_MAGIC.length);
+    return new Promise((resolve, reject) => {
+      zlib.brotliDecompress(body, (error, out) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        try {
+          resolve(JSON.parse(out.toString("utf8")));
+        } catch (parseError) {
+          reject(parseError);
+        }
+      });
+    });
+  }
+
+  const text = Buffer.isBuffer(raw) ? raw.toString("utf8") : raw;
+  return Promise.resolve(JSON.parse(text));
 }

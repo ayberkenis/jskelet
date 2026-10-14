@@ -209,6 +209,11 @@ export const DATA_CACHE_MAX_ENTRIES_CEILING = 20_000;
 export const DEFAULT_TRANSIENT_RETRY = {
   attempts: 1,
   delayMs: 300,
+  /**
+   * `true` (varsayılan): ilk transient `notFound`ta hemen 503; retry arka
+   * planda data cache'i ısıtır. `false`: yanıt öncesi senkron retry (eski).
+   */
+  background: true,
 };
 
 /**
@@ -273,9 +278,8 @@ export const DEFAULT_UPSTREAM_LIMIT = {
  * invalidation'ı bütün node'lara yaymak. Tek instance çalışan bir kurulumda
  * kazanç neredeyse yok; bu yüzden `enabled` varsayılan olarak kapalı.
  *
- * `storeEncoded` kapalı, çünkü sıkıştırılmış gövdeleri de paylaşmak girdi
- * başına boyutu iki-üç katına çıkarır ve brotli'yi yeniden üretmek Redis'ten
- * indirmekten çoğu zaman daha ucuz.
+ * `storeEncoded` açık: soğuk replica L2 HIT'te yeniden brotli ödemesin.
+ * Boyut artar; tek encoding (br) tutulduğu için maliyet sınırlıdır.
  */
 export const DEFAULT_REDIS = {
   enabled: false,
@@ -288,8 +292,8 @@ export const DEFAULT_REDIS = {
   html: true,
   /** Veri önbelleği paylaşılsın mı. */
   data: true,
-  /** Brotli/gzip gövdeleri de paylaşılsın mı. */
-  storeEncoded: false,
+  /** Brotli gövdeleri de paylaşılsın mı (yazma sonrası preencode). */
+  storeEncoded: true,
   /** pub/sub üzerinden invalidation yayını. */
   events: true,
   /**

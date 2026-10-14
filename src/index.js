@@ -11,6 +11,8 @@ export {
   renderPage,
   renderView,
   renderNotFound,
+  warmRenderEngine,
+  resetRenderEngine,
 } from "./server/render.js";
 export { renderStatusPage, statusFromError } from "./server/status-page.js";
 export { createApp, startServer } from "./server/create-app.js";

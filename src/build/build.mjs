@@ -68,14 +68,29 @@ async function task(label, run) {
   }
 }
 
-if (config.fonts?.length) {
-  const { copyFonts } = await import("./tasks/fonts.mjs");
-  Object.assign(manifest, await task("Fonts", () => copyFonts(config)));
-}
-
-if (config.icons !== false) {
-  const { buildIconSprite } = await import("./tasks/icons.mjs");
-  Object.assign(manifest, await task("Icon sprite", () => buildIconSprite(config)));
+// Fonts ve icon sprite birbirine bağlı değil — paralel.
+{
+  /** @type {Promise<Record<string, string> | void>[]} */
+  const parallel = [];
+  if (config.fonts?.length) {
+    parallel.push(
+      (async () => {
+        const { copyFonts } = await import("./tasks/fonts.mjs");
+        return task("Fonts", () => copyFonts(config));
+      })(),
+    );
+  }
+  if (config.icons !== false) {
+    parallel.push(
+      (async () => {
+        const { buildIconSprite } = await import("./tasks/icons.mjs");
+        return task("Icon sprite", () => buildIconSprite(config));
+      })(),
+    );
+  }
+  for (const part of await Promise.all(parallel)) {
+    if (part) Object.assign(manifest, part);
+  }
 }
 
 if (fs.existsSync(config.dirs.styles)) {

@@ -26,6 +26,39 @@ one is listed under a **Breaking** heading.
   variant URLs once at load time.
 - `scripts/measure-ssr.mjs` microbench for fixture `renderView` /
   `renderPage` and live cache MISS/HIT timings against a running app.
+- HTML cache awaits brotli on write so the MISS response can reuse it;
+  `rememberHtmlEncoding` updates the byte budget by delta instead of
+  rescanning the store. Short negative cache skips empty L2 (Redis/disk)
+  lookups after a miss.
+- Data cache early-refreshes near TTL (same lead formula as HTML) and skips
+  repeated empty L2 reads the same way; `produceMs` is stored on entries.
+- Image optimizer coalesces concurrent work for the same `url+w+q` and caches
+  DNS safety checks for 60s.
+- Disk/Redis L2 decode uses async brotli (no sync decompress on the event
+  loop). `cache()` skips `JSON.stringify` for a single primitive argument.
+- `preconnectHints()` adds `build.assets.prefix` origin automatically. Build
+  runs Fonts and Icon sprite in parallel; precompress writes `.br`/`.gz` in
+  parallel per file.
+- Cold SSR without prewarm: `warmRenderEngine()` runs before listen; page
+  `.jsk` templates load lazily (layout + `components/*` stay eager); production
+  `ensureTemplatesCompiled` returns on manifest without walking sources.
+- L2 read races a 50ms budget then produces locally; Redis `storeEncoded`
+  defaults to on.
+- `renderPage` runs the body with `page.metadata` in parallel with the
+  `metadata` hook + `layoutContext` chain.
+- `sendHtml` always negotiates brotli/gzip for HTML (including
+  `fragment` / `private`), instead of relying on compression middleware.
+- Transient upstream `notFound()` defaults to an immediate 503 with
+  background retry (`cache().transientRetry.background`; set `false` for the
+  old sync loop). `warmRenderEngine` / `resetRenderEngine` are exported.
+
+### Breaking
+
+- Redis `storeEncoded` defaults to `true` (was `false`). Opt out with
+  `cache().redis.storeEncoded: false` if L2 size must stay minimal.
+- Transient retry no longer delays the visitor by default
+  (`background: true`). Set `cache().transientRetry.background: false` to
+  wait for sync retries before responding.
 
 ### Fixed
 

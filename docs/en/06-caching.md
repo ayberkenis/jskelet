@@ -570,39 +570,41 @@ cache, a temporary quota problem becomes a "this page does not exist" answer for
 the whole TTL. For a search engine that is a permanent loss.
 
 The framework separates the two cases: if a **transient** upstream failure
-happened during the render, `notFound()` is not served as a 404. In order:
+happened during the render, `notFound()` is not served as a 404. Default
+(`background: true`):
 
-1. The page is **retried** after a short delay (once by default, after 300 ms).
+1. The visitor gets an immediate uncached `503` + `Retry-After`.
+2. The same path is retried in the background (once by default, after 300 ms).
    The retry runs in its own upstream and per-request cache scope, so neither
-   the first round's failure nor its memoized empty answers affect it.
-2. If the second round can produce the page, the visitor sees the **real
-   content** and the output is cached normally. Warm-up logs show this is
-   common: the same path returns 200 seconds later.
-3. If the retries are exhausted the response is a `503` — not cached, carrying
-   `Retry-After`, and the next request can still produce the real content.
+   the first round's failure nor its memoized empty answers affect it. On
+   success the next request is an L1/L2 HIT.
+3. `background: false` restores the old sync loop: wait + retry first; on
+   success the visitor sees real content, otherwise a 503.
 
 | During the render | Result of `notFound()` |
 | --- | --- |
-| A transient failure exists (`429`, `5xx`, network error) | Retry → the page if it succeeds; otherwise `503`, `Retry-After: 30`, `no-store` |
+| Transient failure + `background: true` (default) | Immediate `503`, `Retry-After: 30`, `no-store`; retry in background |
+| Transient failure + `background: false` | Retry → the page if it succeeds; otherwise `503` |
 | The retry got a clean answer saying "not there" | A normal `404` |
 | A permanent failure (`404`, `403`…) or no failure | A normal `404`, no retry |
 
 The log lines:
 
 ```
-[render] /news/x returned notFound() while upstream is failing (429 /api/...), retrying (1/1)
+[render] /news/x returned notFound() while upstream is failing (429 /api/...), retrying in background (1×)
 [render] /news/x could not be produced, upstream is still failing (429 /api/...), serving an uncached 503 instead of a 404
 ```
 
-So **an existing page never turns into a 404**: either the real content arrives,
-or an uncached 503 does. Nothing is frozen as "missing".
+So **an existing page never turns into a 404**: either the real content arrives
+(sync retry or the next request), or an uncached 503 does. Nothing is frozen as
+"missing".
 
 The cost of a retry is a second round of requests on upstream, which is why the
 default is a single attempt. The setting is `cache().transientRetry`:
 
 ```js
 cache: {
-  transientRetry: { attempts: 2, delayMs: 500 },
+  transientRetry: { attempts: 2, delayMs: 500, background: true },
 }
 ```
 
@@ -905,9 +907,9 @@ file too.
   rule already holds in a single process, but it matters far more in a shared
   tier: a leak would mean serving one user's HTML to the whole cluster.
   `degraded` renders and non-200 status codes are not shared either.
-- **Compressed bodies stay local by default.** `storeEncoded: true` turns this
-  on, but it doubles or triples the size per entry; recomputing brotli is
-  usually cheaper than downloading it from Redis.
+- **Compressed bodies are shared by default.** `storeEncoded` (default `true`)
+  keeps a cold replica from paying brotli again on an L2 HIT; it doubles or
+  triples the size per entry. Set `storeEncoded: false` to keep L2 lean.
 - **A soft invalidation deletes the Redis copy.** Staling in Redis would mean a
   read-modify-write round per key, and a webhook drops thousands of keys at
   once. The cost of deleting is one render on a replica that never saw that

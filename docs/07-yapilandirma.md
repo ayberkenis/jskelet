@@ -772,7 +772,7 @@ Ayrıntı: [03-routing.md](./03-routing.md).
 **Tip:**
 `() => { html?: Record<string, number>, staleWhileRevalidate?: number, query?: Record<string, string[] | true>, vary?: { host?: boolean, headers?: string[], fn?: (req) => string | null }, maxEntries?: number, data?: object, trackUpstream?: boolean, trackDependencies?: boolean, transientRetry?: object | false, upstream?: object, redis?: object, prewarm?: false | object }` —
 **Varsayılan:**
-`{ html: {}, staleWhileRevalidate: 60, query: {}, vary: { host: false }, maxEntries: 500, data: { maxEntries: 10000, staleFactor: 10 }, trackUpstream: true, trackDependencies: true, transientRetry: { attempts: 1, delayMs: 300 }, upstream: { rate: 0 }, redis: { enabled: false }, prewarm: { enabled: true, mode: "classic", max: 400, intervalSeconds: 0, origins: [] } }` (veya `prewarm: false` → `mode: "off"`)
+`{ html: {}, staleWhileRevalidate: 60, query: {}, vary: { host: false }, maxEntries: 500, data: { maxEntries: 10000, staleFactor: 10 }, trackUpstream: true, trackDependencies: true, transientRetry: { attempts: 1, delayMs: 300, background: true }, upstream: { rate: 0 }, redis: { enabled: false, storeEncoded: true }, prewarm: { enabled: true, mode: "classic", max: 400, intervalSeconds: 0, origins: [] } }` (veya `prewarm: false` → `mode: "off"`)
 
 ### `cache().html`
 
@@ -902,13 +902,14 @@ kaydedilecek bir şey yok; kapatmak bağlam kurma maliyetini de kaldırır.
 
 ### `cache().transientRetry`
 
-**Tip:** `{ attempts?: number, delayMs?: number } | false` —
-**Varsayılan:** `{ attempts: 1, delayMs: 300 }`
+**Tip:** `{ attempts?: number, delayMs?: number, background?: boolean } | false` —
+**Varsayılan:** `{ attempts: 1, delayMs: 300, background: true }`
 
 Geçici bir upstream hatası yüzünden `notFound()` çağrılan sayfa kaç kez daha
-denenir. Amaç var olan bir sayfanın 404'e dönüşmemesi; denemeler tükenirse yanıt
-önbelleğe girmeyen bir 503 olur. `false` ya da `attempts: 0` tekrarı kapatır.
-Ayrıntı: [06-cache.md](./06-cache.md).
+denenir. Amaç var olan bir sayfanın 404'e dönüşmemesi. `background: true`
+(varsayılan) ziyaretçiye hemen 503 verir ve retry'yi arka planda koşturur;
+`false` eski senkron döngüyü açar (önce bekle + dene, sonra yanıt). `false` ya
+da `attempts: 0` tekrarı kapatır. Ayrıntı: [06-cache.md](./06-cache.md).
 
 ### `cache().upstream`
 
@@ -959,7 +960,7 @@ kurulmadıysa ya da bağlanılamıyorsa uyarı basılır ve site bellek içi ön
 | `keyPrefix` | `string` | `"_jskelet"` | Anahtar düzeninin kökü |
 | `html` | `boolean` | `true` | HTML gövdeleri paylaşılsın mı |
 | `data` | `boolean` | `true` | `withDataCache` girdileri paylaşılsın mı |
-| `storeEncoded` | `boolean` | `false` | Brotli/gzip gövdeleri de paylaşılsın mı; girdi başına boyutu iki-üç katına çıkarır |
+| `storeEncoded` | `boolean` | `true` | Brotli/gzip gövdeleri de paylaşılsın mı; girdi başına boyutu iki-üç katına çıkarır |
 | `events` | `boolean` | `true` | pub/sub üzerinden invalidation yayını |
 | `commandTimeoutMs` | `number` | `200` | Tek bir komutun en fazla bekletebileceği süre |
 

@@ -39,6 +39,17 @@ const imageCacheIndex = new Map();
 /** @type {number} */
 let imageCacheBytes = 0;
 
+/** Aynı url+w+q için eşzamanlı optimize birleşir. @type {Map<string, Promise<void>>} */
+const optimizeInflight = new Map();
+
+/**
+ * DNS güven kontrolü kısa TTL'li cache — her hop'ta tekrar lookup olmasın.
+ * @type {Map<string, { ok: boolean, until: number }>}
+ */
+const dnsSafeCache = new Map();
+const DNS_SAFE_TTL_MS = 60_000;
+const MAX_DNS_SAFE = 500;
+
 const MAX_REDIRECTS = 5;
 
 /**
@@ -172,16 +183,27 @@ export function isRemoteUrlShapeAllowed(url, allowHosts) {
  */
 export async function assertResolvedHostSafe(hostname) {
   if (isBlockedAddress(hostname)) return false;
+
+  const cached = dnsSafeCache.get(hostname);
+  if (cached && Date.now() < cached.until) return cached.ok;
+
+  /** @type {boolean} */
+  let ok = false;
   try {
     const results = await dns.lookup(hostname, { all: true, verbatim: true });
-    if (!results.length) return false;
-    for (const { address } of results) {
-      if (isBlockedAddress(address)) return false;
+    if (results.length) {
+      ok = results.every(({ address }) => !isBlockedAddress(address));
     }
-    return true;
   } catch {
-    return false;
+    ok = false;
   }
+
+  if (dnsSafeCache.size >= MAX_DNS_SAFE) {
+    const oldest = dnsSafeCache.keys().next().value;
+    if (oldest !== undefined) dnsSafeCache.delete(oldest);
+  }
+  dnsSafeCache.set(hostname, { ok, until: Date.now() + DNS_SAFE_TTL_MS });
+  return ok;
 }
 
 /**
@@ -355,37 +377,59 @@ async function handleOptimize(req, res, remote) {
       return;
     }
 
-    const upstream = await fetchUpstream(allowed.href, remote);
-    if (!upstream.ok) {
-      res.status(502).type("text").send("Upstream image fetch failed");
+    let pending = optimizeInflight.get(key);
+    if (!pending) {
+      pending = materializeOptimized(allowed.href, filePath, width, quality, remote).finally(
+        () => {
+          optimizeInflight.delete(key);
+        },
+      );
+      optimizeInflight.set(key, pending);
+    }
+    await pending;
+
+    if (imageCacheIndex.has(filePath) || fs.existsSync(filePath)) {
+      sendCached(res, filePath, remote.cacheMaxAge);
       return;
     }
 
-    const sharp = sharpModule.default;
-    const buffer = await sharp(upstream.buffer, { failOn: "none" })
-      .rotate()
-      .resize({
-        width,
-        withoutEnlargement: true,
-        fit: "inside",
-      })
-      .webp({ quality, effort: 4 })
-      .toBuffer();
-
-    // Atomik yaz: yarım dosya immutable cache'e düşmesin.
-    const tmp = `${filePath}.${process.pid}.tmp`;
-    await fs.promises.writeFile(tmp, buffer);
-    await fs.promises.rename(tmp, filePath);
-    // Yeni dosya için yer aç: en eski düşer. Az önce yazılan, tek başına
-    // tavanı aşıyorsa kalır; bir sonraki yazım onu düşürür. Silme, bu
-    // yanıtın `sendFile`'ından önce olmasın.
-    noteImageCacheFile(filePath, buffer.length);
-    sendCached(res, filePath, remote.cacheMaxAge);
+    res.status(502).type("text").send("Upstream image fetch failed");
   } catch (error) {
     console.warn("[images.remote] optimize failed:", error);
     // Bozuk kaynakta sayfa boş kalmasın: orijinale düş.
     if (!res.headersSent) res.redirect(302, allowed.href);
   }
+}
+
+/**
+ * @param {string} href
+ * @param {string} filePath
+ * @param {number} width
+ * @param {number} quality
+ * @param {import('../config/index.js').ImagesRemoteConfig} remote
+ * @returns {Promise<void>}
+ */
+async function materializeOptimized(href, filePath, width, quality, remote) {
+  if (imageCacheIndex.has(filePath) || fs.existsSync(filePath)) return;
+
+  const upstream = await fetchUpstream(href, remote);
+  if (!upstream.ok) return;
+
+  const sharp = /** @type {NonNullable<typeof sharpModule>} */ (sharpModule).default;
+  const buffer = await sharp(upstream.buffer, { failOn: "none" })
+    .rotate()
+    .resize({
+      width,
+      withoutEnlargement: true,
+      fit: "inside",
+    })
+    .webp({ quality, effort: 4 })
+    .toBuffer();
+
+  const tmp = `${filePath}.${process.pid}.tmp`;
+  await fs.promises.writeFile(tmp, buffer);
+  await fs.promises.rename(tmp, filePath);
+  noteImageCacheFile(filePath, buffer.length);
 }
 
 /**

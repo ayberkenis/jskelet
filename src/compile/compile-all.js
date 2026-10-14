@@ -107,18 +107,24 @@ export async function compileAll(config, _options = {}) {
  * @returns {Promise<{ count: number, rebuilt: boolean }>}
  */
 export async function ensureTemplatesCompiled(config) {
-  const viewRoots = getViewRoots(config);
-  const jskFiles = discoverJskFiles(viewRoots);
-  if (jskFiles.size === 0) {
-    return { count: 0, rebuilt: false };
-  }
-
   const outDir = path.join(config.dirs.generated, "templates");
   const manifestPath = path.join(outDir, "manifest.json");
   const isProd = process.env.NODE_ENV === "production";
 
-  if (fs.existsSync(manifestPath) && isProd) {
-    return { count: jskFiles.size, rebuilt: false };
+  // Prod'da manifest varsa kaynak ağacını hiç gezme — cold start FS maliyeti.
+  if (isProd && fs.existsSync(manifestPath)) {
+    try {
+      const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+      return { count: Object.keys(manifest).length, rebuilt: false };
+    } catch {
+      return { count: 0, rebuilt: false };
+    }
+  }
+
+  const viewRoots = getViewRoots(config);
+  const jskFiles = discoverJskFiles(viewRoots);
+  if (jskFiles.size === 0) {
+    return { count: 0, rebuilt: false };
   }
 
   let needs = !fs.existsSync(manifestPath);

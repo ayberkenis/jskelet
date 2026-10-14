@@ -39,6 +39,7 @@ import { collectDependencies } from "./cache-deps.js";
 import { compilePattern, matchPattern } from "../config/pattern.js";
 import { pathOfCacheKey, publicHost } from "./cache-vary.js";
 import { diskDrop, diskDropMatching, diskGetJson, diskSetJson, diskShares } from "./disk-cache.js";
+import { encodeText } from "./middleware/compression.js";
 import {
   cacheKey,
   onCacheEvent,
@@ -57,8 +58,9 @@ import {
  * yine sorulur; cevabı bu alan taşıyor.
  *
  * `sharedEncodings`: Redis'e en son kaç sıkıştırılmış gövde yazıldığı.
- * `encoded` haritası yanıt yolunda (`sendHtml`) doluyor, yani yazma anında
- * boş; `storeEncoded` açıkken harita büyüdüğünde girdi yeniden paylaşılır.
+ * `encoded` yazmadan sonra arka planda brotli ile doldurulur (ve `sendHtml`
+ * ilk yanıtta da yazabilir); `storeEncoded` açıkken harita büyüdüğünde girdi
+ * yeniden paylaşılır.
  *
  * `produceMs`: son başarılı üretimin süresi. Erken tazeleme penceresi bundan
  * türetilir; Redis'ten gelen kopyada yoksa varsayılan kullanılır.
@@ -195,6 +197,19 @@ const MAX_INVALIDATED = 500;
 const purgedDeps = new Map();
 
 const MAX_PURGED_DEPS = 1000;
+
+/**
+ * L2'de bulunamayan anahtarlar — kısa süre `readShared` atlanır (boş Redis/
+ * disk round-trip + timeout maliyeti). Yazınca düşer.
+ *
+ * @type {Map<string, number>}
+ */
+const sharedMissUntil = new Map();
+
+/** @type {number} */
+const SHARED_MISS_TTL_MS = 2_000;
+
+const MAX_SHARED_MISS = 2_000;
 
 /**
  * Erken tazeleme lead'i: son render süresinin 2 katı (en az 250 ms), TTL'in
@@ -337,9 +352,8 @@ function read(key) {
   store.delete(key);
   store.set(key, entry);
 
-  // `encoded` yanıt yolunda dolduğu için yazma anında paylaşılamıyor. Kontrol
-  // yalnızca `storeEncoded` açıkken yapılır; kapalıyken (varsayılan) bu satır
-  // tek bir karşılaştırmaya bile girmez.
+  // `encoded` yanıt yolunda büyüyebilir (gzip vb.). Kontrol yalnızca
+  // `storeEncoded` açıkken yapılır; kapalıyken bu satır karşılaştırmaya girmez.
   if (redisSharesEncoded() && entry.encoded.size !== entry.sharedEncodings) {
     share(key, entry);
   }
@@ -404,20 +418,43 @@ function share(key, entry) {
  * @param {string} key
  * @returns {Promise<HtmlEntry | null>}
  */
+/**
+ * @param {string} key
+ * @returns {void}
+ */
+function rememberSharedMiss(key) {
+  if (sharedMissUntil.size >= MAX_SHARED_MISS) {
+    const oldest = sharedMissUntil.keys().next().value;
+    if (oldest !== undefined) sharedMissUntil.delete(oldest);
+  }
+  sharedMissUntil.set(key, Date.now() + SHARED_MISS_TTL_MS);
+}
+
 async function readShared(key) {
   const onRedis = redisShares("html");
   const onDisk = diskShares("html");
   if (!onRedis && !onDisk) return null;
 
+  const missUntil = sharedMissUntil.get(key);
+  if (missUntil !== undefined) {
+    if (Date.now() < missUntil) return null;
+    sharedMissUntil.delete(key);
+  }
+
   const payload = onRedis
     ? await redisGetJson(cacheKey("html", key))
     : await diskGetJson("html", key);
-  if (!payload || typeof payload.html !== "string") return null;
+  if (!payload || typeof payload.html !== "string") {
+    rememberSharedMiss(key);
+    return null;
+  }
   if (typeof payload.expiresAt !== "number" || Date.now() >= payload.expiresAt) {
     // Dosyanın TTL'i yok; süresi dolmuş kopya okununca silinir.
     if (onDisk) diskDrop("html", [key]);
+    rememberSharedMiss(key);
     return null;
   }
+  sharedMissUntil.delete(key);
 
   const deps = new Set(Array.isArray(payload.deps) ? payload.deps.map(String) : []);
   const storedAt = Number(payload.storedAt) || 0;
@@ -466,8 +503,9 @@ async function readShared(key) {
  * @param {number} ttlSeconds
  * @param {Set<string> | null} deps Render sırasında okunan veri anahtarları.
  * @param {number} [produceMs] Son üretimin süresi (ms).
+ * @returns {Promise<void>}
  */
-function write(key, value, ttlSeconds, deps = null, produceMs = DEFAULT_PRODUCE_MS) {
+async function write(key, value, ttlSeconds, deps = null, produceMs = DEFAULT_PRODUCE_MS) {
   const now = Date.now();
 
   /** @type {HtmlEntry} */
@@ -487,7 +525,30 @@ function write(key, value, ttlSeconds, deps = null, produceMs = DEFAULT_PRODUCE_
 
   // Bütçeye sığmayan sayfa Redis'e de yazılmaz: bir sonraki istek onu
   // geri alıp yine reddeder, stringify ise o anki RSS'i şişirir.
-  if (install(key, entry)) share(key, entry);
+  sharedMissUntil.delete(key);
+  if (!install(key, entry)) return;
+
+  // MISS yanıtı br ile gidebilsin: encode bitmeden dönme. share encode sonrası
+  // (storeEncoded açıkken br L2'ye de gider).
+  await preencodeEntry(key, entry);
+  share(key, entry);
+}
+
+/**
+ * Yazılan HTML için brotli üretir.
+ *
+ * @param {string} key
+ * @param {HtmlEntry} entry
+ * @returns {Promise<void>}
+ */
+async function preencodeEntry(key, entry) {
+  try {
+    const buffer = await encodeText(entry.html, "br");
+    if (store.get(key) !== entry) return;
+    rememberHtmlEncoding(entry.encoded, "br", buffer);
+  } catch {
+    // Encode başarısızsa sonraki sendHtml dener; cache yazımı bozulmaz.
+  }
 }
 
 /**
@@ -522,10 +583,8 @@ function install(key, entry) {
 }
 
 /**
- * Sıkıştırılmış gövde `install()`'dan sonra, ilk brotli/gzip yanıtında
- * girdinin `encoded` haritasına eklenir. Sayacı delta ile büyütmek, o sıra
- * LRU'dan düşmüş bir haritaya yazınca bir daha inmeyen bir artık bırakır;
- * store'dan yeniden okumak o artığı taşımaz.
+ * Bayt sayacını store'dan yeniden hesaplar. Testler elle `encoded` doldurunca
+ * çağırır; hot path `rememberHtmlEncoding` delta kullanır.
  *
  * @returns {void}
  */
@@ -612,40 +671,92 @@ function extendStaleWhileRefreshing(key) {
  * @returns {Promise<{ html: string, status: number, degraded?: boolean,
  *   storable?: boolean }>}
  */
+/** L2 yanıtı bu sürede gelmezse local produce başlar (yavaş Redis TTFB'si). */
+const SHARED_WAIT_MS = 50;
+
 async function produce(key, ttlSeconds, producer, token) {
   const startedAt = Date.now();
 
-  // Başka bir node bu sayfayı zaten render ettiyse render hiç çalışmaz. Soğuk
-  // ayağa kalkan bir instance'ın sıcak önbellek bulmasının tek yolu bu.
-  const shared = await readShared(key);
-  if (shared && tokens.get(key) === token) {
-    install(key, shared);
-    return { html: shared.html, status: shared.status };
+  // L2 ile yarış: hızlı HIT kullan; yavaşsa local üret. Local hata L2'yi
+  // iptal etmez — disk/Redis decode 50 ms'yi aşabilir.
+  const sharedPromise = readShared(key);
+  const timedOut = await Promise.race([
+    sharedPromise.then((shared) => ({ shared, timeout: false })),
+    sleep(SHARED_WAIT_MS).then(() => ({ shared: null, timeout: true })),
+  ]);
+
+  if (timedOut.shared && tokens.get(key) === token) {
+    install(key, timedOut.shared);
+    return { html: timedOut.shared.html, status: timedOut.shared.status };
   }
 
-  // Bağımlılıklar tazelemede de toplanır, ilk üretimde değil sadece: sayfanın
-  // okuduğu anahtarlar zamanla değişir (yeni bir widget, kaldırılan bir blok).
   const deps = trackDependencies() ? new Set() : null;
+  const runLocal = () =>
+    deps ? collectDependencies(deps, producer) : producer();
 
-  const value = await (deps ? collectDependencies(deps, producer) : producer());
+  /** @type {{ html: string, status: number, degraded?: boolean, storable?: boolean } | null} */
+  let value = null;
 
-  // `degraded`: upstream düştüğü için eksik veriyle üretilmiş HTML.
-  // Saklanırsa eksik içerik tüm TTL boyunca servis edilir.
-  //
-  // `storable: false`: çıktı kullanıcıya bağlı (cookie/Authorization
-  // okundu). Anahtar yalnızca yol + query olduğu için saklamak, bir
-  // kullanıcının HTML'ini bir başkasına servis etmek olur. Paylaşımlı
-  // kademede bunun bedeli daha da ağır — bir kullanıcının HTML'i tüm kümeye
-  // dağılırdı — bu yüzden kontrol Redis yazımından önce, `write()` içinde.
-  //
-  // Token uyuşmuyorsa bu tur, sonucu geçersiz kılan bir invalidation'ın
-  // öncesinde başlamış demektir; yazmak az önce düşürüleni geri koyardı.
+  if (timedOut.timeout) {
+    const localSettled = runLocal().then(
+      (v) => /** @type {const} */ ({ ok: true, value: v }),
+      (err) => /** @type {const} */ ({ ok: false, err }),
+    );
+
+    const winner = await Promise.race([
+      sharedPromise.then((shared) =>
+        shared
+          ? /** @type {const} */ ({ source: "shared", shared })
+          : /** @type {const} */ ({ source: "miss" }),
+      ),
+      localSettled.then((result) =>
+        /** @type {const} */ ({ source: "local", result }),
+      ),
+    ]);
+
+    if (winner.source === "shared" && tokens.get(key) === token) {
+      install(key, winner.shared);
+      return { html: winner.shared.html, status: winner.shared.status };
+    }
+
+    if (winner.source === "miss") {
+      const result = await localSettled;
+      if (!result.ok) throw result.err;
+      value = result.value;
+    } else {
+      // Local önce bitti; geç L2 HIT varsa onu tercih et (yazma yok).
+      const late = await sharedPromise;
+      if (late && tokens.get(key) === token) {
+        install(key, late);
+        return { html: late.html, status: late.status };
+      }
+      if (!winner.result.ok) throw winner.result.err;
+      value = winner.result.value;
+    }
+  } else {
+    // L2 miss (null) — local üret.
+    value = await runLocal();
+  }
+
   const valid = tokens.get(key) === token && !readsPurgedData(deps, startedAt);
-  if (valid && value.status === 200 && !value.degraded && value.storable !== false) {
-    write(key, value, ttlSeconds, deps, Date.now() - startedAt);
+  if (
+    value &&
+    valid &&
+    value.status === 200 &&
+    !value.degraded &&
+    value.storable !== false
+  ) {
+    await write(key, value, ttlSeconds, deps, Date.now() - startedAt);
   }
 
   return value;
+}
+
+/** @param {number} ms */
+function sleep(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms).unref?.();
+  });
 }
 
 /**
@@ -705,6 +816,7 @@ function clearLocal() {
   tokens.clear();
   invalidated.clear();
   purgedDeps.clear();
+  sharedMissUntil.clear();
 }
 
 export function getHtmlCacheSize() {
@@ -1127,7 +1239,8 @@ export function isHtmlCacheKeyFresh(key) {
 
 /**
  * Girdide en fazla bir sıkıştırılmış gövde durur. Yeni kodlama eskisinin
- * yerini alır; ham HTML kalır. Bayt sayacı `noteHtmlCacheGrowth` ile işlenir.
+ * yerini alır; ham HTML kalır. Bayt sayacı delta ile güncellenir — harita
+ * LRU'dan düşmüşse (store'da yok) sayaç oynatılmaz.
  *
  * @param {Map<string, Buffer>} encoded
  * @param {string} encoding
@@ -1135,11 +1248,28 @@ export function isHtmlCacheKeyFresh(key) {
  * @returns {void}
  */
 export function rememberHtmlEncoding(encoded, encoding, buffer) {
-  for (const key of [...encoded.keys()]) {
-    if (key !== encoding) encoded.delete(key);
+  let removed = 0;
+  for (const [key, buf] of [...encoded.entries()]) {
+    if (key !== encoding) {
+      removed += buf.length;
+      encoded.delete(key);
+    }
   }
+  const previous = encoded.get(encoding);
+  if (previous) removed += previous.length;
   encoded.set(encoding, buffer);
-  noteHtmlCacheGrowth();
+
+  let owned = false;
+  for (const entry of store.values()) {
+    if (entry.encoded === encoded) {
+      owned = true;
+      break;
+    }
+  }
+  if (!owned) return;
+
+  storedBytes = Math.max(0, storedBytes - removed + buffer.length);
+  evictOverflow();
 }
 
 /**

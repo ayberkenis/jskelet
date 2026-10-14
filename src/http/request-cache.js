@@ -19,6 +19,24 @@ export function withRequestCache(run) {
 }
 
 /**
+ * Sık görülen ilkel argümanlarda `JSON.stringify` atlanır.
+ *
+ * @param {unknown[]} args
+ * @returns {string}
+ */
+function argsKey(args) {
+  if (args.length === 0) return "";
+  if (args.length === 1) {
+    const value = args[0];
+    const type = typeof value;
+    if (value == null) return `\0${value}`;
+    if (type === "string") return `\0s:${value}`;
+    if (type === "number" || type === "boolean") return `\0${type}:${value}`;
+  }
+  return JSON.stringify(args);
+}
+
+/**
  * @param {F} fn
  * @returns {F}
  * @template {(...args: any[]) => any} F
@@ -34,7 +52,7 @@ export function cache(fn) {
       contextStore.set(fn, perFn);
     }
 
-    const key = args.length === 0 ? "" : JSON.stringify(args);
+    const key = argsKey(args);
     if (perFn.has(key)) return perFn.get(key);
 
     const result = fn(...args);

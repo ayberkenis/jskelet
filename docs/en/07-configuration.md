@@ -786,7 +786,7 @@ Details: [03-routing.md](./03-routing.md).
 **Type:**
 `() => { html?: Record<string, number>, staleWhileRevalidate?: number, query?: Record<string, string[] | true>, vary?: { host?: boolean, headers?: string[], fn?: (req) => string | null }, maxEntries?: number, data?: object, trackUpstream?: boolean, trackDependencies?: boolean, transientRetry?: object | false, upstream?: object, redis?: object, prewarm?: false | object }` —
 **Default:**
-`{ html: {}, staleWhileRevalidate: 60, query: {}, vary: { host: false }, maxEntries: 500, data: { maxEntries: 10000, staleFactor: 10 }, trackUpstream: true, trackDependencies: true, transientRetry: { attempts: 1, delayMs: 300 }, upstream: { rate: 0 }, redis: { enabled: false }, prewarm: { enabled: true, mode: "classic", max: 400, intervalSeconds: 0, origins: [] } }` (or `prewarm: false` → `mode: "off"`)
+`{ html: {}, staleWhileRevalidate: 60, query: {}, vary: { host: false }, maxEntries: 500, data: { maxEntries: 10000, staleFactor: 10 }, trackUpstream: true, trackDependencies: true, transientRetry: { attempts: 1, delayMs: 300, background: true }, upstream: { rate: 0 }, redis: { enabled: false, storeEncoded: true }, prewarm: { enabled: true, mode: "classic", max: 400, intervalSeconds: 0, origins: [] } }` (or `prewarm: false` → `mode: "off"`)
 
 ### `cache().html`
 
@@ -920,13 +920,15 @@ setting up the context.
 
 ### `cache().transientRetry`
 
-**Type:** `{ attempts?: number, delayMs?: number } | false` —
-**Default:** `{ attempts: 1, delayMs: 300 }`
+**Type:** `{ attempts?: number, delayMs?: number, background?: boolean } | false` —
+**Default:** `{ attempts: 1, delayMs: 300, background: true }`
 
 How many extra times a page is tried when `notFound()` was called because of a
 transient upstream failure. The point is that an existing page never turns into
-a 404; if the retries are exhausted the response is an uncached 503. `false` or
-`attempts: 0` disables the retry. Details: [06-caching.md](./06-caching.md).
+a 404. `background: true` (default) returns 503 immediately and runs the retry
+in the background; `false` restores the old sync loop (wait + retry, then
+respond). `false` or `attempts: 0` disables the retry. Details:
+[06-caching.md](./06-caching.md).
 
 ### `cache().upstream`
 
@@ -977,7 +979,7 @@ the site keeps running on the in-process cache.
 | `keyPrefix` | `string` | `"_jskelet"` | Root of the key layout |
 | `html` | `boolean` | `true` | Whether HTML bodies are shared |
 | `data` | `boolean` | `true` | Whether `withDataCache` entries are shared |
-| `storeEncoded` | `boolean` | `false` | Whether brotli/gzip bodies are shared too; doubles or triples the size per entry |
+| `storeEncoded` | `boolean` | `true` | Whether brotli/gzip bodies are shared too; doubles or triples the size per entry |
 | `events` | `boolean` | `true` | Invalidation broadcast over pub/sub |
 | `commandTimeoutMs` | `number` | `200` | At most how long a single command may block |
 

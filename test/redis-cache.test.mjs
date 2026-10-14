@@ -145,34 +145,28 @@ test("a page larger than 1 KB is stored as brotli and still promotes", async () 
   assert.equal(hit.html, html);
 });
 
-test("compressed bodies stay local unless storeEncoded is on", async () => {
+test("compressed bodies stay local when storeEncoded is off", async () => {
   const fake = createFakeRedis();
-  setRedisClientForTests(fake);
-
-  const hit = await withHtmlCache("/a?", 60, async () => ({ html: "x", status: 200 }));
-  // Yanıt yolunun yaptığı şey: gövde ilk kez sıkıştırıldığında haritaya konur.
-  hit.encoded?.set("br", Buffer.from("sıkıştırılmış"));
+  setRedisClientForTests(fake, { storeEncoded: false });
 
   await withHtmlCache("/a?", 60, async () => ({ html: "x", status: 200 }));
 
   const payload = JSON.parse(fake.store.get(`${PREFIX}:html:/a?`));
-  assert.equal(payload.encoded, undefined, "varsayılan olarak paylaşılmamalı");
+  assert.equal(payload.encoded, undefined, "kapalıyken paylaşılmamalı");
 });
 
-test("storeEncoded shares the compressed body on the next read", async () => {
+test("storeEncoded shares the compressed body on write", async () => {
   const fake = createFakeRedis();
   setRedisClientForTests(fake, { storeEncoded: true });
 
-  const hit = await withHtmlCache("/a?", 60, async () => ({ html: "x", status: 200 }));
-  hit.encoded?.set("br", Buffer.from("sıkıştırılmış"));
-
-  // `encoded` yazma anında boş; paylaşım bir sonraki okumada tamamlanır.
-  await withHtmlCache("/a?", 60, async () => ({ html: "x", status: 200 }));
+  // Yazma preencode'u await eder; br L2 payload'ında olur.
+  await withHtmlCache("/a?", 60, async () => ({ html: "hello-html", status: 200 }));
 
   const payload = JSON.parse(fake.store.get(`${PREFIX}:html:/a?`));
-  assert.equal(
-    Buffer.from(payload.encoded.br, "base64").toString(),
-    "sıkıştırılmış",
+  assert.ok(payload.encoded?.br, "br paylaşılmalı");
+  assert.ok(
+    Buffer.from(payload.encoded.br, "base64").length > 0,
+    "br gövdesi boş olmamalı",
   );
 });
 

@@ -27,7 +27,7 @@ import { getConfig } from "../config/index.js";
 import { DATA_CACHE_BYTE_BUDGET, DEFAULT_DATA_CACHE } from "../config/defaults.js";
 import { recordDependency } from "./cache-deps.js";
 import { diskDrop, diskDropMatching, diskGetJson, diskSetJson, diskShares } from "./disk-cache.js";
-import { invalidateHtmlByDependency } from "./html-cache.js";
+import { earlyRefreshLeadMs, invalidateHtmlByDependency } from "./html-cache.js";
 import {
   cacheKey,
   onCacheEvent,
@@ -39,8 +39,11 @@ import {
 } from "./redis.js";
 
 /**
- * @typedef {{ value: unknown, expiresAt: number, staleUntil: number, bytes: number }} DataEntry
+ * @typedef {{ value: unknown, expiresAt: number, staleUntil: number, bytes: number,
+ *   produceMs: number }} DataEntry
  */
+
+const DEFAULT_PRODUCE_MS = 500;
 
 /** @type {Map<string, DataEntry>} */
 const store = new Map();
@@ -59,6 +62,14 @@ let byteBudgetOverride = null;
 
 /** @type {Map<string, Promise<unknown>>} */
 const inflight = new Map();
+
+/**
+ * L2 miss kısa belleği — boş Redis/disk turunu tekrarlamamak için.
+ * @type {Map<string, number>}
+ */
+const sharedMissUntil = new Map();
+const SHARED_MISS_TTL_MS = 2_000;
+const MAX_SHARED_MISS = 2_000;
 
 /**
  * Süreç ömrü boyunca biriken sayaçlar.
@@ -107,8 +118,24 @@ function settings() {
 }
 
 /**
+ * @param {DataEntry} entry
+ * @param {number} [now]
+ * @returns {boolean}
+ */
+function isEarly(entry, now = Date.now()) {
+  if (now >= entry.expiresAt) return false;
+  // `storedAt` yok; orijinal TTL = bayat penceresi / staleFactor.
+  const staleFactor = settings().staleFactor;
+  const staleWindow = Math.max(0, entry.staleUntil - entry.expiresAt);
+  const originalTtl =
+    staleFactor > 0 ? staleWindow / staleFactor : Math.max(staleWindow, entry.produceMs * 4);
+  const lead = earlyRefreshLeadMs(entry.produceMs ?? DEFAULT_PRODUCE_MS, originalTtl);
+  return now >= entry.expiresAt - lead;
+}
+
+/**
  * @param {string} key
- * @returns {{ value: unknown, stale: boolean } | null}
+ * @returns {{ value: unknown, stale: boolean, early: boolean } | null}
  */
 function read(key) {
   const entry = store.get(key);
@@ -124,7 +151,12 @@ function read(key) {
   store.delete(key);
   store.set(key, entry);
 
-  return { value: entry.value, stale: now >= entry.expiresAt };
+  const stale = now >= entry.expiresAt;
+  return {
+    value: entry.value,
+    stale,
+    early: !stale && isEarly(entry, now),
+  };
 }
 
 /**
@@ -200,8 +232,9 @@ function install(key, entry) {
  * @param {unknown} value
  * @param {number} ttlSeconds
  * @param {number} staleFactor
+ * @param {number} [produceMs]
  */
-function write(key, value, ttlSeconds, staleFactor) {
+function write(key, value, ttlSeconds, staleFactor, produceMs = DEFAULT_PRODUCE_MS) {
   const now = Date.now();
   const ttl = ttlSeconds * 1000;
 
@@ -211,7 +244,11 @@ function write(key, value, ttlSeconds, staleFactor) {
     expiresAt: now + ttl,
     staleUntil: now + ttl + ttl * staleFactor,
     bytes: valueBytes(value),
+    produceMs:
+      Number.isFinite(produceMs) && produceMs >= 0 ? Math.round(produceMs) : DEFAULT_PRODUCE_MS,
   };
+
+  sharedMissUntil.delete(key);
 
   // Bütçeye sığmayan değer Redis'e de yazılmaz: bir sonraki istek onu geri
   // alıp yine reddeder. Çağıran sonuç yine `producer`'ın döndürdüğüdür.
@@ -236,7 +273,23 @@ function write(key, value, ttlSeconds, staleFactor) {
  */
 function promote(key, entry) {
   if (!entry.bytes) entry.bytes = valueBytes(entry.value);
+  if (!Number.isFinite(entry.produceMs) || entry.produceMs < 0) {
+    entry.produceMs = DEFAULT_PRODUCE_MS;
+  }
+  sharedMissUntil.delete(key);
   install(key, entry);
+}
+
+/**
+ * @param {string} key
+ * @returns {void}
+ */
+function rememberSharedMiss(key) {
+  if (sharedMissUntil.size >= MAX_SHARED_MISS) {
+    const oldest = sharedMissUntil.keys().next().value;
+    if (oldest !== undefined) sharedMissUntil.delete(oldest);
+  }
+  sharedMissUntil.set(key, Date.now() + SHARED_MISS_TTL_MS);
 }
 
 /**
@@ -254,13 +307,24 @@ async function readShared(key) {
   const onDisk = diskShares("data");
   if (!onRedis && !onDisk) return null;
 
+  const missUntil = sharedMissUntil.get(key);
+  if (missUntil !== undefined) {
+    if (Date.now() < missUntil) return null;
+    sharedMissUntil.delete(key);
+  }
+
   const entry = onRedis ? await redisGetJson(cacheKey("data", key)) : await diskGetJson("data", key);
-  if (!entry || typeof entry.expiresAt !== "number") return null;
+  if (!entry || typeof entry.expiresAt !== "number") {
+    rememberSharedMiss(key);
+    return null;
+  }
   if (Date.now() >= entry.expiresAt) {
     if (onDisk) diskDrop("data", [key]);
+    rememberSharedMiss(key);
     return null;
   }
 
+  sharedMissUntil.delete(key);
   return /** @type {DataEntry} */ (entry);
 }
 
@@ -309,11 +373,13 @@ async function produce(key, ttlSeconds, producer, options, staleFactor) {
   }
 
   stats.produced += 1;
+  const startedAt = Date.now();
   const value = await producer();
+  const produceMs = Date.now() - startedAt;
 
   const empty = value === undefined || value === null;
   if (!empty || options.storeEmpty === true) {
-    write(key, value, ttlSeconds, staleFactor);
+    write(key, value, ttlSeconds, staleFactor, produceMs);
   }
 
   return value;
@@ -348,10 +414,9 @@ export async function withDataCache(key, ttlSeconds, producer, options = {}) {
     if (hit.stale) stats.stale += 1;
     else stats.hits += 1;
 
-    // Bayat girdi anında döner; tazeleme arkada yürür ve hatası bu isteği
-    // etkilemez — çağıran taraf bir şey beklemediği için upstream'in yavaş
-    // olması sayfaya yansımaz.
-    if (hit.stale) {
+    // Bayat veya erken penceredeki girdi anında döner; tazeleme arkada yürür
+    // — HTML cache ile aynı: TTL dolmadan upstream çağrısı bitsin.
+    if (hit.stale || hit.early) {
       void refresh(key, ttlSeconds, producer, options).catch((error) => {
         console.error(`[data-cache] background refresh failed: ${key}`, error);
       });
@@ -445,6 +510,7 @@ function clearLocal(prefix) {
     removed.push(...store.keys());
     store.clear();
     storedBytes = 0;
+    sharedMissUntil.clear();
   } else {
     for (const key of [...store.keys()]) {
       if (key.startsWith(prefix)) {

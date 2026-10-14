@@ -58,16 +58,22 @@ const isDev = process.env.NODE_ENV === "development";
  * taraması dosya sistemine dokunduğu için bir kez yapılır; config yüklenmeden
  * hesaplanamaz, bu yüzden ilk render'da kurulur.
  *
- * @type {{ helpers: Record<string, unknown>, options: Record<string, unknown>,
+ * Sayfa `.jsk` şablonları lazy yüklenir; layout + `components/*.jsk` eager.
+ *
+ * @typedef {{ helpers: Record<string, unknown>, options: Record<string, unknown>,
  *   viewsDir: string, viewRoots: string[], layout: string,
  *   compiled: Map<string, (data: object, helpers: object) => string>,
+ *   loading: Map<string, Promise<(data: object, helpers: object) => string | null>>,
+ *   manifest: Record<string, string>, templatesDir: string, bust: string,
  *   layoutRender: ((data: object, helpers: object) => string) | null
- * } | null}
+ * }} RenderEngine
  */
+
+/** @type {RenderEngine | null} */
 let engine = null;
 
 /**
- * @returns {Promise<NonNullable<typeof engine>>}
+ * @returns {Promise<RenderEngine>}
  */
 async function getEngine() {
   if (engine) return engine;
@@ -104,14 +110,11 @@ async function getEngine() {
     if (!(pascal in helpers)) helpers[pascal] = value;
   }
 
-  const { compiled, layoutRender: appLayoutRender } = await loadCompiledTemplates(
-    config,
-    helpers,
-  );
+  const loaded = await loadCompiledTemplates(config, helpers);
 
   // Yalnızca framework varsayılan layout'una düşüldüğünde hazır modülü kullan;
   // uygulamanın kendi layout.jsk'si derlenmemişse sessizce framework'e kayma.
-  let layoutRender = appLayoutRender;
+  let layoutRender = loaded.layoutRender;
   if (!layoutRender) {
     const fwLayout = path.join(FRAMEWORK_ROOT, "src", "templates", "layout.jsk");
     if (path.resolve(config.layout) === path.resolve(fwLayout)) {
@@ -125,7 +128,11 @@ async function getEngine() {
     viewRoots,
     layout: config.layout,
     helpers,
-    compiled,
+    compiled: loaded.compiled,
+    loading: new Map(),
+    manifest: loaded.manifest,
+    templatesDir: loaded.templatesDir,
+    bust: loaded.bust,
     layoutRender,
     options: {
       // `include('partials/header')` gibi çağrılar views kökünden çözülür.
@@ -141,11 +148,48 @@ async function getEngine() {
 }
 
 /**
- * Derlenmiş `.jsk` modüllerini yükler. İstek anında parse/compile yok.
+ * Manifest'ten tek bir derlenmiş view yükler. Include'lar modül grafiğinde
+ * statik import ile gelir.
+ *
+ * @param {RenderEngine} eng
+ * @param {string} viewId
+ * @returns {Promise<((data: object, helpers: object) => string) | null>}
+ */
+async function ensureCompiledView(eng, viewId) {
+  const hit = eng.compiled.get(viewId);
+  if (hit) return hit;
+
+  const rel = eng.manifest[viewId];
+  if (!rel) return null;
+
+  const pending = eng.loading.get(viewId);
+  if (pending) return pending;
+
+  const task = (async () => {
+    const file = path.join(eng.templatesDir, rel);
+    try {
+      const mod = await import(pathToFileURL(file).href + eng.bust);
+      if (typeof mod.render !== "function") return null;
+      eng.compiled.set(viewId, mod.render);
+      return mod.render;
+    } catch {
+      return null;
+    } finally {
+      eng.loading.delete(viewId);
+    }
+  })();
+
+  eng.loading.set(viewId, task);
+  return task;
+}
+
+/**
+ * Layout + `components/*.jsk` eager; sayfa şablonları ilk `renderView`'da.
  *
  * @param {import('../config/index.js').ResolvedConfig} config
  * @param {Record<string, unknown>} helpers
- * @returns {Promise<{ compiled: Map<string, Function>, layoutRender: Function | null }>}
+ * @returns {Promise<{ compiled: Map<string, Function>, layoutRender: Function | null,
+ *   manifest: Record<string, string>, templatesDir: string, bust: string }>}
  */
 async function loadCompiledTemplates(config, helpers) {
   /** @type {Map<string, (data: object, helpers: object) => string>} */
@@ -154,16 +198,26 @@ async function loadCompiledTemplates(config, helpers) {
   const manifestPath = path.join(templatesDir, "manifest.json");
 
   if (!fs.existsSync(manifestPath)) {
-    return { compiled, layoutRender: null };
+    return {
+      compiled,
+      layoutRender: null,
+      manifest: {},
+      templatesDir,
+      bust: "",
+    };
   }
 
   /** @type {Record<string, string>} */
   const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
   const bust = isDev ? `?t=${Date.now()}` : "";
 
-  // Paralel import — sıralı await cold start'ı şişiriyordu.
+  const eagerIds = Object.keys(manifest).filter(
+    (id) => id === "layout" || id.startsWith("components/"),
+  );
+
   const entries = await Promise.all(
-    Object.entries(manifest).map(async ([viewId, rel]) => {
+    eagerIds.map(async (viewId) => {
+      const rel = manifest[viewId];
       const file = path.join(templatesDir, rel);
       try {
         const mod = await import(pathToFileURL(file).href + bust);
@@ -178,7 +232,6 @@ async function loadCompiledTemplates(config, helpers) {
     if (!mod || typeof mod.render !== "function") continue;
     compiled.set(viewId, mod.render);
 
-    // `components/*.jsk` → helpers.PascalName
     if (viewId.startsWith("components/")) {
       const base = viewId.slice("components/".length).split("/").pop() ?? "";
       const pascal = base
@@ -193,7 +246,24 @@ async function loadCompiledTemplates(config, helpers) {
   }
 
   const layoutRender = compiled.get("layout") ?? null;
-  return { compiled, layoutRender };
+  return { compiled, layoutRender, manifest, templatesDir, bust };
+}
+
+/**
+ * Listen öncesi: motor + asset manifest ısınır (sayfa prewarm değil).
+ *
+ * @returns {Promise<void>}
+ */
+export async function warmRenderEngine() {
+  await getEngine();
+  hasAsset("app.css");
+  hasAsset("main.js");
+  try {
+    const { getBuildId } = await import("./assets.js");
+    getBuildId();
+  } catch {
+    /* yoksa sessiz */
+  }
 }
 
 /**
@@ -232,8 +302,13 @@ export function resetRenderEngine() {
  * @returns {Promise<string>}
  */
 export async function renderView(view, data = {}) {
-  const { helpers, options, compiled, viewRoots, viewsDir } = await getEngine();
-  const renderFn = compiled.get(view);
+  const eng = await getEngine();
+  const { helpers, options, viewRoots, viewsDir } = eng;
+
+  let renderFn = eng.compiled.get(view) ?? null;
+  if (!renderFn && eng.manifest[view]) {
+    renderFn = await ensureCompiledView(eng, view);
+  }
   if (renderFn) {
     return renderFn({ ...data }, helpers);
   }
@@ -256,17 +331,31 @@ export async function renderPage(page) {
   const { helpers, options, layout, layoutRender } = await getEngine();
   const config = getConfig();
 
-  const metadata = {
+  // Gövde `page.metadata` ile başlar (hook beklemez). Head/layout birleşik
+  // metadata'yı alır — siteName/titleTemplate gibi hook alanları layout'ta.
+  const pageMeta = page.metadata ?? {};
+  const metadataPromise = (async () => ({
     ...(await hook("metadata", {}, page)),
-    ...(page.metadata ?? {}),
-  };
+    ...pageMeta,
+  }))();
 
-  // Layout bağlamı ve gövde paralel üretilir: navigasyon çoğu projede
-  // upstream'den geliyor ve gövde render'ıyla sırayla beklemek her sayfaya
-  // gereksiz gecikme ekliyor.
-  const [body, context] = await Promise.all([
-    renderView(page.view, { ...(page.data ?? {}), metadata }),
-    hook("layoutContext", {}, { pathname: page.pathname ?? "", metadata }),
+  const bodyPromise = renderView(page.view, {
+    ...(page.data ?? {}),
+    metadata: pageMeta,
+  });
+
+  // metadata → layoutContext zinciri gövdeyle paralel.
+  const layoutPromise = metadataPromise.then(async (metadata) => {
+    const context = await hook("layoutContext", {}, {
+      pathname: page.pathname ?? "",
+      metadata,
+    });
+    return { metadata, context };
+  });
+
+  const [body, { metadata, context }] = await Promise.all([
+    bodyPromise,
+    layoutPromise,
   ]);
 
   // Layout local'leri. `.jsk` `(data, helpers)` aldığı için helpers'ı data'ya
@@ -694,31 +783,28 @@ async function sendHtml(req, res, body, encoded, options = {}) {
   const encoding =
     req.method === "HEAD" ? null : negotiateEncoding(req.headers["accept-encoding"]);
 
-  if (!encoding || !encoded) {
+  if (!encoding) {
     if (options.etag === false) {
-      // Sıkıştırma middleware'i devreye girerse Content-Length'i kendisi
-      // kaldırır; girmezse doğru uzunlukla gider.
       res.setHeader("Content-Length", String(Buffer.byteLength(body)));
       res.end(req.method === "HEAD" ? undefined : body);
       return;
     }
-
     res.send(body);
     return;
   }
 
-  let buffer = encoded.get(encoding);
+  // Public cache haritası veya private/fragment: HTML'i burada sıkıştır —
+  // middleware'in ikinci kez buffer'lamasını ve private yolda q=5 maliyetini kes.
+  let buffer = encoded?.get(encoding);
   if (!buffer) {
     buffer = await encodeText(body, encoding);
-    // Ham HTML kalır; sıkıştırılmış kopya tek kodlamadır. Diğer istemci
-    // gelince eski buffer düşer, bayt bütçesi iki gövdeyi birden saymaz.
-    rememberHtmlEncoding(encoded, encoding, buffer);
+    if (encoded) rememberHtmlEncoding(encoded, encoding, buffer);
   }
 
   res.setHeader("Content-Encoding", encoding);
   res.setHeader("Vary", "Accept-Encoding");
   res.setHeader("Content-Length", String(buffer.length));
-  res.end(buffer);
+  res.end(req.method === "HEAD" ? undefined : buffer);
 }
 
 /**
@@ -770,11 +856,46 @@ async function produce(controller, ctx) {
   if (!first.transient.length) return { html: await renderNotFound(), status: 404 };
 
   // Buraya gelindiyse `notFound()` veri gelmediği için çağrılmış. **Var olan
-  // bir sayfayı** 404 olarak servis etmek en kötü sonuç: arama motoru geçici
-  // bir rate limit'i kalıcı bir kayıp sanar. Bu yüzden sayfa yeniden denenir —
-  // ısıtma günlükleri gösteriyor ki aynı yol saniyeler sonra 200 dönüyor.
-  const { attempts, delayMs } = transientRetry();
+  // bir sayfayı** 404 olarak servis etmek en kötü sonuç. Varsayılan: hemen
+  // 503 dön, retry'yi arka planda çalıştır (data cache ısınır). `background:
+  // false` eski senkron retry davranışını geri getirir.
+  const { attempts, delayMs, background } = transientRetry();
   let failures = first.transient;
+
+  if (background && attempts > 0) {
+    const retryDetail =
+      `returned notFound() while upstream is failing ` +
+      `(${summarizeFailures(failures)}), retrying in background (${attempts}×)`;
+    if (!suppressForPrewarm(retryDetail)) {
+      console.warn(`[render] ${ctx.pathname} ${retryDetail}`);
+    }
+
+    void (async () => {
+      for (let round = 1; round <= attempts; round += 1) {
+        await sleep(delayMs * round);
+        try {
+          const retried = await withUpstreamTracking(() =>
+            withRequestCache(() => attempt(controller, ctx)),
+          );
+          if ("page" in retried || !retried.transient.length) return;
+          failures = retried.transient;
+        } catch (error) {
+          console.warn(
+            `[render] ${ctx.pathname} background retry failed`,
+            error instanceof Error ? error.message : error,
+          );
+          return;
+        }
+      }
+    })();
+
+    return {
+      html: await renderStatusPage(503),
+      status: 503,
+      degraded: true,
+      retryAfter: RETRY_AFTER_SECONDS,
+    };
+  }
 
   for (let round = 1; round <= attempts; round += 1) {
     const retryDetail =
@@ -784,29 +905,20 @@ async function produce(controller, ctx) {
       console.warn(`[render] ${ctx.pathname} ${retryDetail}`);
     }
 
-    // Beklemeden tekrar denemek rate limit'e girmiş bir API'de aynı 429'u
-    // getirir; kısa bekleme hem pencerenin dönmesine şans verir hem de
-    // fırtınayı büyütmez.
     await sleep(delayMs * round);
 
-    // Her deneme kendi upstream ve istek içi cache bağlamında çalışır: ilk
-    // turun hataları ikinci turun kararını kirletmesin ve memoize edilmiş
-    // boş cevaplar tekrar kullanılmasın.
     const retried = await withUpstreamTracking(() =>
       withRequestCache(() => attempt(controller, ctx)),
     );
 
     if ("page" in retried) return retried.page;
     if (!retried.transient.length) {
-      // Bu kez upstream sağlam cevap verdi ve "yok" dedi: gerçek 404.
       return { html: await renderNotFound(), status: 404 };
     }
 
     failures = retried.transient;
   }
 
-  // Denemeler tükendi. 404 yerine 503: önbelleğe girmez, `Retry-After` taşır
-  // ve bir sonraki istek gerçek içeriği üretebilir.
   const outageDetail =
     `could not be produced, upstream is still failing ` +
     `(${summarizeFailures(failures)}), serving an uncached 503 instead of a 404`;
@@ -830,11 +942,10 @@ async function produce(controller, ctx) {
 const RETRY_AFTER_SECONDS = 30;
 
 /**
- * Tekrar denemenin maliyeti upstream'e binen ikinci bir istek turu; bu yüzden
- * varsayılan tek deneme ve kısa bekleme. Rate limit fırtınasında toplam yük
- * iki katına çıkabilir, ama alternatifi var olan sayfaları 404'e düşürmek.
+ * Varsayılan: arka plan retry + hemen 503 (TTFB'yi sleep ile şişirmez).
+ * `background: false` → eski senkron döngü.
  *
- * @returns {{ attempts: number, delayMs: number }}
+ * @returns {{ attempts: number, delayMs: number, background: boolean }}
  */
 function transientRetry() {
   const raw = /** @type {any} */ (getConfig().transientRetry ?? {});
@@ -844,6 +955,7 @@ function transientRetry() {
   return {
     attempts: Number.isFinite(attempts) && attempts >= 0 ? Math.floor(attempts) : 1,
     delayMs: Number.isFinite(delayMs) && delayMs >= 0 ? delayMs : 300,
+    background: raw.background !== false,
   };
 }
 
