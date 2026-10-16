@@ -324,28 +324,57 @@ export function toKebab(name) {
  * build yokken 404 link'i istememek için. `.jsk` ifade dilinde `asset()` /
  * `hasAsset()` çağrılamadığı için layout bu etiketi kullanır.
  *
- * @param {{ styles?: string[] }} [props]
+ * `blocking` varsayılan `true`: `<link rel="stylesheet">` boyamayı bekletir.
+ * Ölçümde bu, sheet geç gelince oluşan CLS'ten daha ucuz. `false` yalnızca
+ * açık boolean'dır (`:blocking="false"`); atlamak veya `true` aynı çıktıyı
+ * verir.
+ *
+ * @param {{ styles?: string[], blocking?: boolean }} [props]
  * @returns {string}
  */
 export function stylesheets(props = {}) {
   const styles = Array.isArray(props.styles) ? props.styles : [];
+  const blocking = props.blocking !== false;
   /** @type {string[]} */
   const parts = [];
 
-  if (hasAsset("app.css")) {
-    parts.push(
-      `<link rel="stylesheet" href="${esc(asset("app.css"))}" data-jskelet-css="app.css">`,
-    );
-  }
+  pushStylesheet(parts, "app.css", blocking);
 
   for (const sheet of styles) {
-    if (!sheet || !hasAsset(sheet)) continue;
-    parts.push(
-      `<link rel="stylesheet" href="${esc(asset(sheet))}" data-jskelet-css="${esc(sheet)}">`,
-    );
+    if (!sheet) continue;
+    pushStylesheet(parts, sheet, blocking);
   }
 
   return parts.join("\n    ");
+}
+
+/**
+ * Tek bir manifest anahtarı için stylesheet linki.
+ *
+ * `blocking: false` iken `media="print"`: eşleşmeyen media tarayıcıda
+ * render-blocking sayılmaz, indirme boyamayı bekletmez. `onload` sheet
+ * inince `media`'yı `all` yapar. JS kapalıyken `onload` çalışmaz ve link
+ * print'te kalır; `<noscript>` içindeki normal link o yolu kapatır.
+ *
+ * @param {string[]} parts
+ * @param {string} name Manifest anahtarı (`app.css`, `home.css`, …)
+ * @param {boolean} blocking
+ */
+function pushStylesheet(parts, name, blocking) {
+  if (!hasAsset(name)) return;
+
+  const href = esc(asset(name));
+  const id = esc(name);
+  if (blocking) {
+    parts.push(
+      `<link rel="stylesheet" href="${href}" data-jskelet-css="${id}">`,
+    );
+    return;
+  }
+
+  parts.push(
+    `<link rel="stylesheet" href="${href}" media="print" onload="this.media='all'" data-jskelet-css="${id}">\n    <noscript><link rel="stylesheet" href="${href}" data-jskelet-css="${id}"></noscript>`,
+  );
 }
 
 /**

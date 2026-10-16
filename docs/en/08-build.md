@@ -145,9 +145,11 @@ The pipeline: PostCSS + `@tailwindcss/postcss` → minification with lightningcs
   noticeably.
 - **lightningcss is optional:** without it, Tailwind's own output is used, and it
   is only a few kB bigger.
-- The global output is `app.css` and the layout loads it render-blocking on every
-  page. The measurement-based reasoning for not producing a separate "critical
-  CSS" is in [02-architecture.md](./02-architecture.md).
+- The global output is `app.css` and the layout loads it render-blocking on
+  every page by default. `<Stylesheets :blocking="false" />` turns that wait
+  off ([04-rendering.md](./04-rendering.md)). The measurement-based reasoning
+  for not producing a separate "critical CSS" is in
+  [02-architecture.md](./02-architecture.md).
 
 ### Page stylesheets (`styles/pages/`)
 
@@ -170,7 +172,8 @@ Page CSS is for page-specific rules. Keep Tailwind utilities in the global
 sheet — a full `@import "tailwindcss"` in a page file duplicates utility output.
 
 After `app.css`, the layout emits a `<link data-jskelet-css="…">` for each name
-in `styles`; if `hasAsset` is false the tag is omitted.
+in `styles`; if `hasAsset` is false the tag is omitted. `blocking: false`
+adds `media="print"` and `onload` to those same links.
 
 ### `@source` directives are mandatory
 

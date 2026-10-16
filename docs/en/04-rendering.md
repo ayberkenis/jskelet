@@ -180,10 +180,14 @@ Points to watch:
 
 - **`extraHead` comes first.** Delaying resource hints (`preconnect`, LCP
   `preload`) writes straight into LCP.
-- **`<Stylesheets />` emits global `app.css` (render-blocking)** plus controller
-  `styles: [...]`, with the reasoning in
-  [02-architecture.md](./02-architecture.md). If the build has not run,
-  `hasAsset` is false inside the tag and nothing is emitted.
+- **`<Stylesheets />` emits global `app.css` render-blocking by default**,
+  plus controller `styles: [...]`, with the reasoning in
+  [02-architecture.md](./02-architecture.md).
+  `<Stylesheets :blocking="false" />` (`stylesheets({ blocking: false })`)
+  emits the links with `media="print"` plus `onload`, and a `<noscript>`
+  fallback when JS is off. Painting is not held, and the layout can shift
+  when the sheet arrives. If the build has not run, `hasAsset` is false
+  inside the tag and nothing is emitted.
 - **`<BodyScripts />` emits `main.js`, page `entries`, and the
   development-only overlay.** The overlay script exists only when
   `NODE_ENV=development`; it is absent from production output.
@@ -435,6 +439,34 @@ icon({ name: "ArrowRight", weight: "bold", size: 20, class: "text-slate-500" });
   **statically** in the source; if a call whose name is computed at runtime
   points at a missing symbol, the screen is silently left blank
   ([08-build.md](./08-build.md)).
+
+### `stylesheets(props)`
+
+Global `app.css` and the controller `styles` list for the layout `<head>`.
+The built-in tag is the usual call site:
+
+```jsk
+<Stylesheets :styles="styles" />
+<Stylesheets :styles="styles" :blocking="false" />
+```
+
+```js
+stylesheets({ styles: ["home.css"] });
+stylesheets({ styles: ["home.css"], blocking: false });
+```
+
+- `styles` are manifest keys (`"home.css"` → `styles/pages/home.css`). Names
+  for which `hasAsset` is false are omitted.
+- `blocking` defaults to `true`:
+  `<link rel="stylesheet" data-jskelet-css="…">`. Only the boolean `false`
+  turns waiting off. The output is `media="print"` and
+  `onload="this.media='all'"`; a non-matching media does not hold painting.
+  A second link inside `<noscript>` keeps styles from staying on `print`
+  when JS is off. Under a CSP that blocks inline handlers (no
+  `'unsafe-inline'` in `script-src`, and no `script-src-attr`) the sheet
+  stays on `print`.
+- `data-jskelet-css` is how dev hot-swap picks the right link; it is written
+  in both modes.
 
 ### `preloadImage(props)`
 

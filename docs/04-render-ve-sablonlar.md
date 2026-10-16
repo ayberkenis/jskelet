@@ -113,7 +113,7 @@ script ve JSON-LD döngüleri için yerleşikler:
 
 | Etiket | Props | Çıktı |
 | --- | --- | --- |
-| `Stylesheets` | `styles` | `app.css` + sayfa sheet’leri (`data-jskelet-css`) |
+| `Stylesheets` | `styles`, `blocking` | `app.css` + sayfa sheet’leri (`data-jskelet-css`). `blocking` varsayılan `true` |
 | `BodyScripts` | `entries`, `devtools`, `devBasePath` | `main.js`, entry’ler, isteğe bağlı overlay |
 | `JsonLd` | `items` (`structuredData`) | `application/ld+json` script’leri |
 
@@ -181,9 +181,12 @@ Dikkat edilecek noktalar:
 
 - **`extraHead` en başta.** Kaynak ipuçlarını (`preconnect`, LCP `preload`)
   geciktirmek doğrudan LCP'ye yazılır.
-- **Global `app.css` render-blocking** ve gerekçesi
+- **Global `app.css` varsayılan olarak render-blocking** ve gerekçesi
   [02-mimari.md](./02-mimari.md)'de. Controller `styles: [...]` ile ek sayfa
-  sheet'leri de aynı şekilde basılır. Build çalışmadıysa `hasAsset` false olur
+  sheet'leri de aynı şekilde basılır. `<Stylesheets :blocking="false" />`
+  (`stylesheets({ blocking: false })`) linkleri `media="print"` + `onload`
+  ile basar; JS kapalıyken `<noscript>` yedeği uygulanır. Boyama beklenmez,
+  sheet gelince düzen kayabilir. Build çalışmadıysa `hasAsset` false olur
   ve etiket hiç basılmaz.
 - **`hasAsset` kontrolleri** build eksikken sayfanın 404 veren dosyaları
   istememesini sağlar (`Stylesheets` / `BodyScripts` içinde).
@@ -431,6 +434,32 @@ icon({ name: "ArrowRight", weight: "bold", size: 20, class: "text-slate-500" });
   basılır. Sprite yalnızca kaynakta **statik olarak** görülen adları içerir; adı
   çalışma anında hesaplanan bir çağrı eksik sembole işaret ederse ekranda
   sessizce boşluk kalır ([08-build.md](./08-build.md)).
+
+### `stylesheets(props)`
+
+Layout `<head>` içindeki global `app.css` ve controller `styles` dizisi.
+Doğrudan çağırmak yerine yerleşik etiket kullanılır:
+
+```jsk
+<Stylesheets :styles="styles" />
+<Stylesheets :styles="styles" :blocking="false" />
+```
+
+```js
+stylesheets({ styles: ["home.css"] });
+stylesheets({ styles: ["home.css"], blocking: false });
+```
+
+- `styles` manifest anahtarlarıdır (`"home.css"` → `styles/pages/home.css`).
+  `hasAsset` false olanlar basılmaz.
+- `blocking` varsayılan `true`: `<link rel="stylesheet" data-jskelet-css="…">`.
+  Yalnızca boolean `false` beklemeyi kapatır. Çıktı `media="print"` ve
+  `onload="this.media='all'"` olur; eşleşmeyen media boyamayı bekletmez.
+  `<noscript>` içindeki ikinci link, JS kapalıyken stillerin print'te
+  kalmamasını sağlar. Inline `onload` çalışmayan bir CSP'de (`script-src`
+  içinde `'unsafe-inline'` veya `script-src-attr` yok) sheet `print`'te kalır.
+- `data-jskelet-css` dev hot-swap'ın doğru linki seçmesi içindir; her iki
+  modda da yazılır.
 
 ### `preloadImage(props)`
 

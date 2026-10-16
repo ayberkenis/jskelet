@@ -102,11 +102,17 @@ export declare function toKebab(name: string): string;
  * build yokken 404 link'i istememek için. `.jsk` ifade dilinde `asset()` /
  * `hasAsset()` çağrılamadığı için layout bu etiketi kullanır.
  *
- * @param {{ styles?: string[] }} [props]
+ * `blocking` varsayılan `true`: `<link rel="stylesheet">` boyamayı bekletir.
+ * Ölçümde bu, sheet geç gelince oluşan CLS'ten daha ucuz. `false` yalnızca
+ * açık boolean'dır (`:blocking="false"`); atlamak veya `true` aynı çıktıyı
+ * verir.
+ *
+ * @param {{ styles?: string[], blocking?: boolean }} [props]
  * @returns {string}
  */
 export declare function stylesheets(props?: {
     styles?: string[];
+    blocking?: boolean;
 }): string;
 /**
  * Layout gövde sonu script'leri: `main.js`, controller `entries`, isteğe

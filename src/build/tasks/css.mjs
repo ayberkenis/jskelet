@@ -10,7 +10,8 @@
  * CLS 0.307) ve aynı ~27 KB her HTML yanıtında tekrar ediyordu. Sıkıştırılmış
  * global sheet'i render-blocking bırakmak hem daha hızlı hem CLS'siz; ikinci
  * ziyarette zaten immutable önbellekten geliyor. Sayfa sheet'leri de
- * render-blocking; yalnızca ilgili sayfada ek maliyet.
+ * varsayılan olarak render-blocking; yalnızca ilgili sayfada ek maliyet.
+ * Layout `stylesheets({ blocking: false })` ile bu beklemeyi kapatabilir.
  *
  * Tailwind utility'leri global sheet'te kalmalı. Sayfa CSS'inde tam
  * `@import "tailwindcss"` utility çıktısını tekrarlar; sayfaya özel kurallar

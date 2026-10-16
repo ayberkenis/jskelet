@@ -155,9 +155,17 @@ kapsamadığı için sheet gelince sayfa yeniden akıyordu (bir liste sayfasınd
 ziyarette zaten `immutable` önbellekten geliyor.
 
 Sayfaya özel kurallar için `styles/pages/*.css` + controller `styles: [...]`
-eklenebilir ([08-build.md](./08-build.md)); bunlar da render-blocking basılır
-ama yalnızca ilgili sayfada. Tailwind utility'leri global sheet'te kalır —
-sayfa sheet'inde tam `@import "tailwindcss"` utility çıktısını tekrarlar.
+eklenebilir ([08-build.md](./08-build.md)); bunlar da varsayılan olarak
+render-blocking basılır ama yalnızca ilgili sayfada. Tailwind utility'leri
+global sheet'te kalır — sayfa sheet'inde tam `@import "tailwindcss"` utility
+çıktısını tekrarlar.
+
+Erken boyama isteyen bir layout bu varsayılandan çıkabilir:
+`stylesheets({ blocking: false })` veya şablonda
+`<Stylesheets :blocking="false" />`. Link `media="print"` ile iner, `onload`
+onu `all` yapar; JS kapalıyken `<noscript>` içindeki normal link uygulanır.
+Bu, yukarıdaki CLS takasının tersidir: ilk boyama erken gelir, sheet gelince
+düzen kayabilir.
 
 Aynı mantık ikonlarda da var: her ikon için ayrı istek yerine, build zamanında
 yalnızca kaynakta kullanılan sembollerden bir SVG sprite üretilir. Tüm Phosphor

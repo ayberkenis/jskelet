@@ -73,6 +73,10 @@ one is listed under a **Breaking** heading.
 
 ### Added
 
+- `stylesheets({ blocking: false })` and `<Stylesheets :blocking="false" />`
+  emit each stylesheet with `media="print"` and an `onload` that switches it
+  to `all`, plus a `<noscript>` fallback, so the links do not block rendering.
+  The default stays render-blocking.
 - Dev tools **Server** tab can clear the HTML cache for the open page, every
   HTML entry, or the data cache. Live stats include HTML/data entry counts;
   new endpoints under `devBasePath`: `POST /cache/clear-html`,

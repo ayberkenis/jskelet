@@ -160,9 +160,16 @@ both faster and free of CLS; on the second visit it already comes from the
 
 Page-specific rules can use `styles/pages/*.css` plus controller
 `styles: [...]` ([08-build.md](./08-build.md)); those are also render-blocking
-but only on the pages that ask for them. Keep Tailwind utilities in the global
-sheet — a full `@import "tailwindcss"` in a page sheet duplicates utility
-output.
+by default, but only on the pages that ask for them. Keep Tailwind utilities
+in the global sheet — a full `@import "tailwindcss"` in a page sheet
+duplicates utility output.
+
+A layout that wants an earlier first paint can leave this default:
+`stylesheets({ blocking: false })`, or `<Stylesheets :blocking="false" />`
+in the template. The link downloads with `media="print"`, `onload` switches
+it to `all`, and a plain link inside `<noscript>` applies when JS is off.
+That is the reverse of the CLS tradeoff above: first paint arrives sooner,
+and the layout can shift when the sheet arrives.
 
 The same logic applies to icons: instead of a separate request per icon, an SVG
 sprite is produced at build time from only the symbols actually used in the

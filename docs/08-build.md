@@ -141,8 +141,10 @@ minifikasyon → `writeAsset("app.css", …)`.
   şekilde yavaşlatıyor.
 - **lightningcss opsiyoneldir:** yoksa Tailwind'in kendi çıktısı kullanılır,
   yalnızca birkaç kB daha büyük olur.
-- Global çıktı `app.css`'tir ve layout onu her sayfada render-blocking olarak
-  yükler. Ayrı bir "critical CSS" üretilmemesinin ölçüm gerekçesi
+- Global çıktı `app.css`'tir ve layout onu her sayfada varsayılan olarak
+  render-blocking yükler. `<Stylesheets :blocking="false" />` bu beklemeyi
+  kapatır ([04-render-ve-sablonlar.md](./04-render-ve-sablonlar.md)). Ayrı bir
+  "critical CSS" üretilmemesinin ölçüm gerekçesi
   [02-mimari.md](./02-mimari.md)'de.
 
 ### Sayfa stylesheet'leri (`styles/pages/`)
@@ -166,6 +168,7 @@ kalmalı — dosyada tam `@import "tailwindcss"` utility çıktısını tekrarla
 
 Layout `app.css`ten sonra `styles` dizisindeki her sheet için
 `<link data-jskelet-css="…">` basar; `hasAsset` false ise etiket yok.
+`blocking: false` aynı linklere `media="print"` ve `onload` ekler.
 
 ### `@source` direktifleri zorunludur
 
