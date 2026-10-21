@@ -960,15 +960,17 @@ kurulmadıysa ya da bağlanılamıyorsa uyarı basılır ve site bellek içi ön
 | `keyPrefix` | `string` | `"_jskelet"` | Anahtar düzeninin kökü |
 | `html` | `boolean` | `true` | HTML gövdeleri paylaşılsın mı |
 | `data` | `boolean` | `true` | `withDataCache` girdileri paylaşılsın mı |
-| `storeEncoded` | `boolean` | `true` | Brotli/gzip gövdeleri de paylaşılsın mı; girdi başına boyutu iki-üç katına çıkarır |
+| `storeEncoded` | `boolean` | `true` | Brotli/gzip gövdeleri ayrı `:enc:` anahtarına yazılsın mı |
 | `events` | `boolean` | `true` | pub/sub üzerinden invalidation yayını |
-| `commandTimeoutMs` | `number` | `200` | Tek bir komutun en fazla bekletebileceği süre |
+| `commandTimeoutMs` | `number` | `200` | Veri, yayın ve `SCAN` için tek komutun tavanı |
+| `htmlCommandTimeoutMs` | `number` | `2000` | Yalnızca HTML bağlantısının komut tavanı. Verilmezse 2000 |
 
-Anahtarlar `_jskelet:{namespace}:{buildId}:html:{yol}?{query}` biçiminde yaşar.
-`buildId` her build'de değişir, böylece deploy sonrası eski HTML kendiliğinden
-geçersiz olur. Kişiye özel (`storable: false`), `degraded` ve 200 dışındaki
-yanıtlar paylaşımlı kademeye hiç yazılmaz. Takaslar ve teşhis:
-[06-cache.md](./06-cache.md).
+Anahtarlar parçalıdır: `_jskelet:{namespace}:{buildId}:html:{yol}?{query}` küçük
+meta JSON'u, aynı anahtarın `:body` soneki HTML'in brotli baytını, `:enc:br`
+ve `:enc:gzip` ise yanıt kodlamasını tutar. `buildId` her build'de değişir,
+böylece deploy sonrası eski HTML kendiliğinden geçersiz olur. Kişiye özel
+(`storable: false`), `degraded` ve 200 dışındaki yanıtlar paylaşımlı kademeye
+hiç yazılmaz. Takaslar ve teşhis: [06-cache.md](./06-cache.md).
 
 ```js
 redis: {

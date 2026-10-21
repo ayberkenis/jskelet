@@ -5,8 +5,12 @@
  * davranışın hiç değişmemesi.
  */
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import zlib from "node:zlib";
 import { afterEach, test } from "node:test";
+import { loadConfig } from "../src/config/index.js";
 import {
   clearHtmlCache,
   getHtmlCacheEntries,
@@ -32,6 +36,31 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** `setRedisClientForTests` bu öneki kuruyor; anahtarları elle kurmak için. */
 const PREFIX = "_jskelet:default:test";
+
+/**
+ * Parçalı HTML kaydı: meta JSON + brotli gövde.
+ *
+ * @param {ReturnType<typeof createFakeRedis>} fake
+ * @param {string} key
+ * @param {string} html
+ * @param {Record<string, unknown>} [meta]
+ */
+function seedHtml(fake, key, html, meta = {}) {
+  const now = Date.now();
+  fake.store.set(
+    `${PREFIX}:html:${key}`,
+    JSON.stringify({
+      status: 200,
+      storedAt: now,
+      expiresAt: now + 60_000,
+      staleUntil: now + 120_000,
+      produceMs: 5,
+      deps: [],
+      ...meta,
+    }),
+  );
+  fake.store.set(`${PREFIX}:html:${key}:body`, zlib.brotliCompressSync(Buffer.from(html)));
+}
 
 /**
  * Bellek içi sahte istemci. Yalnızca bu katmanın kullandığı komutlar var.
@@ -71,6 +100,35 @@ function createFakeRedis() {
       const base = pattern.replace(/\*$/, "");
       return ["0", [...store.keys()].filter((key) => key.startsWith(base))];
     },
+    /**
+     * ioredis pipeline'ı: her komut `[hata, değer]` döner.
+     */
+    pipeline() {
+      /** @type {Promise<string | Buffer | null>[]} */
+      const jobs = [];
+      const api = {
+        /** @param {string} key */
+        get(key) {
+          jobs.push(Promise.resolve(store.has(key) ? store.get(key) ?? null : null));
+          return api;
+        },
+        /** @param {string} key */
+        getBuffer(key) {
+          const value = store.get(key);
+          jobs.push(
+            Promise.resolve(
+              value == null ? null : Buffer.isBuffer(value) ? value : Buffer.from(value),
+            ),
+          );
+          return api;
+        },
+        async exec() {
+          const values = await Promise.all(jobs);
+          return values.map((value) => [null, value]);
+        },
+      };
+      return api;
+    },
     /** @param {string} _channel @param {string} payload */
     async publish(_channel, payload) {
       published.push(JSON.parse(payload));
@@ -102,14 +160,18 @@ test("a cached page is written to the shared tier", async () => {
   await withHtmlCache("/a?", 60, async () => ({ html: "merhaba", status: 200 }));
 
   const raw = fake.store.get(`${PREFIX}:html:/a?`);
-  assert.ok(raw, "girdi paylaşımlı kademeye yazılmalı");
-
-  const payload = JSON.parse(raw);
-  assert.equal(payload.html, "merhaba");
+  assert.equal(typeof raw, "string", "meta düz JSON kalmalı");
+  const payload = JSON.parse(/** @type {string} */ (raw));
+  assert.equal(payload.html, undefined, "gövde meta'nın içinde durmamalı");
   assert.equal(payload.status, 200);
   assert.deepEqual(payload.deps, []);
   assert.ok(payload.expiresAt > Date.now(), "mutlak zamanlar taşınmalı");
   assert.ok(payload.staleUntil > payload.expiresAt);
+
+  const html = zlib
+    .brotliDecompressSync(/** @type {Buffer} */ (fake.store.get(`${PREFIX}:html:/a?:body`)))
+    .toString("utf8");
+  assert.equal(html, "merhaba");
 });
 
 test("a page larger than 1 KB is stored as brotli and still promotes", async () => {
@@ -119,21 +181,13 @@ test("a page larger than 1 KB is stored as brotli and still promotes", async () 
   const html = `<p>${"merhaba ".repeat(400)}</p>`;
   await withHtmlCache("/buyuk?", 60, async () => ({ html, status: 200 }));
 
-  const key = `${PREFIX}:html:/buyuk?`;
-  let raw = fake.store.get(key);
-  for (let i = 0; raw === undefined && i < 50; i += 1) {
-    await sleep(10);
-    raw = fake.store.get(key);
-  }
-
-  assert.ok(Buffer.isBuffer(raw));
-  assert.equal(raw[0], 0x4a);
-  assert.equal(raw[1], 0x53);
-  assert.equal(raw[2], 0x4b);
-  assert.equal(raw[3], 0x01);
-  const payload = JSON.parse(zlib.brotliDecompressSync(raw.subarray(4)).toString("utf8"));
-  assert.equal(payload.html, html);
-  assert.ok(raw.length < Buffer.byteLength(JSON.stringify(payload)));
+  const meta = fake.store.get(`${PREFIX}:html:/buyuk?`);
+  const body = fake.store.get(`${PREFIX}:html:/buyuk?:body`);
+  assert.equal(typeof meta, "string");
+  assert.equal(JSON.parse(/** @type {string} */ (meta)).html, undefined);
+  assert.ok(Buffer.isBuffer(body));
+  assert.equal(zlib.brotliDecompressSync(body).toString("utf8"), html);
+  assert.ok(body.length < Buffer.byteLength(html));
 
   setRedisClientForTests(null);
   clearHtmlCache();
@@ -151,23 +205,28 @@ test("compressed bodies stay local when storeEncoded is off", async () => {
 
   await withHtmlCache("/a?", 60, async () => ({ html: "x", status: 200 }));
 
-  const payload = JSON.parse(fake.store.get(`${PREFIX}:html:/a?`));
-  assert.equal(payload.encoded, undefined, "kapalıyken paylaşılmamalı");
+  const payload = JSON.parse(/** @type {string} */ (fake.store.get(`${PREFIX}:html:/a?`)));
+  assert.equal(payload.encoded, undefined, "kapalıyken meta'ya girmemeli");
+  assert.equal(fake.store.has(`${PREFIX}:html:/a?:enc:br`), false);
+  assert.ok(fake.store.has(`${PREFIX}:html:/a?:body`), "gövde yine yazılmalı");
 });
 
 test("storeEncoded shares the compressed body on write", async () => {
   const fake = createFakeRedis();
   setRedisClientForTests(fake, { storeEncoded: true });
 
-  // Yazma preencode'u await eder; br L2 payload'ında olur.
+  // Yazma preencode'u await eder; br ayrı anahtara ham bayt olarak gider.
   await withHtmlCache("/a?", 60, async () => ({ html: "hello-html", status: 200 }));
 
-  const payload = JSON.parse(fake.store.get(`${PREFIX}:html:/a?`));
-  assert.ok(payload.encoded?.br, "br paylaşılmalı");
-  assert.ok(
-    Buffer.from(payload.encoded.br, "base64").length > 0,
-    "br gövdesi boş olmamalı",
-  );
+  const payload = JSON.parse(/** @type {string} */ (fake.store.get(`${PREFIX}:html:/a?`)));
+  assert.equal(payload.encoded, undefined, "base64 meta'nın içinde durmamalı");
+  const enc = fake.store.get(`${PREFIX}:html:/a?:enc:br`);
+  const body = fake.store.get(`${PREFIX}:html:/a?:body`);
+  assert.ok(Buffer.isBuffer(enc));
+  assert.ok(Buffer.isBuffer(body));
+  assert.ok(enc.length > 0, "br gövdesi boş olmamalı");
+  assert.equal(zlib.brotliDecompressSync(enc).toString("utf8"), "hello-html");
+  assert.deepEqual(body, enc, "gövde ikinci kez sıkıştırılmamalı");
 });
 
 test("results that must not be cached never reach the shared tier", async () => {
@@ -221,23 +280,17 @@ test("a stale shared entry is ignored so the refresh can run", async () => {
 
   const now = Date.now();
   // Bayat bir kopyayı promote etmek tazelemeyi sonsuza kadar ertelerdi.
-  fake.store.set(
-    `${PREFIX}:html:/a?`,
-    JSON.stringify({
-      html: "bayat",
-      status: 200,
-      storedAt: now - 10_000,
-      expiresAt: now - 5_000,
-      staleUntil: now + 60_000,
-      deps: [],
-    }),
-  );
+  seedHtml(fake, "/a?", "bayat", {
+    storedAt: now - 10_000,
+    expiresAt: now - 5_000,
+    staleUntil: now + 60_000,
+  });
 
   const hit = await withHtmlCache("/a?", 60, async () => ({ html: "taze", status: 200 }));
   assert.equal(hit.html, "taze");
 });
 
-test("a promoted entry keeps its dependencies", async () => {
+test("a shared record without a body is a miss", async () => {
   const fake = createFakeRedis();
   setRedisClientForTests(fake);
 
@@ -245,14 +298,24 @@ test("a promoted entry keeps its dependencies", async () => {
   fake.store.set(
     `${PREFIX}:html:/a?`,
     JSON.stringify({
-      html: "uzak",
       status: 200,
       storedAt: now,
       expiresAt: now + 60_000,
       staleUntil: now + 120_000,
-      deps: ["haber:1"],
+      produceMs: 1,
+      deps: [],
     }),
   );
+
+  const hit = await withHtmlCache("/a?", 60, async () => ({ html: "yerel", status: 200 }));
+  assert.equal(hit.html, "yerel");
+});
+
+test("a promoted entry keeps its dependencies", async () => {
+  const fake = createFakeRedis();
+  setRedisClientForTests(fake);
+
+  seedHtml(fake, "/a?", "uzak", { deps: ["haber:1"] });
 
   await withHtmlCache("/a?", 60, async () => ({ html: "yerel", status: 200 }));
   assert.equal(getHtmlCacheEntries()[0].deps, 1, "ters indeks yeniden kurulmalı");
@@ -300,7 +363,10 @@ test("invalidation is announced and the shared copy is dropped", async () => {
   assert.ok(event.originId, "kendi mesajını elemek için kimlik taşınmalı");
 
   assert.equal(fake.store.has(`${PREFIX}:html:/haber/a?`), false);
+  assert.equal(fake.store.has(`${PREFIX}:html:/haber/a?:body`), false);
+  assert.equal(fake.store.has(`${PREFIX}:html:/haber/a?:enc:br`), false);
   assert.ok(fake.store.has(`${PREFIX}:html:/hakkinda?`), "eşleşmeyen yol kalmalı");
+  assert.ok(fake.store.has(`${PREFIX}:html:/hakkinda?:body`));
 });
 
 test("regexp targets survive the round trip", async () => {
@@ -401,14 +467,60 @@ test("the circuit breaker stops hammering a dead redis", async () => {
   setRedisClientForTests(createBrokenRedis());
 
   // Devre kesici beş art arda hatadan sonra kapanır; sonraki çağrılar Redis'e
-  // hiç gitmez ve `getRedisStatus()` bunu bildirir.
+  // hiç gitmez ve `getRedisStatus()` bunu bildirir. Sayaç veri komutlarınındır.
+  for (let i = 0; i < 6; i += 1) {
+    await withDataCache(`k${i}`, 60, async () => i);
+  }
+
+  const status = getRedisStatus();
+  assert.equal(status.bypassed, true);
+  assert.equal(status.htmlBypassed, false);
+  assert.ok(status.errors >= 5);
+});
+
+test("html timeouts do not bypass the data cache", async () => {
+  let htmlOps = 0;
+  const boom = async () => {
+    htmlOps += 1;
+    throw new Error("Command timed out");
+  };
+  const html = {
+    getBuffer: boom,
+    set: boom,
+    pipeline() {
+      /** @type {Promise<unknown>[]} */
+      const jobs = [];
+      const api = {
+        getBuffer() {
+          jobs.push(boom());
+          return api;
+        },
+        async exec() {
+          const values = await Promise.all(jobs);
+          return values.map((value) => [null, value]);
+        },
+      };
+      return api;
+    },
+  };
+  const data = createFakeRedis();
+  setRedisClientForTests(data, {}, html);
+
   for (let i = 0; i < 6; i += 1) {
     await withHtmlCache(`/a${i}?`, 60, async () => ({ html: "x", status: 200 }));
   }
 
   const status = getRedisStatus();
-  assert.equal(status.bypassed, true);
-  assert.ok(status.errors >= 5);
+  assert.equal(status.bypassed, false, "veri katmanı açık kalmalı");
+  assert.equal(status.htmlBypassed, true);
+  assert.equal(status.errors, 0);
+
+  const opsAtBypass = htmlOps;
+  await withHtmlCache("/sonra?", 60, async () => ({ html: "y", status: 200 }));
+  assert.equal(htmlOps, opsAtBypass, "html baypası yeni komut göndermemeli");
+
+  await withDataCache("haber:1", 60, async () => ({ baslik: "uzak" }));
+  assert.ok(data.store.has(`${PREFIX}:data:haber:1`), "veri SET'i HTML baypasında da gitmeli");
 });
 
 test("the status is safe to read with no connection", () => {
@@ -432,6 +544,8 @@ test("the connection details never carry the password", () => {
   assert.equal(details.secure, true);
   assert.equal(details.db, "3");
   assert.equal(details.namespace, "haber");
+  assert.equal(details.commandTimeoutMs, 200);
+  assert.equal(details.htmlCommandTimeoutMs, 2000);
   assert.ok(
     !JSON.stringify(details).includes("s3cret"),
     "sır teşhis çıktısına girmemeli",
@@ -469,4 +583,27 @@ test("inspecting without a connection reports failure instead of throwing", asyn
     usedMemory: null,
     totalKeys: null,
   });
+});
+
+test("htmlCommandTimeoutMs defaults to 2000 when the app omits it", async () => {
+  /** @param {string} body */
+  const load = async (body) => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "jskelet-redis-"));
+    fs.writeFileSync(
+      path.join(root, "jskelet.config.mjs"),
+      `export default { cache() { return { redis: { ${body} } }; } };\n`,
+    );
+    return loadConfig({ root, force: true });
+  };
+
+  const loaded = await load("enabled: false");
+  assert.equal(loaded.redis.commandTimeoutMs, 200);
+  assert.equal(loaded.redis.htmlCommandTimeoutMs, 2000);
+
+  const custom = await load("enabled: false, commandTimeoutMs: 50, htmlCommandTimeoutMs: 1500");
+  assert.equal(custom.redis.commandTimeoutMs, 50);
+  assert.equal(custom.redis.htmlCommandTimeoutMs, 1500);
+
+  const broken = await load("enabled: false, htmlCommandTimeoutMs: 0");
+  assert.equal(broken.redis.htmlCommandTimeoutMs, 2000);
 });

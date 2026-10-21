@@ -979,12 +979,15 @@ the site keeps running on the in-process cache.
 | `keyPrefix` | `string` | `"_jskelet"` | Root of the key layout |
 | `html` | `boolean` | `true` | Whether HTML bodies are shared |
 | `data` | `boolean` | `true` | Whether `withDataCache` entries are shared |
-| `storeEncoded` | `boolean` | `true` | Whether brotli/gzip bodies are shared too; doubles or triples the size per entry |
+| `storeEncoded` | `boolean` | `true` | Whether brotli/gzip bodies are written to their own `:enc:` keys |
 | `events` | `boolean` | `true` | Invalidation broadcast over pub/sub |
-| `commandTimeoutMs` | `number` | `200` | At most how long a single command may block |
+| `commandTimeoutMs` | `number` | `200` | Per-command ceiling for data, publish, and `SCAN` |
+| `htmlCommandTimeoutMs` | `number` | `2000` | Per-command ceiling for the HTML connection only. `2000` when omitted |
 
-Keys live as `_jskelet:{namespace}:{buildId}:html:{path}?{query}`. `buildId`
-changes with every build, so old HTML becomes invalid on its own after a deploy.
+Keys are split: `_jskelet:{namespace}:{buildId}:html:{path}?{query}` is the
+small meta JSON, the `:body` suffix is the brotli bytes of the HTML, and
+`:enc:br` / `:enc:gzip` hold the response encoding. `buildId` changes with
+every build, so old HTML becomes invalid on its own after a deploy.
 Personalised (`storable: false`), `degraded` and non-200 responses are never
 written to the shared tier. Trade-offs and diagnosis:
 [06-caching.md](./06-caching.md).

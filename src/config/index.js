@@ -95,7 +95,8 @@ const CONFIG_FILE = "jskelet.config.mjs";
  * @property {boolean} data Veri önbelleği paylaşılsın mı.
  * @property {boolean} storeEncoded Sıkıştırılmış gövdeler de paylaşılsın mı.
  * @property {boolean} events pub/sub invalidation yayını.
- * @property {number} commandTimeoutMs
+ * @property {number} commandTimeoutMs Veri, yayın ve SCAN tavanı.
+ * @property {number} htmlCommandTimeoutMs Yalnızca HTML bağlantısının tavanı.
  */
 
 /**
@@ -340,6 +341,7 @@ function normalizePriority(raw) {
 function normalizeRedis(raw) {
   const source = /** @type {Record<string, any>} */ (raw ?? {});
   const timeout = Number(source.commandTimeoutMs);
+  const htmlTimeout = Number(source.htmlCommandTimeoutMs);
 
   return {
     enabled: source.enabled === true,
@@ -354,6 +356,10 @@ function normalizeRedis(raw) {
       Number.isFinite(timeout) && timeout > 0
         ? Math.floor(timeout)
         : DEFAULT_REDIS.commandTimeoutMs,
+    htmlCommandTimeoutMs:
+      Number.isFinite(htmlTimeout) && htmlTimeout > 0
+        ? Math.floor(htmlTimeout)
+        : DEFAULT_REDIS.htmlCommandTimeoutMs,
   };
 }
 

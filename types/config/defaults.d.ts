@@ -260,11 +260,19 @@ export declare const DEFAULT_REDIS: {
     /** pub/sub üzerinden invalidation yayını. */
     events: boolean;
     /**
-     * Tek bir komutun en fazla bekletebileceği süre. Önbellek okuması isteği
+     * Veri, yayın ve SCAN için tek komut tavanı. Önbellek okuması isteği
      * bloklayan bir adım: Redis takıldığında render'a düşmek, ağı beklemekten
-     * iyidir.
+     * iyidir. HTML gövdesi bu süreye sığmaz; o bağlantının tavanı
+     * `htmlCommandTimeoutMs`.
      */
     commandTimeoutMs: number;
+    /**
+     * Yalnızca HTML bağlantısı. ioredis `commandTimeout` istemci genelinde
+     * olduğu için gövde ayrı bağlantıda durur. Verilmezse 2000: uygulama
+     * config'i değiştirmek zorunda kalmasın. Parçalı yazma normalde bunun
+     * altında biter; tavan, gövde beklenmedik büyürse diye durur.
+     */
+    htmlCommandTimeoutMs: number;
 };
 /**
  * Kalıcı log sink'leri (dosya + S3).

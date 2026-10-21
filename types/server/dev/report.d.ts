@@ -210,6 +210,8 @@ export declare function buildReport(devtools: {
             buildId: string;
             errors: number;
             bypassed: boolean;
+            htmlErrors: number;
+            htmlBypassed: boolean;
         };
     };
     upstream: {

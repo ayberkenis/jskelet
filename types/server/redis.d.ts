@@ -49,6 +49,40 @@ export declare function redisSharesEncoded(): boolean;
  */
 export declare function cacheKey(kind: "html" | "data", key: string): string;
 /**
+ * HTML kaydını parçalı yazar. Meta küçük JSON'dur; gövde ham brotli baytıdır
+ * (base64 yok, JSON içinde ikinci brotli yok). `encoded` varsa her kodlama
+ * `:enc:` anahtarına olduğu gibi gider.
+ *
+ * Ateşle-unut ve tek sayaç adımı: üç SET'ten biri düşerse bu bir hatadır,
+ * veri devre kesicisine yazılmaz.
+ *
+ * @param {string} key Önbellek anahtarı (`yol?query`), öneksiz.
+ * @param {Record<string, unknown>} meta
+ * @param {Buffer} body
+ * @param {Map<string, Buffer> | null} encoded
+ * @param {number} ttlMs
+ */
+export declare function redisShareHtml(key: string, meta: Record<string, unknown>, body: Buffer, encoded: Map<string, Buffer> | null, ttlMs: number): void;
+/**
+ * Meta + gövde (+ açıksa kodlamalar) tek pipeline. Parça eksikse kayıt yok
+ * sayılır; bu bir hata değildir. Bağlantı hatası HTML sayacına yazılır.
+ *
+ * @param {string} key Önbellek anahtarı (`yol?query`), öneksiz.
+ * @returns {Promise<{ html: string, status: unknown, storedAt: unknown,
+ *   expiresAt: unknown, staleUntil: unknown, produceMs: unknown, deps: unknown,
+ *   encoded: Map<string, Buffer> } | null>}
+ */
+export declare function redisGetHtml(key: string): Promise<{
+    html: string;
+    status: unknown;
+    storedAt: unknown;
+    expiresAt: unknown;
+    staleUntil: unknown;
+    produceMs: unknown;
+    deps: unknown;
+    encoded: Map<string, Buffer>;
+} | null>;
+/**
  * @param {string} key
  * @returns {Promise<any | null>} Girdi yoksa, ayrıştırılamıyorsa ya da Redis
  *   hata verirse `null` — hepsi "miss" sayılır.
@@ -85,7 +119,8 @@ export declare function redisDropMatching(kind: "html" | "data", match?: (key: s
  * Dev raporu için durum özeti. Bağlantı yoksa da güvenle çağrılabilir.
  *
  * @returns {{ enabled: boolean, connected: boolean, keyPrefix: string,
- *   buildId: string, errors: number, bypassed: boolean }}
+ *   buildId: string, errors: number, bypassed: boolean, htmlErrors: number,
+ *   htmlBypassed: boolean }}
  */
 export declare function getRedisStatus(): {
     enabled: boolean;
@@ -94,6 +129,8 @@ export declare function getRedisStatus(): {
     buildId: string;
     errors: number;
     bypassed: boolean;
+    htmlErrors: number;
+    htmlBypassed: boolean;
 };
 /**
  * Bağlantının **nereye** kurulduğu ve hangi ayarlarla çalıştığı.
@@ -106,7 +143,7 @@ export declare function getRedisStatus(): {
  * @returns {{ address: string, secure: boolean, db: string | null,
  *   namespace: string, keyPrefix: string, html: boolean, data: boolean,
  *   storeEncoded: boolean, events: boolean, commandTimeoutMs: number,
- *   subscribed: boolean }}
+ *   htmlCommandTimeoutMs: number, subscribed: boolean }}
  */
 export declare function getRedisDetails(): {
     address: string;
@@ -119,6 +156,7 @@ export declare function getRedisDetails(): {
     storeEncoded: boolean;
     events: boolean;
     commandTimeoutMs: number;
+    htmlCommandTimeoutMs: number;
     subscribed: boolean;
 };
 /**
@@ -152,8 +190,10 @@ export declare function disconnectRedis(): Promise<void>;
  *
  * @param {any} fake `null` → katman kapatılır.
  * @param {Partial<RedisConfig>} [overrides]
+ * @param {any} [htmlFake] Verilmezse `fake` hem veri hem HTML istemcisidir.
+ *   HTML zaman aşımını veri sayacından ayırmak için ayrı bir sahte verilir.
  */
-export declare function setRedisClientForTests(fake: any, overrides?: Partial<RedisConfig>): void;
+export declare function setRedisClientForTests(fake: any, overrides?: Partial<RedisConfig>, htmlFake?: any): void;
 /**
  * Testler için: abone kanalından gelmiş gibi olay besler. `originId`
  * verilmezse uzak bir node varsayılır; kendi kimliğini taşıyan bir yayını

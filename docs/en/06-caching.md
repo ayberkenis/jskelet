@@ -849,8 +849,10 @@ npm install ioredis
 
 If it is not installed, or Redis cannot be reached, a warning is printed and the
 site **keeps running on the in-process cache**. The same happens if Redis goes
-down while running: a circuit breaker bypasses the tier for five seconds after
-five consecutive failures, so requests do not each wait for a network timeout.
+down while running: data and HTML have separate circuit breakers. Five
+consecutive failures bypass that tier for five seconds, so requests do not each
+wait for a network timeout. An HTML timeout is not charged to the data counter,
+so a slow page does not shut the small data keys.
 
 ### What you get
 
@@ -870,6 +872,8 @@ five consecutive failures, so requests do not each wait for a network timeout.
 
 ```
 _jskelet:{namespace}:{buildId}:html:{vary|}{path}?{query}
+_jskelet:{namespace}:{buildId}:html:{vary|}{path}?{query}:body
+_jskelet:{namespace}:{buildId}:html:{vary|}{path}?{query}:enc:{br|gzip}
 _jskelet:{namespace}:{buildId}:data:{key}
 _jskelet:{namespace}:events
 ```
@@ -885,13 +889,25 @@ build has not been run the id is `dev`.
 deliberately does **not** carry `buildId`: during a deploy the old and the new
 version run side by side and a purge has to reach both.
 
-HTML and data entries of 1 KB or more are not stored as plain JSON. The shared
-tier receives a brotli body prefixed with `JSK\x01` (quality 5, text mode — the
-same settings as response compression). L1 still holds the decoded value;
-compression runs only when sharing after an L1 miss, and it does not delay the
-response. Smaller records stay plain JSON, and older plain JSON records are
-still read. zstd is not used: `node:zlib` gained it in 22.15, while the engine
-range is `>=22`.
+HTML is stored as three parts. The meta key is a small JSON document
+(`status`, `storedAt`, `expiresAt`, `staleUntil`, `produceMs`, `deps`) and does
+not contain the body. `:body` is the brotli bytes of the HTML: no base64, and
+those bytes are not compressed again inside JSON. When `storeEncoded` is on,
+the brotli or gzip body produced for the response is written as-is to
+`:enc:br` / `:enc:gzip`. A read pipelines meta and body; if either part is
+missing the record counts as absent and the page is rendered.
+
+Data entries of 1 KB or more are not stored as plain JSON. They are a brotli
+body prefixed with `JSK\x01` (quality 5, text mode — the same settings as
+response compression). Smaller data records stay plain JSON. HTML does not use
+that wrapper. zstd is not used: `node:zlib` gained it in 22.15, while the
+engine range is `>=22`.
+
+`commandTimeoutMs` (default 200) applies to data, publish, and `SCAN`. HTML
+reads and writes use a second connection; `htmlCommandTimeoutMs` (default
+2000) limits only that connection. ioredis applies `commandTimeout` to the
+whole client, so the two budgets cannot share one connection. When an
+application omits the field, the framework uses 2000.
 
 When Redis is off, or cannot connect, the same body is written under
 `.jskelet/cache/<buildId>/`. After a restart L1 is empty, but a fresh file
@@ -908,8 +924,9 @@ file too.
   tier: a leak would mean serving one user's HTML to the whole cluster.
   `degraded` renders and non-200 status codes are not shared either.
 - **Compressed bodies are shared by default.** `storeEncoded` (default `true`)
-  keeps a cold replica from paying brotli again on an L2 HIT; it doubles or
-  triples the size per entry. Set `storeEncoded: false` to keep L2 lean.
+  keeps a cold replica from paying brotli again on an L2 HIT. The body is
+  stored as raw bytes on an `:enc:{br|gzip}` key; it is not base64 inside the
+  meta JSON. Set `storeEncoded: false` to skip those keys.
 - **A soft invalidation deletes the Redis copy.** Staling in Redis would mean a
   read-modify-write round per key, and a webhook drops thousands of keys at
   once. The cost of deleting is one render on a replica that never saw that
@@ -936,9 +953,10 @@ app.get("/api/healthcheck", (req, res) => {
 ```
 
 Safe to call even with no connection. The returned object is
-`{ enabled, connected, keyPrefix, buildId, errors, bypassed }`; `bypassed` tells
-you the circuit breaker is open and `errors` is the total command failure count.
-The same summary is in the dev panel report
+`{ enabled, connected, keyPrefix, buildId, errors, bypassed, htmlErrors, htmlBypassed }`.
+`bypassed` means the data tier is in its bypass window and `htmlBypassed` means
+the HTML connection is. `errors` counts data-command failures and `htmlErrors`
+counts HTML-command failures. The same summary is in the dev panel report
 ([09-dev-tools.md](./09-dev-tools.md)).
 
 Two more diagnostic surfaces:
@@ -946,7 +964,7 @@ Two more diagnostic surfaces:
 | Call | What it tells you |
 | --- | --- |
 | `getRedisDetails()` | **Where** the connection points: address, TLS, database, `namespace`, which kinds are shared, whether the purge channel is subscribed. The password is never returned — a connection URL may carry one. |
-| `inspectRedis()` | What is actually in the shared tier: keys per kind, `DBSIZE` and `used_memory`. It runs a `SCAN`, so **never call it on the request path**; in the admin panel it sits behind its own button. |
+| `inspectRedis()` | What is actually in the shared tier: records per kind (HTML body and encoding fragments count as one page), `DBSIZE` and `used_memory`. It runs a `SCAN`, so **never call it on the request path**; in the admin panel it sits behind its own button. |
 
 The full list of settings: [07-configuration.md](./07-configuration.md).
 
@@ -1030,7 +1048,7 @@ export content.
 | Clear HTML cache | `clearHtmlCache()` |
 | Clear data cache (optional prefix) | `clearDataCache(prefix)` |
 | Drop shared keys | Scans and unlinks the `html` or `data` namespace in Redis |
-| Count keys in Redis | `inspectRedis()` — keys per kind, `DBSIZE` and `used_memory` |
+| Count keys in Redis | `inspectRedis()` — records per kind (HTML fragments count as one page), `DBSIZE` and `used_memory` |
 | Prewarm | `prewarm()` — the pass runs in the background, progress shows in the card |
 | Cloudflare purge (everything / URLs held here / prefix / host / tag) | `purgeCloudflare()` |
 | Change a Cloudflare setting or feature | Zone settings and Tiered Cache / Cache Reserve |

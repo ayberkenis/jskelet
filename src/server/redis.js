@@ -19,6 +19,7 @@
  * fırlatmaz; okuma `null`, yazma sessiz no-op'a döner.
  */
 import crypto from "node:crypto";
+import zlib from "node:zlib";
 import { DEFAULT_REDIS } from "../config/defaults.js";
 import { tryImportFromApp } from "../build/resolve-peer.mjs";
 import { getBuildId } from "./assets.js";
@@ -32,6 +33,14 @@ import { decodeCacheValueAsync, encodeCacheValue } from "./cache-blob.js";
 
 /** @type {any} */
 let client = null;
+/**
+ * HTML GET/SET. `commandTimeout` ioredis'te istemci genelinde: gövde yazması
+ * veri okumasının 200 ms tavanını paylaşırsa yavaş sayfa küçük anahtarları da
+ * bekletir. Ayrı bağlantı bu yüzden var.
+ *
+ * @type {any}
+ */
+let htmlClient = null;
 /** @type {any} */
 let subscriber = null;
 
@@ -53,22 +62,38 @@ const originId = crypto.randomUUID();
 const listeners = [];
 
 let errors = 0;
+let htmlErrors = 0;
 
 /**
  * Devre kesici. Redis düştüğünde her istek `commandTimeoutMs` beklemesin:
  * art arda gelen hatalardan sonra istemci bir süre baypas edilir. Süre
  * dolduğunda tek bir komut denenir ve başarılıysa sayaç sıfırlanır.
+ *
+ * HTML'in sayacı ayrı. Gövde zaman aşımı `consecutiveFailures`'a yazılmaz:
+ * beş yavaş sayfa, veri önbelleğini beş saniye kapatmasın.
  */
 let consecutiveFailures = 0;
 let bypassUntil = 0;
+let htmlConsecutiveFailures = 0;
+let htmlBypassUntil = 0;
 
 const MAX_FAILURES = 5;
 const BYPASS_MS = 5000;
+
+/** Yanıt için saklanan kodlamalar. Okuma bunları aynı pipeline'a koyar. */
+const HTML_RESPONSE_ENCODINGS = ["br", "gzip"];
 
 /** @returns {boolean} */
 function usable() {
   if (!client) return false;
   if (bypassUntil && Date.now() < bypassUntil) return false;
+  return true;
+}
+
+/** @returns {boolean} */
+function htmlUsable() {
+  if (!htmlClient) return false;
+  if (htmlBypassUntil && Date.now() < htmlBypassUntil) return false;
   return true;
 }
 
@@ -99,6 +124,36 @@ function noteFailure(action, error) {
 function noteSuccess() {
   consecutiveFailures = 0;
   bypassUntil = 0;
+}
+
+/**
+ * HTML bağlantısının hataları. Veri sayacına dokunmaz.
+ *
+ * @param {string} action
+ * @param {unknown} error
+ */
+function noteHtmlFailure(action, error) {
+  htmlErrors += 1;
+  htmlConsecutiveFailures += 1;
+
+  if (htmlConsecutiveFailures >= MAX_FAILURES && !htmlBypassUntil) {
+    htmlBypassUntil = Date.now() + BYPASS_MS;
+    console.warn(
+      `[redis] ${MAX_FAILURES} consecutive html failures — bypassing html for ${BYPASS_MS}ms`,
+    );
+  }
+
+  if (htmlConsecutiveFailures <= MAX_FAILURES) {
+    console.warn(
+      `[redis] html ${action} failed`,
+      error instanceof Error ? error.message : error,
+    );
+  }
+}
+
+function noteHtmlSuccess() {
+  htmlConsecutiveFailures = 0;
+  htmlBypassUntil = 0;
 }
 
 /**
@@ -135,6 +190,7 @@ export async function connectRedis(config) {
     // ayağa kalkmalı, sadece L2 devre dışı kalır.
     lazyConnect: true,
     // Tek bir komut isteği bloklayan adım; kuyrukta birikmesine izin verilmez.
+    // Bu tavan veri, yayın ve SCAN içindir. HTML ayrı bağlantıda.
     commandTimeout: redis.commandTimeoutMs,
     maxRetriesPerRequest: 1,
     enableOfflineQueue: false,
@@ -165,10 +221,50 @@ export async function connectRedis(config) {
   // sürüm yan yana koşuyor ve purge mesajı ikisine de ulaşmalı.
   channel = `${redis.keyPrefix}:${redis.namespace}:events`;
 
+  if (redis.html) await connectHtml(Redis, redis, options);
   if (redis.events) await subscribe(Redis, redis, options);
 
   console.log(`[redis] connected — keys under \`${prefix}:\``);
   return true;
+}
+
+/**
+ * HTML gövdesi için ayrı bağlantı. `duplicate` host, şifre ve db'yi kopyalar;
+ * `commandTimeout` ise bu istemciye özel kalır.
+ *
+ * Bağlanamazsa veri katmanı ayakta kalır — HTML L1'de durur.
+ *
+ * @param {Function} Redis
+ * @param {RedisConfig} redis
+ * @param {Record<string, unknown>} options
+ */
+async function connectHtml(Redis, redis, options) {
+  const htmlOptions = { ...options, commandTimeout: redis.htmlCommandTimeoutMs };
+
+  try {
+    htmlClient =
+      typeof client.duplicate === "function"
+        ? client.duplicate({ commandTimeout: redis.htmlCommandTimeoutMs })
+        : redis.url
+          ? new Redis(redis.url, htmlOptions)
+          : new Redis(htmlOptions);
+
+    htmlClient.on("error", (error) => noteHtmlFailure("connection", error));
+    if (htmlClient.status !== "ready" && htmlClient.status !== "connecting") {
+      await htmlClient.connect();
+    }
+  } catch (error) {
+    console.warn(
+      "[redis] html connection failed — HTML stays in-process:",
+      error instanceof Error ? error.message : error,
+    );
+    try {
+      htmlClient?.disconnect();
+    } catch {
+      // Zaten kopmuş olabilir.
+    }
+    htmlClient = null;
+  }
 }
 
 /**
@@ -264,7 +360,8 @@ export function publishCacheEvent(event) {
  * @returns {boolean}
  */
 export function redisShares(kind) {
-  return usable() && settings[kind] === true;
+  if (settings[kind] !== true) return false;
+  return kind === "html" ? htmlUsable() : usable();
 }
 
 /** @returns {boolean} */
@@ -279,6 +376,192 @@ export function redisSharesEncoded() {
  */
 export function cacheKey(kind, key) {
   return `${prefix}:${kind}:${key}`;
+}
+
+/**
+ * HTML kaydını parçalı yazar. Meta küçük JSON'dur; gövde ham brotli baytıdır
+ * (base64 yok, JSON içinde ikinci brotli yok). `encoded` varsa her kodlama
+ * `:enc:` anahtarına olduğu gibi gider.
+ *
+ * Ateşle-unut ve tek sayaç adımı: üç SET'ten biri düşerse bu bir hatadır,
+ * veri devre kesicisine yazılmaz.
+ *
+ * @param {string} key Önbellek anahtarı (`yol?query`), öneksiz.
+ * @param {Record<string, unknown>} meta
+ * @param {Buffer} body
+ * @param {Map<string, Buffer> | null} encoded
+ * @param {number} ttlMs
+ */
+export function redisShareHtml(key, meta, body, encoded, ttlMs) {
+  if (!htmlUsable() || !(ttlMs > 0)) return;
+
+  /** @type {string} */
+  let json;
+  try {
+    json = JSON.stringify(meta);
+  } catch (error) {
+    noteHtmlFailure("serialize", error);
+    return;
+  }
+
+  const base = cacheKey("html", key);
+  const px = Math.ceil(ttlMs);
+  /** @type {Promise<unknown>[]} */
+  const writes = [
+    htmlClient.set(base, json, "PX", px),
+    htmlClient.set(`${base}:body`, body, "PX", px),
+  ];
+
+  if (encoded) {
+    for (const [encoding, buffer] of encoded) {
+      if (!encoding || !Buffer.isBuffer(buffer) || !buffer.length) continue;
+      writes.push(htmlClient.set(`${base}:enc:${encoding}`, buffer, "PX", px));
+    }
+  }
+
+  Promise.all(writes)
+    .then(() => noteHtmlSuccess())
+    .catch((error) => noteHtmlFailure("set", error));
+}
+
+/**
+ * Meta + gövde (+ açıksa kodlamalar) tek pipeline. Parça eksikse kayıt yok
+ * sayılır; bu bir hata değildir. Bağlantı hatası HTML sayacına yazılır.
+ *
+ * @param {string} key Önbellek anahtarı (`yol?query`), öneksiz.
+ * @returns {Promise<{ html: string, status: unknown, storedAt: unknown,
+ *   expiresAt: unknown, staleUntil: unknown, produceMs: unknown, deps: unknown,
+ *   encoded: Map<string, Buffer> } | null>}
+ */
+export async function redisGetHtml(key) {
+  if (!htmlUsable()) return null;
+
+  const base = cacheKey("html", key);
+  /** @type {string[]} */
+  const keys = [base, `${base}:body`];
+  if (settings.storeEncoded === true) {
+    for (const encoding of HTML_RESPONSE_ENCODINGS) keys.push(`${base}:enc:${encoding}`);
+  }
+
+  try {
+    const values = await readHtmlBuffers(keys);
+    noteHtmlSuccess();
+
+    const metaRaw = values[0];
+    const bodyRaw = values[1];
+    if (metaRaw == null || bodyRaw == null) return null;
+
+    const metaText = asText(metaRaw);
+    if (!metaText) return null;
+    const meta = JSON.parse(metaText);
+    if (!meta || typeof meta !== "object") return null;
+
+    const html = await inflateBrotli(bodyRaw);
+    /** @type {Map<string, Buffer>} */
+    const encoded = new Map();
+    if (settings.storeEncoded === true) {
+      HTML_RESPONSE_ENCODINGS.forEach((encoding, index) => {
+        const buffer = asBuffer(values[2 + index]);
+        if (buffer?.length) encoded.set(encoding, buffer);
+      });
+    }
+
+    return {
+      status: meta.status,
+      storedAt: meta.storedAt,
+      expiresAt: meta.expiresAt,
+      staleUntil: meta.staleUntil,
+      produceMs: meta.produceMs,
+      deps: meta.deps,
+      html,
+      encoded,
+    };
+  } catch (error) {
+    noteHtmlFailure("get", error);
+    return null;
+  }
+}
+
+/**
+ * @param {string[]} keys
+ * @returns {Promise<(Buffer | string | null)[]>}
+ */
+async function readHtmlBuffers(keys) {
+  if (typeof htmlClient.pipeline === "function") {
+    const pipe = htmlClient.pipeline();
+    const getter = typeof pipe.getBuffer === "function" ? "getBuffer" : "get";
+    for (const key of keys) pipe[getter](key);
+    const rows = await pipe.exec();
+    if (!Array.isArray(rows)) return keys.map(() => null);
+    return rows.map((row) => {
+      if (!row) return null;
+      const [error, value] = row;
+      if (error) throw error;
+      return value ?? null;
+    });
+  }
+
+  const getter = typeof htmlClient.getBuffer === "function" ? "getBuffer" : "get";
+  return Promise.all(keys.map((key) => htmlClient[getter](key)));
+}
+
+/**
+ * @param {unknown} value
+ * @returns {string | null}
+ */
+function asText(value) {
+  if (typeof value === "string") return value;
+  if (Buffer.isBuffer(value)) return value.toString("utf8");
+  return null;
+}
+
+/**
+ * @param {unknown} value
+ * @returns {Buffer | null}
+ */
+function asBuffer(value) {
+  if (Buffer.isBuffer(value)) return value;
+  if (typeof value === "string") return Buffer.from(value);
+  return null;
+}
+
+/**
+ * `:body` JSK sarmalayıcısı taşımaz; tamamı brotli'dir.
+ *
+ * @param {unknown} raw
+ * @returns {Promise<string>}
+ */
+function inflateBrotli(raw) {
+  const body = asBuffer(raw);
+  if (!body?.length) return Promise.reject(new Error("empty html body"));
+
+  return new Promise((resolve, reject) => {
+    zlib.brotliDecompress(body, (error, out) => {
+      if (error) reject(error);
+      else resolve(out.toString("utf8"));
+    });
+  });
+}
+
+/**
+ * `:body` ve `:enc:*` sayfa kaydı değil, gövde parçasıdır.
+ *
+ * @param {string} key
+ * @returns {boolean}
+ */
+function isHtmlFragmentKey(key) {
+  return key.endsWith(":body") || key.endsWith(":enc:br") || key.endsWith(":enc:gzip");
+}
+
+/**
+ * @param {string} key
+ * @returns {boolean}
+ */
+function isHtmlMetaKey(key) {
+  // `data` anahtarı da `:html:` metnini taşıyabilir; tür segmenti önekten hemen
+  // sonra gelir. Parça anahtarları (`:body`, `:enc:`) ayrıca düşürülür.
+  if (!prefix || !key.startsWith(`${prefix}:html:`)) return false;
+  return !isHtmlFragmentKey(key);
 }
 
 /**
@@ -348,13 +631,41 @@ export function redisSetJson(key, value, ttlMs) {
  * @param {string[]} keys
  */
 export function redisDrop(keys) {
-  if (!usable() || !keys.length) return;
+  if (!keys.length) return;
 
+  /** @type {string[]} */
+  const dataKeys = [];
+  /** @type {string[]} */
+  const htmlKeys = [];
+
+  for (const key of keys) {
+    if (isHtmlMetaKey(key)) {
+      // Gövde ve kodlama anahtarları meta ile birlikte düşmezse 1 MB'lık
+      // parça TTL'e kadar kalır. Eksik anahtarda UNLINK no-op'tur.
+      htmlKeys.push(key, `${key}:body`, `${key}:enc:br`, `${key}:enc:gzip`);
+    } else if (!isHtmlFragmentKey(key)) {
+      dataKeys.push(key);
+    }
+  }
+
+  if (dataKeys.length && usable()) unlinkKeys(client, dataKeys, noteFailure, noteSuccess);
+  if (htmlKeys.length && htmlUsable()) {
+    unlinkKeys(htmlClient, htmlKeys, noteHtmlFailure, noteHtmlSuccess);
+  }
+}
+
+/**
+ * @param {any} connection
+ * @param {string[]} keys
+ * @param {(action: string, error: unknown) => void} fail
+ * @param {() => void} succeed
+ */
+function unlinkKeys(connection, keys, fail, succeed) {
   // `UNLINK` silmeyi arka plana atar: bir webhook binlerce anahtar
   // düşürdüğünde `DEL` sunucuyu bloklar.
-  Promise.resolve(client.unlink(...keys))
-    .then(noteSuccess)
-    .catch((error) => noteFailure("unlink", error));
+  Promise.resolve(connection.unlink(...keys))
+    .then(() => succeed())
+    .catch((error) => fail("unlink", error));
 }
 
 /**
@@ -409,7 +720,8 @@ export async function redisDropMatching(kind, match) {
  * Dev raporu için durum özeti. Bağlantı yoksa da güvenle çağrılabilir.
  *
  * @returns {{ enabled: boolean, connected: boolean, keyPrefix: string,
- *   buildId: string, errors: number, bypassed: boolean }}
+ *   buildId: string, errors: number, bypassed: boolean, htmlErrors: number,
+ *   htmlBypassed: boolean }}
  */
 export function getRedisStatus() {
   const [, , buildId = ""] = prefix ? prefix.split(":") : [];
@@ -421,6 +733,8 @@ export function getRedisStatus() {
     buildId,
     errors,
     bypassed: Boolean(bypassUntil && Date.now() < bypassUntil),
+    htmlErrors,
+    htmlBypassed: Boolean(htmlBypassUntil && Date.now() < htmlBypassUntil),
   };
 }
 
@@ -435,7 +749,7 @@ export function getRedisStatus() {
  * @returns {{ address: string, secure: boolean, db: string | null,
  *   namespace: string, keyPrefix: string, html: boolean, data: boolean,
  *   storeEncoded: boolean, events: boolean, commandTimeoutMs: number,
- *   subscribed: boolean }}
+ *   htmlCommandTimeoutMs: number, subscribed: boolean }}
  */
 export function getRedisDetails() {
   let address = "localhost:6379 (ioredis default)";
@@ -466,6 +780,7 @@ export function getRedisDetails() {
     storeEncoded: settings.storeEncoded === true,
     events: settings.events === true,
     commandTimeoutMs: settings.commandTimeoutMs,
+    htmlCommandTimeoutMs: settings.htmlCommandTimeoutMs,
     subscribed: Boolean(subscriber),
   };
 }
@@ -526,7 +841,7 @@ async function count(kind) {
       500,
     );
     cursor = next;
-    total += keys.length;
+    total += kind === "html" ? keys.filter((key) => !isHtmlFragmentKey(key)).length : keys.length;
   } while (cursor !== "0");
 
   return total;
@@ -539,8 +854,9 @@ async function count(kind) {
  * @returns {Promise<void>}
  */
 export async function disconnectRedis() {
-  const open = [subscriber, client].filter(Boolean);
+  const open = [...new Set([subscriber, htmlClient, client].filter(Boolean))];
   client = null;
+  htmlClient = null;
   subscriber = null;
 
   await Promise.all(
@@ -564,16 +880,22 @@ export async function disconnectRedis() {
  *
  * @param {any} fake `null` → katman kapatılır.
  * @param {Partial<RedisConfig>} [overrides]
+ * @param {any} [htmlFake] Verilmezse `fake` hem veri hem HTML istemcisidir.
+ *   HTML zaman aşımını veri sayacından ayırmak için ayrı bir sahte verilir.
  */
-export function setRedisClientForTests(fake, overrides = {}) {
+export function setRedisClientForTests(fake, overrides = {}, htmlFake = fake) {
   client = fake;
+  htmlClient = htmlFake;
   subscriber = null;
   settings = { ...DEFAULT_REDIS, enabled: Boolean(fake), ...overrides };
   prefix = fake ? `${settings.keyPrefix}:${settings.namespace}:test` : "";
   channel = `${settings.keyPrefix}:${settings.namespace}:events`;
   errors = 0;
+  htmlErrors = 0;
   consecutiveFailures = 0;
+  htmlConsecutiveFailures = 0;
   bypassUntil = 0;
+  htmlBypassUntil = 0;
 }
 
 /**

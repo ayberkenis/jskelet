@@ -556,8 +556,12 @@ function renderRedis(redis, state) {
         [t("redis.buildId"), redis.buildId || "dev"],
         [
           t("redis.sharesHtml"),
-          redis.html ? t("state.yes") : t("state.no"),
-          redis.html ? "on" : "off",
+          !redis.html
+            ? t("state.no")
+            : redis.htmlBypassed
+              ? t("state.bypassed")
+              : t("state.yes"),
+          redis.html && !redis.htmlBypassed ? "on" : "off",
         ],
         [
           t("redis.sharesData"),
@@ -579,7 +583,9 @@ function renderRedis(redis, state) {
           redis.events && redis.subscribed ? "on" : "off",
         ],
         [t("redis.timeout"), `${redis.commandTimeoutMs} ${t("unit.ms")}`],
+        [t("redis.htmlTimeout"), `${redis.htmlCommandTimeoutMs} ${t("unit.ms")}`],
         [t("redis.errors"), String(redis.errors), redis.errors ? "bad" : "on"],
+        [t("redis.htmlErrors"), String(redis.htmlErrors ?? 0), redis.htmlErrors ? "bad" : "on"],
       ]
     : [
         [t("redis.tier"), t("redis.tier.inProcess")],

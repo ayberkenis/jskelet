@@ -34,7 +34,14 @@ export type RedisConfig = {
      * pub/sub invalidation yayını.
      */
     events: boolean;
+    /**
+     * Veri, yayın ve SCAN tavanı.
+     */
     commandTimeoutMs: number;
+    /**
+     * Yalnızca HTML bağlantısının tavanı.
+     */
+    htmlCommandTimeoutMs: number;
 };
 export type LogKind = "http" | "event" | "error";
 export type LogsConfig = {

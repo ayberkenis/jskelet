@@ -831,9 +831,11 @@ npm install ioredis
 ```
 
 Kurulmadıysa ya da Redis'e bağlanılamıyorsa uyarı basılır ve site **bellek içi
-önbellekle çalışmaya devam eder**. Redis çalışırken düşerse aynı şey olur: bir
-devre kesici art arda beş hatadan sonra katmanı beş saniye baypas eder, böylece
-her istek ağ zaman aşımı beklemez.
+önbellekle çalışmaya devam eder**. Redis çalışırken düşerse aynı şey olur:
+veri ve HTML için ayrı devre kesiciler vardır. Art arda beş hata ilgili
+katmanı beş saniye baypas eder, böylece her istek ağ zaman aşımı beklemez.
+HTML zaman aşımı veri sayacına yazılmaz; yavaş bir sayfa küçük veri
+anahtarlarını kapatmaz.
 
 ### Ne kazanırsınız
 
@@ -852,6 +854,8 @@ her istek ağ zaman aşımı beklemez.
 
 ```
 _jskelet:{namespace}:{buildId}:html:{vary|}{yol}?{query}
+_jskelet:{namespace}:{buildId}:html:{vary|}{yol}?{query}:body
+_jskelet:{namespace}:{buildId}:html:{vary|}{yol}?{query}:enc:{br|gzip}
 _jskelet:{namespace}:{buildId}:data:{anahtar}
 _jskelet:{namespace}:events
 ```
@@ -867,12 +871,25 @@ anahtarlar TTL ile ölür — elle temizlik ya da `FLUSHDB` gerekmez. Build
 bilinçli olarak `buildId` **taşımaz**: deploy sırasında eski ve yeni sürüm yan
 yana koşuyor ve bir purge ikisine de ulaşmalı.
 
-1 KB ve üstü HTML ve veri girdileri düz JSON olarak durmaz: `JSK\x01` önekli
-brotli gövde yazılır (kalite 5, metin modu — yanıt sıkıştırmasıyla aynı ayar).
-L1 yine çözülmüş nesne tutar; sıkıştırma yalnızca L1 miss'ten sonraki
-paylaşımda, yanıtı bekletmeden çalışır. Daha küçük kayıtlar düz JSON kalır,
-eski düz JSON kayıtlar da okunur. zstd kullanılmaz: `node:zlib` içindeki zstd
-22.15'ten itibaren var, motor ise `>=22`.
+HTML üç parçaya yazılır. Meta anahtarı küçük bir JSON'dur (`status`,
+`storedAt`, `expiresAt`, `staleUntil`, `produceMs`, `deps`) ve gövde içermez.
+`:body` HTML'in brotli baytıdır; base64 yoktur ve bu bayt bir JSON'un içine
+ikinci kez sıkıştırılmaz. `storeEncoded` açıksa yanıt için üretilmiş brotli
+veya gzip gövdesi `:enc:br` / `:enc:gzip` anahtarına olduğu gibi yazılır.
+Okuma meta ile gövdeyi tek pipeline'da ister; parçalardan biri yoksa kayıt yok
+sayılır ve sayfa render edilir.
+
+Veri girdileri 1 KB ve üstünde düz JSON olarak durmaz: `JSK\x01` önekli brotli
+gövde yazılır (kalite 5, metin modu — yanıt sıkıştırmasıyla aynı ayar). Daha
+küçük veri kayıtları düz JSON kalır. HTML bu sarmalayıcıyı kullanmaz. zstd
+kullanılmaz: `node:zlib` içindeki zstd 22.15'ten itibaren var, motor ise
+`>=22`.
+
+`commandTimeoutMs` (varsayılan 200) veri, yayın ve `SCAN` komutlarına
+uygulanır. HTML okuma ve yazma ayrı bir bağlantıdadır; `htmlCommandTimeoutMs`
+(varsayılan 2000) yalnız o bağlantının komutlarını sınırlar. ioredis zaman
+aşımı istemci genelinde olduğu için iki süre tek bağlantıda ayrılamaz.
+Uygulama bu alanı vermezse framework 2000 kullanır.
 
 Redis kapalıyken (ya da bağlanamadığında) aynı gövde `.jskelet/cache/<buildId>/`
 altına dosya olarak yazılır. Süreç yeniden açılınca L1 boştur ama diskteki
@@ -889,8 +906,8 @@ bir sonraki yazışta siler. `clearHtmlCache()` ve invalidation dosyayı da dü�
   dışındaki durum kodları da paylaşılmaz.
 - **Sıkıştırılmış gövdeler varsayılan olarak paylaşılır.** `storeEncoded`
   (varsayılan `true`) soğuk replica'nın L2 HIT'te yeniden brotli ödemesini
-  önler; girdi başına boyutu iki-üç katına çıkarır. L2 boyutunu kısıtlamak
-  için `storeEncoded: false` verin.
+  önler. Gövde `:enc:{br|gzip}` anahtarına ham bayt olarak yazılır; meta
+  JSON'unun içine base64 girmez. Kapatmak için `storeEncoded: false` verin.
 - **Yumuşak invalidation Redis kopyasını siler.** Bayatlatmanın Redis karşılığı
   her anahtar için oku-değiştir-yaz turu demek ve bir webhook binlerce anahtarı
   birden düşürüyor. Silmenin bedeli, o yolu hiç görmemiş bir kopyanın bir kez
@@ -917,16 +934,18 @@ app.get("/api/healthcheck", (req, res) => {
 ```
 
 Bağlantı kurulmamışken de güvenle çağrılır. Dönen nesne
-`{ enabled, connected, keyPrefix, buildId, errors, bypassed }`; `bypassed` devre
-kesicinin açık olduğunu, `errors` toplam komut hatasını gösterir. Aynı özet dev
-panelinin raporunda da var ([09-dev-araclari.md](./09-dev-araclari.md)).
+`{ enabled, connected, keyPrefix, buildId, errors, bypassed, htmlErrors, htmlBypassed }`.
+`bypassed` veri katmanının, `htmlBypassed` HTML katmanının baypasta olduğunu
+gösterir. `errors` veri komutlarının, `htmlErrors` HTML komutlarının toplam
+hatasıdır. Aynı özet dev panelinin raporunda da var
+([09-dev-araclari.md](./09-dev-araclari.md)).
 
 İki teşhis yüzeyi daha var:
 
 | Çağrı | Ne der |
 | --- | --- |
 | `getRedisDetails()` | Bağlantının **nereye** kurulduğu: adres, TLS, veritabanı, `namespace`, hangi türlerin paylaşıldığı, purge yayınına abone olunup olunmadığı. Şifre asla dönmez — bağlantı URL'i sır taşıyor olabilir. |
-| `inspectRedis()` | Paylaşımlı kademede gerçekten ne durduğu: tür başına anahtar sayısı, `DBSIZE` ve `used_memory`. Bir `SCAN` turu olduğu için **istek yolunda çağrılmaz**; yönetim panelinde de ayrı bir düğmeye bağlı. |
+| `inspectRedis()` | Paylaşımlı kademede gerçekten ne durduğu: tür başına kayıt sayısı (HTML'de gövde ve kodlama parçaları tek sayfa sayılır), `DBSIZE` ve `used_memory`. Bir `SCAN` turu olduğu için **istek yolunda çağrılmaz**; yönetim panelinde de ayrı bir düğmeye bağlı. |
 
 Ayarların tam listesi: [07-yapilandirma.md](./07-yapilandirma.md).
 
@@ -1029,7 +1048,7 @@ değil.
 | Clear HTML cache | `clearHtmlCache()` |
 | Clear data cache (önek opsiyonel) | `clearDataCache(prefix)` |
 | Drop shared keys | Redis'teki `html` ya da `data` isim alanını tarar ve düşürür |
-| Count keys in Redis | `inspectRedis()` — tür başına anahtar sayısı, `DBSIZE` ve `used_memory` |
+| Count keys in Redis | `inspectRedis()` — tür başına kayıt (HTML parçaları tek sayfa sayılır), `DBSIZE` ve `used_memory` |
 | Prewarm | `prewarm()` — tur arkada koşar, ilerleme kartta görünür |
 | Cloudflare purge (her şey / bellekteki URL'ler / prefix / host / tag) | `purgeCloudflare()` |
 | Cloudflare ayarı ya da özelliği değiştirmek | Zone ayarları ve Tiered Cache / Cache Reserve |

@@ -46,8 +46,8 @@ import {
   publishCacheEvent,
   redisDrop,
   redisDropMatching,
-  redisGetJson,
-  redisSetJson,
+  redisGetHtml,
+  redisShareHtml,
   redisShares,
   redisSharesEncoded,
 } from "./redis.js";
@@ -372,6 +372,10 @@ function read(key) {
  * Girdiyi paylaşımlı kademeye yazar. Ateşle-unut: yanıt yolunda beklenmez,
  * L1 kopyası bu isteği zaten karşılıyor.
  *
+ * Redis'te gövde meta JSON'unun içinde durmaz. 1 MB HTML + base64 kodlama
+ * tek SET'te `commandTimeoutMs`'i aşıyordu ve zaman aşımı veri sayacını da
+ * kapatıyordu. Meta küçük kalır; brotli bayt ayrı anahtardadır.
+ *
  * @param {string} key
  * @param {HtmlEntry} entry
  */
@@ -383,9 +387,30 @@ function share(key, entry) {
   const ttlMs = entry.staleUntil - Date.now();
   if (ttlMs <= 0) return;
 
-  /** @type {Record<string, unknown>} */
-  const payload = {
+  if (onRedis) {
+    shareOnRedis(key, entry, ttlMs);
+    return;
+  }
+
+  diskSetJson("html", key, {
     html: entry.html,
+    status: entry.status,
+    storedAt: entry.storedAt,
+    expiresAt: entry.expiresAt,
+    staleUntil: entry.staleUntil,
+    produceMs: entry.produceMs,
+    deps: [...entry.deps],
+  });
+}
+
+/**
+ * @param {string} key
+ * @param {HtmlEntry} entry
+ * @param {number} ttlMs
+ */
+function shareOnRedis(key, entry, ttlMs) {
+  /** @type {Record<string, unknown>} */
+  const meta = {
     status: entry.status,
     storedAt: entry.storedAt,
     expiresAt: entry.expiresAt,
@@ -394,18 +419,22 @@ function share(key, entry) {
     deps: [...entry.deps],
   };
 
-  if (onRedis && redisSharesEncoded() && entry.encoded.size) {
-    /** @type {Record<string, string>} */
-    const encoded = {};
-    for (const [encoding, buffer] of entry.encoded) {
-      encoded[encoding] = buffer.toString("base64");
-    }
-    payload.encoded = encoded;
-    entry.sharedEncodings = entry.encoded.size;
+  // Yanıt brotli'si HTML brotli'si ile aynı bayt (kalite 5, metin). İkinci
+  // sıkıştırma yok; `enc:br` storeEncoded açıksa bu tamponun kopyasıdır.
+  const encoded = redisSharesEncoded() && entry.encoded.size ? entry.encoded : null;
+  if (encoded) entry.sharedEncodings = entry.encoded.size;
+
+  const ready = entry.encoded.get("br");
+  if (ready) {
+    redisShareHtml(key, meta, ready, encoded, ttlMs);
+    return;
   }
 
-  if (onRedis) redisSetJson(cacheKey("html", key), payload, ttlMs);
-  else diskSetJson("html", key, payload);
+  encodeText(entry.html, "br")
+    .then((body) => redisShareHtml(key, meta, body, encoded, ttlMs))
+    .catch(() => {
+      // Gövdesiz meta okununca kayıt yok sayılır; yarım yazmanın faydası yok.
+    });
 }
 
 /**
@@ -441,16 +470,24 @@ async function readShared(key) {
     sharedMissUntil.delete(key);
   }
 
-  const payload = onRedis
-    ? await redisGetJson(cacheKey("html", key))
-    : await diskGetJson("html", key);
+  const payload = onRedis ? await redisGetHtml(key) : await diskGetJson("html", key);
+  return finishShared(key, payload, !onRedis);
+}
+
+/**
+ * @param {string} key
+ * @param {any} payload
+ * @param {boolean} fromDisk
+ * @returns {HtmlEntry | null}
+ */
+function finishShared(key, payload, fromDisk) {
   if (!payload || typeof payload.html !== "string") {
     rememberSharedMiss(key);
     return null;
   }
   if (typeof payload.expiresAt !== "number" || Date.now() >= payload.expiresAt) {
     // Dosyanın TTL'i yok; süresi dolmuş kopya okununca silinir.
-    if (onDisk) diskDrop("html", [key]);
+    if (fromDisk) diskDrop("html", [key]);
     rememberSharedMiss(key);
     return null;
   }
@@ -464,23 +501,7 @@ async function readShared(key) {
   // etmek olurdu.
   if (readsPurgedData(deps, storedAt)) return null;
 
-  /** @type {Map<string, Buffer>} */
-  const encoded = new Map();
-  if (payload.encoded && typeof payload.encoded === "object") {
-    for (const [encoding, base64] of Object.entries(payload.encoded)) {
-      if (typeof base64 === "string") {
-        encoded.set(encoding, Buffer.from(base64, "base64"));
-      }
-    }
-    // Eski bir replica iki kodlama yazmış olabilir. L1 tek kopya tutar;
-    // brotli varsa o kalır.
-    if (encoded.size > 1) {
-      const keep = encoded.has("br") ? "br" : encoded.keys().next().value;
-      const buffer = keep ? encoded.get(keep) : undefined;
-      encoded.clear();
-      if (keep && buffer) encoded.set(keep, buffer);
-    }
-  }
+  const encoded = normalizeEncoded(payload.encoded);
 
   return {
     html: payload.html,
@@ -495,6 +516,40 @@ async function readShared(key) {
     sharedEncodings: encoded.size,
     produceMs: normalizeProduceMs(payload.produceMs),
   };
+}
+
+/**
+ * Disk hâlâ base64 taşır. Redis `Map<string, Buffer>` döner. L1 tek kodlama
+ * tutar; brotli varsa o kalır.
+ *
+ * @param {unknown} raw
+ * @returns {Map<string, Buffer>}
+ */
+function normalizeEncoded(raw) {
+  /** @type {Map<string, Buffer>} */
+  const encoded = new Map();
+
+  if (raw instanceof Map) {
+    for (const [encoding, buffer] of raw) {
+      if (typeof encoding === "string" && Buffer.isBuffer(buffer) && buffer.length) {
+        encoded.set(encoding, buffer);
+      }
+    }
+  } else if (raw && typeof raw === "object") {
+    for (const [encoding, value] of Object.entries(raw)) {
+      if (typeof value === "string") encoded.set(encoding, Buffer.from(value, "base64"));
+      else if (Buffer.isBuffer(value) && value.length) encoded.set(encoding, value);
+    }
+  }
+
+  if (encoded.size > 1) {
+    const keep = encoded.has("br") ? "br" : encoded.keys().next().value;
+    const buffer = keep ? encoded.get(keep) : undefined;
+    encoded.clear();
+    if (keep && buffer) encoded.set(keep, buffer);
+  }
+
+  return encoded;
 }
 
 /**

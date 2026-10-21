@@ -10,6 +10,9 @@ one is listed under a **Breaking** heading.
 
 ### Changed
 
+- Redis HTML is stored as a small JSON meta key, a raw brotli `:body` key, and
+  optional `:enc:br` / `:enc:gzip` keys on a second connection. HTML command
+  timeouts use their own circuit breaker and no longer bypass the data cache.
 - `.jsk` codegen merges adjacent static HTML into fewer `+=` ops and drops
   template indentation (newline-only whitespace). A lone space between
   inline siblings is kept; `pre` / `textarea` / `script` / `style` / `code`
@@ -73,6 +76,9 @@ one is listed under a **Breaking** heading.
 
 ### Added
 
+- `cache().redis.htmlCommandTimeoutMs` (default `2000`) limits only the HTML
+  Redis connection. `commandTimeoutMs` stays `200` for data, publish, and scan.
+  The admin Redis card shows both timeouts.
 - `stylesheets({ blocking: false })` and `<Stylesheets :blocking="false" />`
   emit each stylesheet with `media="print"` and an `onload` that switches it
   to `all`, plus a `<noscript>` fallback, so the links do not block rendering.
