@@ -34,10 +34,7 @@ test("stylesheets blocking default and media=print opt-out", async () => {
 
   const app = "/assets/app.abc123.css";
   const home = "/assets/home.def456.css";
-  const blocking = [
-    `<link rel="stylesheet" href="${app}" data-jskelet-css="app.css">`,
-    `<link rel="stylesheet" href="${home}" data-jskelet-css="home.css">`,
-  ].join("\n    ");
+  const blocking = `<link rel="stylesheet" href="${home}" data-jskelet-css="home.css">`;
 
   assert.equal(stylesheets(), `<link rel="stylesheet" href="${app}" data-jskelet-css="app.css">`);
   assert.equal(stylesheets({ styles: ["home.css"] }), blocking);
@@ -45,6 +42,14 @@ test("stylesheets blocking default and media=print opt-out", async () => {
   assert.equal(
     stylesheets({ styles: ["", "missing.css", "home.css"] }),
     blocking,
+  );
+  assert.equal(
+    stylesheets({ styles: ["home.css", "home.css"] }),
+    blocking,
+  );
+  assert.equal(
+    stylesheets({ styles: ["missing.css"] }),
+    `<link rel="stylesheet" href="${app}" data-jskelet-css="app.css">`,
   );
 
   const asyncSheet = (href, name) =>
@@ -55,6 +60,6 @@ test("stylesheets blocking default and media=print opt-out", async () => {
 
   assert.equal(
     stylesheets({ styles: ["home.css", "missing.css"], blocking: false }),
-    [asyncSheet(app, "app.css"), asyncSheet(home, "home.css")].join("\n    "),
+    asyncSheet(home, "home.css"),
   );
 });

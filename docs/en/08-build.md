@@ -168,12 +168,19 @@ The directory is `pages/` next to the `paths.styles` file (if `styles` moves,
 pages stays beside it). If the directory is missing or empty, the step only
 produces the global sheet.
 
-Page CSS is for page-specific rules. Keep Tailwind utilities in the global
-sheet — a full `@import "tailwindcss"` in a page file duplicates utility output.
+Each page output is one file containing **compiled global CSS + compiled page
+CSS**. When a controller declares a page sheet, the layout does not emit
+`app.css` separately; it loads only the combined sheet. This prevents the same
+Tailwind utility layer in inline critical CSS, `app.css`, and the page sheet
+from taking effect at three different times. Even if global `.px-0` conflicts
+with page `.lg:px-4`, the browser paints only the file's final cascade result
+instead of an intermediate layout that causes CLS.
 
-After `app.css`, the layout emits a `<link data-jskelet-css="…">` for each name
-in `styles`; if `hasAsset` is false the tag is omitted. `blocking: false`
-adds `media="print"` and `onload` to those same links.
+Page CSS is for page-specific rules. Prefer one page file per route; multiple
+names in `styles` are still supported, but each carries the global CSS and
+therefore downloads redundant bytes. If no requested page name exists in the
+manifest, the layout safely falls back to `app.css`. `blocking: false` adds
+`media="print"` and `onload` to the combined link.
 
 ### `@source` directives are mandatory
 

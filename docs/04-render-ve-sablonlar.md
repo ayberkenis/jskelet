@@ -182,12 +182,12 @@ Dikkat edilecek noktalar:
 - **`extraHead` en başta.** Kaynak ipuçlarını (`preconnect`, LCP `preload`)
   geciktirmek doğrudan LCP'ye yazılır.
 - **Global `app.css` varsayılan olarak render-blocking** ve gerekçesi
-  [02-mimari.md](./02-mimari.md)'de. Controller `styles: [...]` ile ek sayfa
-  sheet'leri de aynı şekilde basılır. `<Stylesheets :blocking="false" />`
-  (`stylesheets({ blocking: false })`) linkleri `media="print"` + `onload`
-  ile basar; JS kapalıyken `<noscript>` yedeği uygulanır. Boyama beklenmez,
-  sheet gelince düzen kayabilir. Build çalışmadıysa `hasAsset` false olur
-  ve etiket hiç basılmaz.
+  [02-mimari.md](./02-mimari.md)'de. Controller `styles: [...]` verirse sayfa
+  sheet'i global CSS'i de içeren birleşik varlıktır ve `app.css` yerine basılır.
+  `<Stylesheets :blocking="false" />` (`stylesheets({ blocking: false })`)
+  linki `media="print"` + `onload` ile basar; JS kapalıyken `<noscript>` yedeği
+  uygulanır. Boyama beklenmez, sheet gelince düzen kayabilir. Build çalışmadıysa
+  `hasAsset` false olur ve etiket hiç basılmaz.
 - **`hasAsset` kontrolleri** build eksikken sayfanın 404 veren dosyaları
   istememesini sağlar (`Stylesheets` / `BodyScripts` içinde).
 - **Devtools script'i** yalnızca `NODE_ENV=development` iken basılır; prod
@@ -437,7 +437,8 @@ icon({ name: "ArrowRight", weight: "bold", size: 20, class: "text-slate-500" });
 
 ### `stylesheets(props)`
 
-Layout `<head>` içindeki global `app.css` ve controller `styles` dizisi.
+Layout `<head>` içindeki global `app.css` veya controller `styles` dizisindeki
+birleşik sayfa sheet'leri.
 Doğrudan çağırmak yerine yerleşik etiket kullanılır:
 
 ```jsk
@@ -451,7 +452,9 @@ stylesheets({ styles: ["home.css"], blocking: false });
 ```
 
 - `styles` manifest anahtarlarıdır (`"home.css"` → `styles/pages/home.css`).
-  `hasAsset` false olanlar basılmaz.
+  Geçerli en az bir sayfa sheet'i varsa `app.css` ayrıca basılmaz; her sayfa
+  çıktısı global CSS'i zaten içerir. Hiçbiri manifest'te yoksa `app.css`e
+  dönülür.
 - `blocking` varsayılan `true`: `<link rel="stylesheet" data-jskelet-css="…">`.
   Yalnızca boolean `false` beklemeyi kapatır. Çıktı `media="print"` ve
   `onload="this.media='all'"` olur; eşleşmeyen media boyamayı bekletmez.

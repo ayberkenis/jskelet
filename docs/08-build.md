@@ -163,12 +163,18 @@ return {
 Dizin, `paths.styles` dosyasının yanındaki `pages/` klasörüdür (`styles` taşınırsa
 pages de yanında kalır). Dizin yoksa veya boşsa adım yalnızca global sheet üretir.
 
-Sayfa CSS'i sayfaya özel kurallar içindir. Tailwind utility'leri global sheet'te
-kalmalı — dosyada tam `@import "tailwindcss"` utility çıktısını tekrarlar.
+Her sayfa çıktısı **global derlenmiş CSS + sayfa derlenmiş CSS** içeren tek bir
+dosyadır. Controller bir sayfa sheet'i bildirdiğinde layout `app.css`i ayrıca
+basmaz; yalnızca birleşik sheet'i yükler. Böylece inline kritik CSS, `app.css`
+ve page sheet içindeki aynı Tailwind utility katmanı üç ayrı anda uygulanmaz.
+Örneğin global `.px-0` ile sayfadaki `.lg:px-4` çatışsa bile tarayıcı yalnızca
+dosyanın son cascade sonucunu boyar ve ara düzen CLS üretmez.
 
-Layout `app.css`ten sonra `styles` dizisindeki her sheet için
-`<link data-jskelet-css="…">` basar; `hasAsset` false ise etiket yok.
-`blocking: false` aynı linklere `media="print"` ve `onload` ekler.
+Sayfa CSS'i sayfaya özel kurallar içindir. Bir route için tek sayfa dosyası
+tercih edin; `styles` dizisinde birden fazla ad hâlâ desteklenir ama her biri
+global CSS'i taşıdığı için gereksiz tekrar indirir. Sayfa adı manifest'te yoksa
+layout güvenli biçimde `app.css`e döner. `blocking: false` birleşik linke
+`media="print"` ve `onload` ekler.
 
 ### `@source` direktifleri zorunludur
 

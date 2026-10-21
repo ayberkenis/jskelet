@@ -222,7 +222,7 @@ fields:
 | `head` | `string` | `""` | Raw HTML to be printed into `<head>` as-is (e.g. the LCP preload). |
 | `bodyClass` | `string` | `hooks.layoutContext().bodyClass ?? ""` | `<body class="…">`. |
 | `entries` | `string[]` | `[]` | The names of client entries to be loaded additionally on this page: `["chart.js"]`. |
-| `styles` | `string[]` | `[]` | Extra stylesheets for this page: `["home.css"]` → `styles/pages/home.css`. |
+| `styles` | `string[]` | `[]` | Page stylesheets combined with global CSS and loaded instead of `app.css`: `["home.css"]` → `styles/pages/home.css`. |
 
 `revalidate` is **the second argument of `route()`**, not a field of the object
 the controller returns.

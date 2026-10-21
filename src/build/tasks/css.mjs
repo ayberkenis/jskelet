@@ -1,9 +1,10 @@
 /**
  * Tailwind v4 → global `app.css` + isteğe bağlı sayfa stylesheet'leri.
  *
- * Global sheet her sayfada yüklenir (`paths.styles`). Sayfa sheet'leri
- * `styles/pages/*.css` altındadır ve yalnızca controller `styles: ["home.css"]`
- * bildiren sayfalarda basılır — island `entries` ile aynı sözleşme.
+ * Global sheet `paths.styles` girdisinden üretilir. Sayfa sheet'leri
+ * `styles/pages/*.css` altındadır; her çıktı global CSS + sayfa CSS'ini tek
+ * dosyada taşır ve yalnızca controller `styles: ["home.css"]` bildiren
+ * sayfalarda basılır — island `entries` ile aynı sözleşme.
  *
  * Ayrı bir "critical CSS" üretilmez. Ölçümde inline kritik CSS ilk ekranı tam
  * kapsamadığı için sheet gelince sayfa yeniden akıyordu (bir liste sayfasında
@@ -13,9 +14,11 @@
  * varsayılan olarak render-blocking; yalnızca ilgili sayfada ek maliyet.
  * Layout `stylesheets({ blocking: false })` ile bu beklemeyi kapatabilir.
  *
- * Tailwind utility'leri global sheet'te kalmalı. Sayfa CSS'inde tam
- * `@import "tailwindcss"` utility çıktısını tekrarlar; sayfaya özel kurallar
- * yeter.
+ * Birleşik çıktı önemli: inline kritik CSS, global utility'ler ve sayfa
+ * utility'leri ayrı ağ yanıtlarında sırayla uygulanırsa ara cascade düzeni
+ * boyanıp CLS üretebilir. Tarayıcı tek dosyayı ancak tamamı geldikten sonra
+ * uygular; sayfa dosyasındaki son kurallar yine global kuralları ezebilir ama
+ * kullanıcı ara durumu görmez.
  *
  * Tailwind'in sınıf taraması `globals.css` içindeki `@source` direktiflerine
  * bağlıdır. Otomatik tespit yalnızca stylesheet'in bulunduğu dizini tarar,
@@ -130,7 +133,8 @@ export async function buildCss(config, { watch = false } = {}) {
 
     for (const file of listPageStyles(pagesDir)) {
       const name = path.basename(file);
-      const css = applyCdnStaticUrls(await compile(file), config);
+      const pageCss = applyCdnStaticUrls(await compile(file), config);
+      const css = `${appCss}\n${pageCss}`;
       const url = writeAsset(name, css);
       urls[name] = url;
       bytes += Buffer.byteLength(css);

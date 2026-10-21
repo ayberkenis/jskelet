@@ -181,8 +181,9 @@ Points to watch:
 - **`extraHead` comes first.** Delaying resource hints (`preconnect`, LCP
   `preload`) writes straight into LCP.
 - **`<Stylesheets />` emits global `app.css` render-blocking by default**,
-  plus controller `styles: [...]`, with the reasoning in
-  [02-architecture.md](./02-architecture.md).
+  with the reasoning in [02-architecture.md](./02-architecture.md). When a
+  controller provides `styles: [...]`, a page sheet is a combined asset that
+  already contains global CSS and is emitted instead of `app.css`.
   `<Stylesheets :blocking="false" />` (`stylesheets({ blocking: false })`)
   emits the links with `media="print"` plus `onload`, and a `<noscript>`
   fallback when JS is off. Painting is not held, and the layout can shift
@@ -442,7 +443,8 @@ icon({ name: "ArrowRight", weight: "bold", size: 20, class: "text-slate-500" });
 
 ### `stylesheets(props)`
 
-Global `app.css` and the controller `styles` list for the layout `<head>`.
+Global `app.css`, or the combined page sheets in the controller `styles` list,
+for the layout `<head>`.
 The built-in tag is the usual call site:
 
 ```jsk
@@ -456,7 +458,9 @@ stylesheets({ styles: ["home.css"], blocking: false });
 ```
 
 - `styles` are manifest keys (`"home.css"` → `styles/pages/home.css`). Names
-  for which `hasAsset` is false are omitted.
+  for which `hasAsset` is false are omitted. If at least one page sheet exists,
+  `app.css` is not emitted separately because every page output already
+  includes it. If none exists, the helper falls back to `app.css`.
 - `blocking` defaults to `true`:
   `<link rel="stylesheet" data-jskelet-css="…">`. Only the boolean `false`
   turns waiting off. The output is `media="print"` and

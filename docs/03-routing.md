@@ -219,7 +219,7 @@ Controller `async (ctx) => sayfa` biçimindedir ve şu alanları döndürebilir:
 | `head` | `string` | `""` | `<head>`e olduğu gibi basılacak ham HTML (ör. LCP preload'ı). |
 | `bodyClass` | `string` | `hooks.layoutContext().bodyClass ?? ""` | `<body class="…">`. |
 | `entries` | `string[]` | `[]` | Bu sayfada ek olarak yüklenecek client entry adları: `["chart.js"]`. |
-| `styles` | `string[]` | `[]` | Bu sayfada ek olarak yüklenecek stylesheet adları: `["home.css"]` → `styles/pages/home.css`. |
+| `styles` | `string[]` | `[]` | Global CSS ile birleştirilip `app.css` yerine yüklenecek sayfa stylesheet adları: `["home.css"]` → `styles/pages/home.css`. |
 
 `revalidate` **`route()`'un ikinci argümanıdır**, controller'ın döndürdüğü
 nesnenin alanı değil.

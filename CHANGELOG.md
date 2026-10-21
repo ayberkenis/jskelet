@@ -10,6 +10,10 @@ one is listed under a **Breaking** heading.
 
 ### Changed
 
+- Page stylesheets are built as one asset containing global CSS followed by
+  page CSS. Routes that declare `styles` load the combined asset instead of
+  applying `app.css` and page utilities in separate cascade steps, preventing
+  the intermediate layout shifts that occur when those sheets arrive apart.
 - Redis HTML is stored as a small JSON meta key, a raw brotli `:body` key, and
   optional `:enc:br` / `:enc:gzip` keys on a second connection. HTML command
   timeouts use their own circuit breaker and no longer bypass the data cache.

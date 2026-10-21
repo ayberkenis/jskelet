@@ -320,9 +320,11 @@ export function toKebab(name) {
 }
 
 /**
- * Layout `<head>` stylesheet'leri. `hasAsset` false olanları basmaz —
- * build yokken 404 link'i istememek için. `.jsk` ifade dilinde `asset()` /
- * `hasAsset()` çağrılamadığı için layout bu etiketi kullanır.
+ * Layout `<head>` stylesheet'leri. Sayfa sheet'i varsa global CSS'i zaten
+ * taşıyan bu birleşik varlık basılır; yoksa `app.css` kullanılır. `hasAsset`
+ * false olanları basmaz — build yokken 404 link'i istememek için. `.jsk`
+ * ifade dilinde `asset()` / `hasAsset()` çağrılamadığı için layout bu etiketi
+ * kullanır.
  *
  * `blocking` varsayılan `true`: `<link rel="stylesheet">` boyamayı bekletir.
  * Ölçümde bu, sheet geç gelince oluşan CLS'ten daha ucuz. `false` yalnızca
@@ -337,11 +339,14 @@ export function stylesheets(props = {}) {
   const blocking = props.blocking !== false;
   /** @type {string[]} */
   const parts = [];
+  const available = [...new Set(styles.filter((sheet) => sheet && hasAsset(sheet)))];
 
-  pushStylesheet(parts, "app.css", blocking);
-
-  for (const sheet of styles) {
-    if (!sheet) continue;
+  // Sayfa çıktıları app.css'i içerir. İki linki birden basmak utility
+  // katmanını iki ağ yanıtında uygulayıp aradaki cascade durumunu boyatır.
+  if (available.length === 0) {
+    pushStylesheet(parts, "app.css", blocking);
+  }
+  for (const sheet of available) {
     pushStylesheet(parts, sheet, blocking);
   }
 
