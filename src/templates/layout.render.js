@@ -6,15 +6,22 @@
  */
 export function render(data, helpers) {
   let s = "";
-  s += "<!DOCTYPE html>";
-  s += "<html" + helpers.attrs({"lang": data.lang}) + ">";
-  s += "<head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">";
+  s += "<!DOCTYPE html><html";
+  {
+    const __c1 = data.lang;
+    if (__c1 != null && __c1 !== false) s += __c1 === true ? " lang" : " lang=\"" + helpers.esc(__c1) + "\"";
+  }
+  s += "><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">";
   s += (data.extraHead ?? "");
   s += (helpers.Stylesheets({ "styles": data.styles }) ?? "");
   s += (data.headMeta ?? "");
   s += (helpers.JsonLd({ "items": data.structuredData }) ?? "");
-  s += "</head>";
-  s += "<body" + helpers.attrs({"class": data.bodyClass}) + ">";
+  s += "</head><body";
+  {
+    const __c2 = data.bodyClass;
+    if (__c2 != null && __c2 !== false) s += __c2 === true ? " class" : " class=\"" + helpers.esc(__c2) + "\"";
+  }
+  s += ">";
   s += (data.body ?? "");
   s += (helpers.BodyScripts({ "entries": data.entries, "devtools": data.devtools, "devBasePath": data.devBasePath }) ?? "");
   s += "</body></html>";

@@ -14,10 +14,26 @@ const THRESHOLD_BYTES = 1024;
 const COMPRESSIBLE =
   /^(?:text\/|application\/(?:json|javascript|xml|xhtml\+xml|rss\+xml|atom\+xml|ld\+json|manifest\+json)|image\/svg\+xml)/i;
 
-const BROTLI_OPTIONS = {
+/**
+ * Saklanan gövde (HTML cache girdisi) bir kez sıkıştırılıp yüzlerce kez
+ * servis edilir: 5, varsayılan 11'e göre çok daha hızlı ve neredeyse aynı boyut.
+ */
+const BROTLI_STORED = {
   params: {
-    // Metin için 5, varsayılan 11'e göre çok daha hızlı ve neredeyse aynı boyut.
     [zlib.constants.BROTLI_PARAM_QUALITY]: 5,
+    [zlib.constants.BROTLI_PARAM_MODE]: zlib.constants.BROTLI_MODE_TEXT,
+  },
+};
+
+/**
+ * Her istekte yeniden sıkıştırılan gövde (dinamik/private sayfa, fragment,
+ * JSON). 4 ile 5 arasında büyük bir eşik var: 7–35 KB HTML'de 5, 4'ün
+ * yaklaşık 3–4 katı CPU harcayıp yalnızca ~%6 daha küçük çıktı veriyor.
+ * Bu fark saklanan gövdede bir kez ödenir, istek başına ödenmez.
+ */
+const BROTLI_LIVE = {
+  params: {
+    [zlib.constants.BROTLI_PARAM_QUALITY]: 4,
     [zlib.constants.BROTLI_PARAM_MODE]: zlib.constants.BROTLI_MODE_TEXT,
   },
 };
@@ -59,15 +75,18 @@ export function negotiateEncoding(acceptEncoding) {
 /**
  * @param {string} text
  * @param {"br" | "gzip"} encoding
+ * @param {{ stored?: boolean }} [options] `stored: false` → gövde saklanmayacak,
+ *   istek başına daha ucuz brotli kalitesi kullanılır. Varsayılan saklanan.
  * @returns {Promise<Buffer>}
  */
-export function encodeText(text, encoding) {
+export function encodeText(text, encoding, options = {}) {
   const input = Buffer.from(text, "utf8");
+  const brotli = options.stored === false ? BROTLI_LIVE : BROTLI_STORED;
 
   return new Promise((resolve, reject) => {
     const done = (error, result) => (error ? reject(error) : resolve(result));
 
-    if (encoding === "br") zlib.brotliCompress(input, BROTLI_OPTIONS, done);
+    if (encoding === "br") zlib.brotliCompress(input, brotli, done);
     else zlib.gzip(input, done);
   });
 }
@@ -130,7 +149,7 @@ export function compression() {
 
       stream =
         encoding === "br"
-          ? zlib.createBrotliCompress(BROTLI_OPTIONS)
+          ? zlib.createBrotliCompress(BROTLI_LIVE)
           : zlib.createGzip({ level: 6 });
 
       // Sıkıştırılmış çıktıyı sokete geri baskıya saygı duyarak aktar.

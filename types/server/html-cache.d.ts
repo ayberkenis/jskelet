@@ -199,9 +199,10 @@ export declare function isHtmlCacheFresh(pathname: string, req?: {
  */
 export declare function isHtmlCacheKeyFresh(key: string): boolean;
 /**
- * Girdide en fazla bir sıkıştırılmış gövde durur. Yeni kodlama eskisinin
- * yerini alır; ham HTML kalır. Bayt sayacı delta ile güncellenir — harita
- * LRU'dan düşmüşse (store'da yok) sayaç oynatılmaz.
+ * Girdide kodlama başına (`br`, `gzip`) en fazla bir sıkıştırılmış gövde
+ * durur; aynı kodlamanın yenisi eskisinin yerini alır, ham HTML kalır. Bayt
+ * sayacı delta ile güncellenir — harita LRU'dan düşmüşse (store'da yok)
+ * sayaç oynatılmaz.
  *
  * @param {Map<string, Buffer>} encoded
  * @param {string} encoding

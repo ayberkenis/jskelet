@@ -13,7 +13,7 @@ import {
   compileAll,
   parseTemplate,
 } from "../src/compile/index.js";
-import { esc } from "../src/views/helpers/html.js";
+import { attrs, esc } from "../src/views/helpers/html.js";
 
 /**
  * @param {string} source
@@ -67,6 +67,34 @@ describe("jsk compile", () => {
     assert.match(html, /value="a&quot;b"/);
     assert.match(html, /\bdisabled\b/);
     assert.doesNotMatch(html, /\bopen\b/);
+  });
+
+  it("bound attributes match helpers.attrs() byte for byte", async () => {
+    const data = { a: `x"<'>&`, t: true, f: false, n: null, z: 0, e: "", c: "son" };
+    const html = await renderCompiled(
+      `<div class="ilk" title="a'b>c" :data-a="a" :data-t="t" :data-f="f" :data-n="n" ` +
+        `:data-z="z" :data-e="e" :lit="'sabit'" :off="false" hidden :class="c"></div>`,
+      data,
+    );
+    // Eski derleyicinin ürettiği nesne literal'i: tekrarlanan ad ilk konumda,
+    // son değerle kalır.
+    const object = {
+      class: "ilk",
+      title: "a'b>c",
+      "data-a": data.a,
+      "data-t": data.t,
+      "data-f": data.f,
+      "data-n": data.n,
+      "data-z": data.z,
+      "data-e": data.e,
+      lit: "sabit",
+      off: false,
+      hidden: true,
+    };
+    object.class = data.c;
+    const expected = "<div" + attrs(object) + "></div>";
+    assert.equal(html, expected);
+    assert.match(html, /^<div class="son" title="a&#39;b&gt;c"/);
   });
 
   it("renders components with props and children", async () => {

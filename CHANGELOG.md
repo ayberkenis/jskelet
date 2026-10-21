@@ -10,6 +10,26 @@ one is listed under a **Breaking** heading.
 
 ### Changed
 
+- Responses that are compressed on every request (dynamic, `private` and
+  `fragment` HTML, plus anything the compression middleware handles) use
+  brotli quality 4 instead of 5. Cached HTML is still stored at quality 5,
+  because it is compressed once. On 7–35 KB pages, quality 4 is 3–4× cheaper
+  in CPU and about 6% larger. In the blog example, dynamic pages served about
+  20–25% more requests per second.
+- The in-process HTML cache keeps one brotli body and one gzip body per
+  entry. Previously it kept a single compressed body, so mixed brotli and gzip
+  clients made a cached page recompress on almost every hit. Both bodies count
+  toward the existing 256 MB budget.
+- Elements with bound (`:attr`) attributes compile their static attributes
+  into the surrounding HTML at build time. Only bound values are checked at
+  render time. Output is byte-for-byte identical. The framework's default
+  `layout.render.js` was regenerated.
+- `renderHeadMeta()` builds tags by direct concatenation and caches resolved
+  canonical URLs. On a simple page, the time `renderPage` spends outside the
+  view dropped by about 40%.
+- `isHtmlCacheFresh()` (used by `onVisit` prewarm on every public response)
+  uses a path index instead of scanning the whole HTML cache for each link.
+
 - Page stylesheets are built as one asset containing global CSS followed by
   page CSS. Routes that declare `styles` load the combined asset instead of
   applying `app.css` and page utilities in separate cascade steps, preventing
@@ -69,6 +89,15 @@ one is listed under a **Breaking** heading.
 
 ### Fixed
 
+- Without Redis, every HTML cache hit rewrote the page to the
+  `.jskelet/cache/` disk tier. `storeEncoded` defaults to on, but only the
+  Redis path updated the "already shared" counter. Hits no longer write. In the
+  blog example, cache-hit throughput rose from about 1,100 to 2,900 requests
+  per second and median latency fell from 27 ms to 9 ms.
+- Concurrent disk-cache writes for the same key no longer share a temp file
+  name. On Windows, they failed with `EPERM` / `ENOENT` and logged
+  `[disk-cache] write failed`. Writes to one file are now serialized, and the
+  newest value is written last.
 - Shared HTML cache keys (Redis and the `.jskelet/cache/` disk tier) now
   change when the layout or other view sources change, not only when CSS/JS
   assets do. `buildId` is `{assets}-{templates}`, where `templates` is a
@@ -87,6 +116,12 @@ one is listed under a **Breaking** heading.
 
 ### Added
 
+- `formatDate(value, locale, options)` in `jskelet/html`: the same output as
+  `new Date(value).toLocaleDateString(locale, options)`, with a cached
+  `Intl.DateTimeFormat`. `toLocaleDateString` builds a new formatter on every
+  call (about 65 µs); the cached version takes about 1.5 µs. In the blog
+  example, post cards spent most of their render time formatting dates. Invalid
+  and missing dates return an empty string.
 - `cache().redis.htmlCommandTimeoutMs` (default `2000`) limits only the HTML
   Redis connection. `commandTimeoutMs` stays `200` for data, publish, and scan.
   The admin Redis card shows both timeouts.

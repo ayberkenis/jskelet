@@ -311,7 +311,9 @@ export async function renderView(view, data = {}) {
     renderFn = await ensureCompiledView(eng, view);
   }
   if (renderFn) {
-    return renderFn({ ...data }, helpers);
+    // Kopya yok: `.jsk` ifade dili atama içermez, derlenmiş şablon `data`'yı
+    // yalnızca okur.
+    return renderFn(data, helpers);
   }
 
   const file =
@@ -798,7 +800,8 @@ async function sendHtml(req, res, body, encoded, options = {}) {
   // middleware'in ikinci kez buffer'lamasını ve private yolda q=5 maliyetini kes.
   let buffer = encoded?.get(encoding);
   if (!buffer) {
-    buffer = await encodeText(body, encoding);
+    // Saklanmayacak gövde her istekte yeniden sıkıştırılır; ucuz kalite.
+    buffer = await encodeText(body, encoding, { stored: Boolean(encoded) });
     if (encoded) rememberHtmlEncoding(encoded, encoding, buffer);
   }
 

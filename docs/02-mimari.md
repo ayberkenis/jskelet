@@ -34,7 +34,7 @@ JSkelet bu gözlemi mimarinin merkezine alır:
 ```
 İstek
  ├─ rewrites(beforeFiles)          config → proxy ya da req.url değişimi
- ├─ compression                    brotli/gzip pazarlığı (kalite 5)
+ ├─ compression                    brotli/gzip pazarlığı (kalite 4)
  ├─ headers                        statik cache + config headers()
  ├─ devGate                        gate açıksa ve token yoksa 404
  ├─ redirects                      config redirects(), ilk eşleşen kazanır
@@ -78,7 +78,10 @@ sebebi var ve yer değiştirmek sessiz bozulmalara yol açıyor.
   yazılmaz — ek düz metne konur, sıkıştırma dışarıda kalır.
 - **`staticPrecompressed`, `express.static`ten önce.** Build'de üretilmiş
   `.br`/`.gz` kopyalar varsa onlar servis edilir (brotli kalite 11); yoksa
-  istek altındaki `static`e düşer ve middleware anında sıkıştırır (kalite 5).
+  istek altındaki `static`e düşer ve middleware anında sıkıştırır (kalite 4).
+  Her istekte ödenen sıkıştırma 4'te kalır: 5, 3–4 kat CPU'ya yalnızca ~%6
+  daha küçük çıktı veriyor. Bir kez sıkıştırılıp saklanan HTML cache gövdesi
+  5 kullanır.
   Hash'li ve `immutable` bir dosyayı her istekte yeniden sıkıştırmak boşa CPU.
   Üretimde `stat` sonucu (var ya da yok) süreç belleğinde kalır; dev'de kalmaz.
 - **Admin paneli** (açıksa, `admin().enabled` / `JSKELET_ADMIN`): statikten

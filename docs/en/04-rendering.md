@@ -214,7 +214,7 @@ Points to watch:
 | `devtools` | `boolean` | `NODE_ENV === "development"` |
 | `devBasePath` | `string` | `brand.devBasePath`, defaults to `/__jskelet/dev` |
 | `asset`, `hasAsset` | function | Manifest access (EJS local; in `.jsk` the second `helpers` argument / built-in tags) |
-| html/tags helpers | function | `esc`, `attrs`, `cx`, `cn`, `jsonScript`, `link`, `image`, `icon`, `preloadImage`, `modulePreload`, `toKebab` — same split |
+| html/tags helpers | function | `esc`, `attrs`, `cx`, `cn`, `jsonScript`, `formatDate`, `link`, `image`, `icon`, `preloadImage`, `modulePreload`, `toKebab` — same split |
 | exports of `views/components/**` | function | Automatic registration (PascalCase tags or EJS locals) |
 | every field returned by `hooks.layoutContext()` | — | Becomes a local directly |
 
@@ -360,6 +360,31 @@ close the body.
 ```ejs
 <script type="application/ld+json"><%- jsonScript(article) %></script>
 ```
+
+### `formatDate(value, locale, options)`
+
+Equivalent to `new Date(value).toLocaleDateString(locale, options)`, but with a
+cached formatter. `toLocaleDateString` builds a new `Intl.DateTimeFormat` on
+every call and spends about 65 µs per date. With the cached formatter, this
+drops to about 1.5 µs. In the blog example, most of a post card's render time
+went to formatting its date.
+
+```js
+import { esc, formatDate } from "jskelet/html";
+
+const DATE = { day: "numeric", month: "long", year: "numeric" };
+`<time datetime="${esc(post.publishedAt)}">${esc(formatDate(post.publishedAt, "tr-TR", DATE))}</time>`;
+```
+
+- An invalid date, `null`, `undefined` or `""` returns an empty string, so a
+  template never prints `Invalid Date`.
+- The cache key is the locale plus the contents of the options object. Keeping
+  the options in a module-level constant is optional, but it makes the key
+  cheaper to compute.
+- One difference: if the options contain no date field (`year`, `month`,
+  `day`, `weekday`, `dateStyle`), `toLocaleDateString` adds year/month/day,
+  while `formatDate`, like `Intl.DateTimeFormat`, prints only the requested
+  fields.
 
 ## Helpers: `jskelet/tags`
 

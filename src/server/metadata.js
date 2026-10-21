@@ -18,7 +18,26 @@
  * @property {object} [twitter] `{ card, site, creator, title, description, image }`
  * @property {string[]} [extraTags] Olduğu gibi basılacak ham etiketler.
  */
-import { attrs, esc } from "../views/helpers/html.js";
+import { esc } from "../views/helpers/html.js";
+
+/**
+ * `<meta {kind}="{key}" content="…">`. Her sayfada ~20 kez çağrılıyor;
+ * etiket başına `attrs({...})` nesnesi kurmak `renderHeadMeta`'yı render
+ * ek yükünün üçte biri yapıyordu. Çıktı `attrs()` ile aynı: `false` içerik
+ * attribute'u düşürür, `true` boolean attribute olur. `key` her zaman
+ * bu dosyadaki sabit bir addır, kaçış gerekmez.
+ *
+ * @param {"name" | "property"} kind
+ * @param {string} key
+ * @param {unknown} content
+ * @returns {string}
+ */
+function metaTag(kind, key, content) {
+  if (content == null || content === "") return "";
+  if (content === false) return `<meta ${kind}="${key}">`;
+  if (content === true) return `<meta ${kind}="${key}" content>`;
+  return `<meta ${kind}="${key}" content="${esc(content)}">`;
+}
 
 /**
  * @param {string} name
@@ -26,8 +45,7 @@ import { attrs, esc } from "../views/helpers/html.js";
  * @returns {string}
  */
 function meta(name, content) {
-  if (content == null || content === "") return "";
-  return `<meta${attrs({ name, content })}>`;
+  return metaTag("name", name, content);
 }
 
 /**
@@ -39,8 +57,7 @@ function meta(name, content) {
  * @returns {string}
  */
 function og(property, content) {
-  if (content == null || content === "") return "";
-  return `<meta${attrs({ property, content })}>`;
+  return metaTag("property", property, content);
 }
 
 /**
@@ -52,8 +69,26 @@ function absoluteUrl(canonical, siteUrl) {
   if (!canonical) return undefined;
   if (/^https?:\/\//.test(canonical)) return canonical;
   if (!siteUrl) return canonical;
-  return new URL(canonical, siteUrl).href;
+
+  // `new URL` her render'da baştan ayrıştırıyor; sonuç yol başına sabit.
+  const key = `${siteUrl}\n${canonical}`;
+  let href = absoluteUrls.get(key);
+  if (href === undefined) {
+    href = new URL(canonical, siteUrl).href;
+    if (absoluteUrls.size >= ABSOLUTE_URLS_MAX) {
+      const oldest = absoluteUrls.keys().next().value;
+      if (oldest !== undefined) absoluteUrls.delete(oldest);
+    }
+    absoluteUrls.set(key, href);
+  }
+  return href;
 }
+
+/** @type {Map<string, string>} */
+const absoluteUrls = new Map();
+
+/** Yakalayıcı route'ta her yol bir girdi bırakır; sınırsız büyümesin. */
+const ABSOLUTE_URLS_MAX = 2000;
 
 /**
  * @param {Metadata} [metadata]
@@ -67,36 +102,35 @@ export function renderHeadMeta(metadata = {}) {
   const url = absoluteUrl(metadata.canonical, metadata.siteUrl);
   const robots = metadata.robots ?? {};
   // Varsayılan indekslenebilir: bir sayfayı gizlemek açık bir karar olmalı.
-  const robotsValue = [
-    robots.index === false ? "noindex" : "index",
-    robots.follow === false ? "nofollow" : "follow",
-  ].join(", ");
+  const robotsValue =
+    (robots.index === false ? "noindex" : "index") +
+    ", " +
+    (robots.follow === false ? "nofollow" : "follow");
 
   const graph = metadata.openGraph ?? {};
   const card = metadata.twitter ?? {};
 
-  return [
-    title ? `<title>${esc(title)}</title>` : "",
-    meta("description", metadata.description),
-    url ? `<link${attrs({ rel: "canonical", href: url })}>` : "",
-    meta("robots", robotsValue),
-    og("og:type", graph.type ?? "website"),
-    og("og:title", graph.title ?? title),
-    og("og:description", graph.description ?? metadata.description),
-    og("og:url", graph.url ?? url),
-    og("og:site_name", graph.siteName),
-    og("og:locale", metadata.locale),
-    og("og:image", graph.image),
-    og("og:image:width", graph.imageWidth),
-    og("og:image:height", graph.imageHeight),
-    meta("twitter:card", card.card ?? (graph.image ? "summary_large_image" : "summary")),
-    meta("twitter:site", card.site),
-    meta("twitter:creator", card.creator),
-    meta("twitter:title", card.title ?? graph.title ?? title),
-    meta("twitter:description", card.description ?? metadata.description),
-    meta("twitter:image", card.image ?? graph.image),
-    ...(metadata.extraTags ?? []),
-  ]
-    .filter(Boolean)
-    .join("");
+  let out =
+    (title ? `<title>${esc(title)}</title>` : "") +
+    meta("description", metadata.description) +
+    (url ? `<link rel="canonical" href="${esc(url)}">` : "") +
+    meta("robots", robotsValue) +
+    og("og:type", graph.type ?? "website") +
+    og("og:title", graph.title ?? title) +
+    og("og:description", graph.description ?? metadata.description) +
+    og("og:url", graph.url ?? url) +
+    og("og:site_name", graph.siteName) +
+    og("og:locale", metadata.locale) +
+    og("og:image", graph.image) +
+    og("og:image:width", graph.imageWidth) +
+    og("og:image:height", graph.imageHeight) +
+    meta("twitter:card", card.card ?? (graph.image ? "summary_large_image" : "summary")) +
+    meta("twitter:site", card.site) +
+    meta("twitter:creator", card.creator) +
+    meta("twitter:title", card.title ?? graph.title ?? title) +
+    meta("twitter:description", card.description ?? metadata.description) +
+    meta("twitter:image", card.image ?? graph.image);
+
+  for (const tag of metadata.extraTags ?? []) if (tag) out += tag;
+  return out;
 }

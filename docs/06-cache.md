@@ -230,9 +230,11 @@ güncelleniyor.
 Store LRU'dur: erişilen girdi sona taşınır, sınır (`cache().maxEntries`,
 varsayılan 500) aşılınca en eski düşürülür. Config 500'ün üstünü isteyebilir;
 **800'ü geçemez** — daha yükseği uyarıyla 800'e çekilir. Bunun yanında süreç
-içi HTML string + sıkıştırılmış gövde **256 MB**'yi geçemez. Sıkıştırılmış
-kopya tektir: brotli veya gzip, hangisi son istendiyse. Ham HTML durur.
-Sayı tavanının
+içi HTML string + sıkıştırılmış gövde **256 MB**'yi geçemez. Girdi başına
+kodlama başına bir gövde durur: en fazla bir brotli ve bir gzip. Brotli
+yazmada (kalite 5) üretilir, gzip ilk gzip isteğinde. Tek kopya tutulduğunda
+karışık gelen brotli ve gzip istemcileri sayfayı her istekte yeniden
+sıkıştırtıyordu. Ham HTML durur. Sayı tavanının
 altında kalan şişman sayfa veya `vary.host` kopyası da bu bütçede LRU ile
 düşer. Tek sayfa 256 MB'den büyükse saklanmaz; yanıt o istekte yine gider.
 
@@ -893,7 +895,7 @@ Okuma meta ile gövdeyi tek pipeline'da ister; parçalardan biri yoksa kayıt yo
 sayılır ve sayfa render edilir.
 
 Veri girdileri 1 KB ve üstünde düz JSON olarak durmaz: `JSK\x01` önekli brotli
-gövde yazılır (kalite 5, metin modu — yanıt sıkıştırmasıyla aynı ayar). Daha
+gövde yazılır (kalite 5, metin modu — saklanan HTML gövdesiyle aynı ayar). Daha
 küçük veri kayıtları düz JSON kalır. HTML bu sarmalayıcıyı kullanmaz. zstd
 kullanılmaz: `node:zlib` içindeki zstd 22.15'ten itibaren var, motor ise
 `>=22`.

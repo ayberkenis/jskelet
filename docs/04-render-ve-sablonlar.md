@@ -213,7 +213,7 @@ Dikkat edilecek noktalar:
 | `devtools` | `boolean` | `NODE_ENV === "development"` |
 | `devBasePath` | `string` | `brand.devBasePath`, varsayılan `/__jskelet/dev` |
 | `asset`, `hasAsset` | fonksiyon | Manifest erişimi (EJS local; `.jsk`’de ikinci `helpers` argümanı / yerleşik etiketler) |
-| html/tags yardımcıları | fonksiyon | `esc`, `attrs`, `cx`, `cn`, `jsonScript`, `link`, `image`, `icon`, `preloadImage`, `modulePreload`, `toKebab` — aynı ayrım |
+| html/tags yardımcıları | fonksiyon | `esc`, `attrs`, `cx`, `cn`, `jsonScript`, `formatDate`, `link`, `image`, `icon`, `preloadImage`, `modulePreload`, `toKebab` — aynı ayrım |
 | `views/components/**` export'ları | fonksiyon | Otomatik kayıt (PascalCase etiket veya EJS local) |
 | `hooks.layoutContext()` çıktısındaki her alan | — | Doğrudan local olur |
 
@@ -358,6 +358,29 @@ kapatamaz.
 ```ejs
 <script type="application/ld+json"><%- jsonScript(article) %></script>
 ```
+
+### `formatDate(value, locale, options)`
+
+`new Date(value).toLocaleDateString(locale, options)` karşılığı, ama
+biçimleyici önbellekte tutulur. `toLocaleDateString` her çağrıda yeni bir
+`Intl.DateTimeFormat` kurar ve tarih başına yaklaşık 65 µs harcar. Önbellekli
+biçimleyiciyle bu süre yaklaşık 1,5 µs'ye iner. Blog örneğinde yazı kartlarının
+render süresinin büyük kısmı tarih biçimlemeye gidiyordu.
+
+```js
+import { esc, formatDate } from "jskelet/html";
+
+const DATE = { day: "numeric", month: "long", year: "numeric" };
+`<time datetime="${esc(post.publishedAt)}">${esc(formatDate(post.publishedAt, "tr-TR", DATE))}</time>`;
+```
+
+- Geçersiz tarih, `null`, `undefined` ve `""` boş string döner; şablonda
+  `Invalid Date` basılmaz.
+- Önbellek anahtarı locale ile seçenek nesnesinin içeriğidir. Seçenekleri
+  modül düzeyinde sabit tutmak zorunlu değil ama anahtar hesabını ucuzlatır.
+- Tek fark: seçenekler hiçbir tarih alanı (`year`, `month`, `day`, `weekday`,
+  `dateStyle`) içermiyorsa `toLocaleDateString` yıl/ay/gün ekler, `formatDate`
+  `Intl.DateTimeFormat` gibi yalnızca istenen alanları basar.
 
 ## Yardımcılar: `jskelet/tags`
 

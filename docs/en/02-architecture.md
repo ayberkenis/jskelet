@@ -34,7 +34,7 @@ JSkelet puts this observation at the centre of the architecture:
 ```
 Request
  ├─ rewrites(beforeFiles)          config → proxy or a change to req.url
- ├─ compression                    brotli/gzip negotiation (quality 5)
+ ├─ compression                    brotli/gzip negotiation (quality 4)
  ├─ headers                        static cache + config headers()
  ├─ devGate                        if the gate is on, 404 without a token
  ├─ redirects                      config redirects(), first match wins
@@ -80,7 +80,10 @@ position has a reason, and moving things around leads to silent breakage.
 - **`staticPrecompressed` before `express.static`.** If there are `.br`/`.gz`
   copies produced at build time, those are served (brotli quality 11);
   otherwise the request falls through to the `static` below it and the
-  middleware compresses on the fly (quality 5). Recompressing a hashed,
+  middleware compresses on the fly (quality 4). Compression that runs on every
+  request stays at 4: quality 5 costs 3–4× the CPU for only about 6% smaller
+  output. HTML cache bodies, compressed once and then stored, use 5.
+  Recompressing a hashed,
   `immutable` file on every request is wasted CPU. In production the `stat`
   result (present or missing) stays in process memory; in development it does not.
 - **Admin panel** (when `admin().enabled` / `JSKELET_ADMIN`): after static,

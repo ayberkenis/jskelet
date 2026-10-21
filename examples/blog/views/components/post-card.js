@@ -1,4 +1,4 @@
-import { attrs, cn, esc } from "jskelet/html";
+import { attrs, cn, esc, formatDate } from "jskelet/html";
 import { link } from "jskelet/tags";
 
 /**
@@ -21,7 +21,7 @@ export function postCard({ post, class: className }) {
 
   return `<article${attributes}>
     <div class="flex items-center gap-2 text-xs text-slate-500">
-      <time datetime="${esc(post.publishedAt)}">${esc(formatDate(post.publishedAt))}</time>
+      <time datetime="${esc(post.publishedAt)}">${esc(displayDate(post.publishedAt))}</time>
       <span aria-hidden="true">·</span>
       <span>${post.readingMinutes} dk okuma</span>
     </div>
@@ -86,14 +86,16 @@ export function postRows({ posts }) {
   return `<ul class="m-0 divide-y divide-slate-200 p-0">${items}</ul>`;
 }
 
+/** Sabit seçenek nesnesi: `formatDate` biçimleyiciyi bununla önbelleğe alır. */
+const DATE_OPTIONS = { day: "numeric", month: "long", year: "numeric" };
+
 /**
+ * `toLocaleDateString` her çağrıda yeni bir `Intl.DateTimeFormat` kurar ve
+ * kart başına ~65 µs harcar; `formatDate` hazır biçimleyiciyi kullanır.
+ *
  * @param {string} iso
  * @returns {string}
  */
-function formatDate(iso) {
-  return new Date(iso).toLocaleDateString("tr-TR", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  });
+function displayDate(iso) {
+  return formatDate(iso, "tr-TR", DATE_OPTIONS);
 }

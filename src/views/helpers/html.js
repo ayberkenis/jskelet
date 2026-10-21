@@ -27,6 +27,53 @@ export function esc(value) {
 }
 
 /**
+ * Locale + seçenek → biçimleyici. `Intl.DateTimeFormat` kurmak tarih başına
+ * ~65 µs, hazır olanla biçimlemek ~1.5 µs; `toLocaleDateString` her çağrıda
+ * yenisini kuruyor ve kart listelerinde render'ın çoğunu bu yiyordu.
+ *
+ * @type {Map<string, Intl.DateTimeFormat>}
+ */
+const dateFormats = new Map();
+
+/** Dinamik seçenek üreten bir çağıran haritayı sınırsız büyütmesin. */
+const DATE_FORMATS_MAX = 64;
+
+/**
+ * `new Date(value).toLocaleDateString(locale, options)` karşılığı, biçimleyici
+ * önbellekli. Fark tek: seçenekler hiçbir tarih alanı (`year`, `month`,
+ * `day`, `weekday`, `dateStyle`) içermiyorsa `toLocaleDateString` yıl/ay/gün
+ * ekler, bu fonksiyon `Intl.DateTimeFormat` gibi yalnızca istenen alanları
+ * basar. Geçersiz tarih ve `null`/`undefined` boş string döner — `esc()`
+ * gibi, şablonda `"Invalid Date"` basılmasın.
+ *
+ * @param {Date | string | number | null | undefined} value
+ * @param {string | string[]} [locale]
+ * @param {Intl.DateTimeFormatOptions} [options]
+ * @returns {string}
+ */
+export function formatDate(value, locale, options) {
+  if (value == null || value === "") return "";
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+
+  const key = `${Array.isArray(locale) ? locale.join(",") : (locale ?? "")}|${
+    options ? JSON.stringify(options) : ""
+  }`;
+  let format = dateFormats.get(key);
+  if (!format) {
+    // `toLocaleDateString` seçeneksiz çağrıda yalnızca tarihi basar;
+    // `DateTimeFormat`'in varsayılanı da aynı (yıl/ay/gün).
+    format = new Intl.DateTimeFormat(locale, options);
+    if (dateFormats.size >= DATE_FORMATS_MAX) {
+      const oldest = dateFormats.keys().next().value;
+      if (oldest !== undefined) dateFormats.delete(oldest);
+    }
+    dateFormats.set(key, format);
+  }
+  return format.format(date);
+}
+
+/**
  * `<script type="application/ld+json">` gövdesi için güvenli JSON.
  * `</script`, `<!--` ve U+2028/2029 kaçırılır.
  * @param {unknown} value

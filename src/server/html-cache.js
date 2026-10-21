@@ -132,6 +132,24 @@ const EARLY_SWEEP_MARK_BUDGET = 4;
 const store = new Map();
 
 /**
+ * Store'daki girdilere ait `encoded` haritaları. `rememberHtmlEncoding` bayt
+ * sayacını yalnızca sahipli haritada oynatır; bunu store'u tarayarak bulmak
+ * sıkıştırma başına O(girdi) demekti.
+ *
+ * @type {WeakSet<Map<string, Buffer>>}
+ */
+const ownedEncodings = new WeakSet();
+
+/**
+ * Yol → o yolun query'siz anahtarları (vary önekli kopyalar dahil).
+ * `isHtmlCacheFresh` onVisit ısıtmasında her HIT'te link başına çağrılıyor;
+ * store'u taramak istek başına O(link × girdi) demekti.
+ *
+ * @type {Map<string, Set<string>>}
+ */
+const queryless = new Map();
+
+/**
  * `store` içindeki HTML string + sıkıştırılmış gövdelerin toplamı.
  * Her `drop` / `install` bunu günceller; sıkıştırma sonradan eklendiğinde
  * `noteHtmlCacheGrowth` artışı yazar. Tam tarama yapmamak için tutulur.
@@ -326,6 +344,8 @@ function drop(key) {
   unlink(key, entry);
   storedBytes = Math.max(0, storedBytes - entryBytes(entry));
   store.delete(key);
+  ownedEncodings.delete(entry.encoded);
+  indexQueryless(key, false);
   return true;
 }
 
@@ -352,9 +372,15 @@ function read(key) {
   store.delete(key);
   store.set(key, entry);
 
-  // `encoded` yanıt yolunda büyüyebilir (gzip vb.). Kontrol yalnızca
-  // `storeEncoded` açıkken yapılır; kapalıyken bu satır karşılaştırmaya girmez.
-  if (redisSharesEncoded() && entry.encoded.size !== entry.sharedEncodings) {
+  // `encoded` yanıt yolunda büyüyebilir (gzip vb.). Yeniden paylaşım yalnızca
+  // Redis içindir: disk kopyası sıkıştırılmış gövde taşımaz ve
+  // `sharedEncodings`'i hiç ilerletmez. Bu koşul olmadan Redis'siz her kurulum
+  // her HIT'te sayfanın tamamını diske yeniden yazıyordu.
+  if (
+    redisSharesEncoded() &&
+    entry.encoded.size !== entry.sharedEncodings &&
+    redisShares("html")
+  ) {
     share(key, entry);
   }
 
@@ -519,8 +545,8 @@ function finishShared(key, payload, fromDisk) {
 }
 
 /**
- * Disk hâlâ base64 taşır. Redis `Map<string, Buffer>` döner. L1 tek kodlama
- * tutar; brotli varsa o kalır.
+ * Disk hâlâ base64 taşır. Redis `Map<string, Buffer>` döner. L1 yalnızca
+ * pazarlığı yapılan kodlamaları (`br`, `gzip`) tutar.
  *
  * @param {unknown} raw
  * @returns {Map<string, Buffer>}
@@ -531,26 +557,28 @@ function normalizeEncoded(raw) {
 
   if (raw instanceof Map) {
     for (const [encoding, buffer] of raw) {
-      if (typeof encoding === "string" && Buffer.isBuffer(buffer) && buffer.length) {
+      if (STORED_ENCODINGS.has(encoding) && Buffer.isBuffer(buffer) && buffer.length) {
         encoded.set(encoding, buffer);
       }
     }
   } else if (raw && typeof raw === "object") {
     for (const [encoding, value] of Object.entries(raw)) {
+      if (!STORED_ENCODINGS.has(encoding)) continue;
       if (typeof value === "string") encoded.set(encoding, Buffer.from(value, "base64"));
       else if (Buffer.isBuffer(value) && value.length) encoded.set(encoding, value);
     }
   }
 
-  if (encoded.size > 1) {
-    const keep = encoded.has("br") ? "br" : encoded.keys().next().value;
-    const buffer = keep ? encoded.get(keep) : undefined;
-    encoded.clear();
-    if (keep && buffer) encoded.set(keep, buffer);
-  }
-
   return encoded;
 }
+
+/**
+ * Girdi başına kodlama başına en fazla bir gövde. Tek yuva br ve gzip
+ * istemcileri karışık geldiğinde her istekte yeniden sıkıştırma demekti
+ * (ölçümde HIT verimi −%17); gzip kopyası brotli'den yalnızca biraz büyük
+ * ve bayt bütçesine sayıldığı için bellek tavanı değişmez.
+ */
+const STORED_ENCODINGS = new Set(["br", "gzip"]);
 
 /**
  * @param {string} key
@@ -625,6 +653,8 @@ function install(key, entry) {
   if (weight > activeByteBudget()) return false;
 
   store.set(key, entry);
+  ownedEncodings.add(entry.encoded);
+  indexQueryless(key, true);
   storedBytes += weight;
 
   for (const dep of entry.deps) {
@@ -865,7 +895,9 @@ export function clearHtmlCache() {
  * yapan bir dinleyici iki node arasında sonsuz mesaj döngüsü üretir.
  */
 function clearLocal() {
+  for (const entry of store.values()) ownedEncodings.delete(entry.encoded);
   store.clear();
+  queryless.clear();
   storedBytes = 0;
   dependents.clear();
   tokens.clear();
@@ -1265,17 +1297,40 @@ export function isHtmlCacheFresh(pathname, req) {
     // Config yokken (testler) önek aranmaz; yol eşleşmesi yeter.
   }
 
+  const keys = queryless.get(pathname);
+  if (!keys) return false;
+
   const now = Date.now();
-  for (const [key, entry] of store) {
-    if (now >= entry.expiresAt) continue;
-    if (pathOfCacheKey(key) !== pathname) continue;
-    const q = key.indexOf("?");
-    if (q !== -1 && key.slice(q + 1)) continue;
+  for (const key of keys) {
+    const entry = store.get(key);
+    if (!entry || now >= entry.expiresAt) continue;
     if (host && hostOfCacheKey(key) !== host) continue;
     return true;
   }
 
   return false;
+}
+
+/**
+ * Anahtarı query'siz ise yol indeksine ekler ya da çıkarır.
+ *
+ * @param {string} key
+ * @param {boolean} add
+ */
+function indexQueryless(key, add) {
+  const q = key.indexOf("?");
+  if (q !== -1 && q < key.length - 1) return;
+
+  const pathname = pathOfCacheKey(key);
+  let keys = queryless.get(pathname);
+  if (add) {
+    if (!keys) queryless.set(pathname, (keys = new Set()));
+    keys.add(key);
+    return;
+  }
+  if (!keys) return;
+  keys.delete(key);
+  if (!keys.size) queryless.delete(pathname);
 }
 
 /**
@@ -1293,9 +1348,10 @@ export function isHtmlCacheKeyFresh(key) {
 }
 
 /**
- * Girdide en fazla bir sıkıştırılmış gövde durur. Yeni kodlama eskisinin
- * yerini alır; ham HTML kalır. Bayt sayacı delta ile güncellenir — harita
- * LRU'dan düşmüşse (store'da yok) sayaç oynatılmaz.
+ * Girdide kodlama başına (`br`, `gzip`) en fazla bir sıkıştırılmış gövde
+ * durur; aynı kodlamanın yenisi eskisinin yerini alır, ham HTML kalır. Bayt
+ * sayacı delta ile güncellenir — harita LRU'dan düşmüşse (store'da yok)
+ * sayaç oynatılmaz.
  *
  * @param {Map<string, Buffer>} encoded
  * @param {string} encoding
@@ -1303,25 +1359,13 @@ export function isHtmlCacheKeyFresh(key) {
  * @returns {void}
  */
 export function rememberHtmlEncoding(encoded, encoding, buffer) {
-  let removed = 0;
-  for (const [key, buf] of [...encoded.entries()]) {
-    if (key !== encoding) {
-      removed += buf.length;
-      encoded.delete(key);
-    }
-  }
+  if (!STORED_ENCODINGS.has(encoding)) return;
+
   const previous = encoded.get(encoding);
-  if (previous) removed += previous.length;
+  const removed = previous ? previous.length : 0;
   encoded.set(encoding, buffer);
 
-  let owned = false;
-  for (const entry of store.values()) {
-    if (entry.encoded === encoded) {
-      owned = true;
-      break;
-    }
-  }
-  if (!owned) return;
+  if (!ownedEncodings.has(encoded)) return;
 
   storedBytes = Math.max(0, storedBytes - removed + buffer.length);
   evictOverflow();

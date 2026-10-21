@@ -239,8 +239,11 @@ The store is an LRU: an accessed entry is moved to the end, and once the limit
 (`cache().maxEntries`, 500 by default) is exceeded the oldest is evicted. Config
 may ask for more than 500; it **cannot exceed 800** — a higher value is clamped
 to 800 with a warning. Separately, in-process HTML strings plus compressed
-bodies **cannot exceed 256 MB**. The compressed copy is singular: brotli or
-gzip, whichever was requested last. The raw HTML stays. A fat page or a `vary.host` copy that is still
+bodies **cannot exceed 256 MB**. Each entry keeps one body per encoding: at
+most one brotli body and one gzip body. Brotli is produced on write
+(quality 5), gzip on the first gzip request. With a single slot, mixed brotli
+and gzip clients made the page recompress on almost every request. The raw
+HTML stays. A fat page or a `vary.host` copy that is still
 under the count limit is evicted by this budget too. A single page larger than
 256 MB is not stored; that response is still sent.
 
@@ -912,7 +915,7 @@ missing the record counts as absent and the page is rendered.
 
 Data entries of 1 KB or more are not stored as plain JSON. They are a brotli
 body prefixed with `JSK\x01` (quality 5, text mode — the same settings as
-response compression). Smaller data records stay plain JSON. HTML does not use
+stored HTML bodies). Smaller data records stay plain JSON. HTML does not use
 that wrapper. zstd is not used: `node:zlib` gained it in 22.15, while the
 engine range is `>=22`.
 

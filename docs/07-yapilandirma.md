@@ -871,7 +871,7 @@ yükseltmek belleği hızla tüketir; on binlerce yollu bir siteyi buradan çöz
 
 **Tavan 800.** Daha yükseği yüklemede uyarıyla 800'e çekilir. Süreç içi HTML +
 sıkıştırılmış gövde ayrıca 256 MB'yi geçemez; bu bütçe config'den yükseltilmez.
-Sıkıştırılmış kopya tektir (brotli veya gzip).
+Girdi başına en fazla bir brotli ve bir gzip gövdesi tutulur.
 
 ### `cache().data`
 

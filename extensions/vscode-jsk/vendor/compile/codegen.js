@@ -1,6 +1,10 @@
 /**
  * AST → ESM kaynak metni. `eval` / `new Function` yok; çıktı diskteki
  * `.mjs` dosyasına yazılır ve runtime'da normal `import` ile yüklenir.
+ *
+ * Statik HTML parçaları bitişik `s +=` yerine tek literal'de birleşir;
+ * şablon girintisi (satır sonu içeren salt-whitespace) derlemede düşer.
+ * `pre` / `textarea` / `script` / `style` / `code` içinde whitespace korunur.
  */
 import { codegenExpr } from "./expr.js";
 import { CompileError } from "./errors.js";
@@ -9,6 +13,9 @@ import { CompileError } from "./errors.js";
  * @typedef {import('./parse.js').AstNode} AstNode
  * @typedef {import('./parse.js').AttrNode} AttrNode
  */
+
+/** İçinde girinti sıkıştırması yapılmayan etiketler. */
+const PRESERVE_WS = new Set(["pre", "textarea", "script", "style", "code"]);
 
 /**
  * @param {AstNode[]} ast
@@ -49,6 +56,21 @@ export function toPascalCase(name) {
     .join("");
 }
 
+/**
+ * Şablon girintisini düşür: satır sonu içeren salt-whitespace → boş;
+ * yalnızca boşluk/tab → tek boşluk (inline aralık). Koruma alanı dışında.
+ *
+ * @param {string} value
+ * @param {boolean} preserve
+ * @returns {string}
+ */
+export function collapseTemplateWhitespace(value, preserve) {
+  if (preserve || !value) return value;
+  if (!/^[\t\n\r\f\v ]+$/.test(value)) return value;
+  if (/[\n\r]/.test(value)) return "";
+  return " ";
+}
+
 class CodegenContext {
   /**
    * @param {{ viewId: string, file?: string, knownComponents?: Set<string> }} options
@@ -71,6 +93,10 @@ class CodegenContext {
     this.locals = new Set();
     /** Çocuk gövdesinde `s` yerine kullanılacak değişken. */
     this.outVar = "s";
+    /** Bitişik statik parçalar — flush edilene kadar birikir. */
+    this.staticBuf = "";
+    /** `pre` vb. iç içe derinliği. */
+    this.preserveWs = 0;
   }
 
   /**
@@ -81,9 +107,28 @@ class CodegenContext {
   }
 
   /**
+   * Birikmiş statik HTML'i tek `+=` olarak yazar.
+   * @returns {void}
+   */
+  flushStatic() {
+    if (!this.staticBuf) return;
+    this.line(`${this.outVar} += ${JSON.stringify(this.staticBuf)};`);
+    this.staticBuf = "";
+  }
+
+  /**
+   * @param {string} text
+   */
+  appendStatic(text) {
+    if (text) this.staticBuf += text;
+  }
+
+  /**
+   * Dinamik ifade — önce statik tamponu boşaltır.
    * @param {string} exprJs
    */
   append(exprJs) {
+    this.flushStatic();
     this.line(`${this.outVar} += ${exprJs};`);
   }
 
@@ -105,9 +150,14 @@ class CodegenContext {
    */
   emit(node) {
     switch (node.type) {
-      case "Text":
-        if (node.value) this.append(JSON.stringify(node.value));
+      case "Text": {
+        const value = collapseTemplateWhitespace(
+          node.value,
+          this.preserveWs > 0,
+        );
+        if (value) this.appendStatic(value);
         break;
+      }
       case "Interp": {
         const expr = codegenExpr(node.expr, this.locals);
         if (node.raw) this.append(`(${expr} ?? "")`);
@@ -139,17 +189,64 @@ class CodegenContext {
    */
   emitElement(node) {
     const bound = node.attrs.some((a) => a.bound);
+    const preserve = PRESERVE_WS.has(node.name.toLowerCase());
+
     if (bound) {
-      this.append(
-        `"<${node.name}" + helpers.attrs({${this.attrsObject(node.attrs)}}) + ">"`,
-      );
+      this.appendStatic(`<${node.name}`);
+      this.emitBoundAttrs(node.attrs);
+      this.appendStatic(">");
     } else {
-      this.append(JSON.stringify(`<${node.name}${staticAttrString(node.attrs)}>`));
+      this.appendStatic(`<${node.name}${staticAttrString(node.attrs)}>`);
     }
 
     if (!node.selfClosing) {
+      if (preserve) this.preserveWs += 1;
       this.emitNodes(node.children);
-      this.append(JSON.stringify(`</${node.name}>`));
+      if (preserve) this.preserveWs -= 1;
+      this.appendStatic(`</${node.name}>`);
+    }
+  }
+
+  /**
+   * Bağlı attribute taşıyan elemanın attribute'ları. Çıktı eskiden yazılan
+   * `helpers.attrs({...})` ile bayt bayt aynı, ama statik kısım derlemede
+   * kaçışlanıp çevredeki statik HTML'le birleşir; çalışma anında yalnızca
+   * bağlı değerler kontrol edilir. Ölçümde nesne kurup `Object.entries`
+   * üzerinden yürümek attribute başına ~9 kat pahalıydı.
+   *
+   * Aynı ad iki kez yazılmışsa nesne literal'i gibi davranılır: ilk konumda,
+   * son değerle.
+   *
+   * @param {AttrNode[]} attrs
+   */
+  emitBoundAttrs(attrs) {
+    /** @type {Map<string, AttrNode>} */
+    const byName = new Map();
+    for (const attr of attrs) byName.set(attr.name, attr);
+
+    for (const [name, attr] of byName) {
+      if (!attr.bound || !attr.expr) {
+        this.appendStatic(staticAttr(name, attr.boolean ? true : (attr.value ?? true)));
+        continue;
+      }
+      if (attr.expr.type === "Literal") {
+        this.appendStatic(staticAttr(name, attr.expr.value));
+        continue;
+      }
+
+      const tmp = this.nextTemp();
+      const expr = codegenExpr(attr.expr, this.locals);
+      this.flushStatic();
+      this.line(`{`);
+      this.indent += 1;
+      this.line(`const ${tmp} = ${expr};`);
+      this.line(
+        `if (${tmp} != null && ${tmp} !== false) ${this.outVar} += ${tmp} === true ? ${JSON.stringify(
+          ` ${name}`,
+        )} : ${JSON.stringify(` ${name}="`)} + helpers.esc(${tmp}) + "\\"";`,
+      );
+      this.indent -= 1;
+      this.line(`}`);
     }
   }
 
@@ -186,13 +283,18 @@ class CodegenContext {
 
     if (node.children.length) {
       const tmp = this.nextTemp();
+      this.flushStatic();
       this.line(`{`);
       this.indent += 1;
       this.line(`let ${tmp} = "";`);
       const prevOut = this.outVar;
+      const prevStatic = this.staticBuf;
       this.outVar = tmp;
+      this.staticBuf = "";
       this.emitNodes(node.children);
+      this.flushStatic();
       this.outVar = prevOut;
+      this.staticBuf = prevStatic;
       const propsWithChildren = props
         ? `${props}, children: ${tmp}`
         : `children: ${tmp}`;
@@ -209,14 +311,17 @@ class CodegenContext {
    */
   emitIf(node) {
     const test = codegenExpr(node.test, this.locals);
+    this.flushStatic();
     this.line(`if (${test}) {`);
     this.indent += 1;
     this.emitNodes(node.consequent);
+    this.flushStatic();
     this.indent -= 1;
     if (node.alternate.length) {
       this.line(`} else {`);
       this.indent += 1;
       this.emitNodes(node.alternate);
+      this.flushStatic();
       this.indent -= 1;
     }
     this.line(`}`);
@@ -228,6 +333,7 @@ class CodegenContext {
   emitEach(node) {
     const list = codegenExpr(node.list, this.locals);
     const idx = node.indexName ?? `__i${++this.temp}`;
+    this.flushStatic();
     this.line(`{`);
     this.indent += 1;
     this.line(`const __list = ${list} ?? [];`);
@@ -239,6 +345,7 @@ class CodegenContext {
     this.locals.add(idx);
     if (node.indexName) this.locals.add(node.indexName);
     this.emitNodes(node.children);
+    this.flushStatic();
     this.locals = prev;
     this.indent -= 1;
     this.line(`}`);
@@ -259,6 +366,8 @@ class CodegenContext {
 
   /** @returns {string} */
   finish() {
+    this.flushStatic();
+
     const imports = [...this.includes]
       .map((id) => {
         const alias = includeAlias(id);
@@ -301,6 +410,22 @@ function staticAttrString(attrs) {
     out += ` ${attr.name}="${escapeAttr(attr.value ?? "")}"`;
   }
   return out;
+}
+
+/** `helpers.esc` ile aynı tablo — derlemede kaçışlanan değer çalışma anındakiyle aynı baytları vermeli. */
+const ESC_MAP = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
+
+/**
+ * `helpers.attrs()`in tek bir attribute için çıktısı, derleme zamanında.
+ *
+ * @param {string} name
+ * @param {unknown} value
+ * @returns {string}
+ */
+function staticAttr(name, value) {
+  if (value == null || value === false) return "";
+  if (value === true) return ` ${name}`;
+  return ` ${name}="${String(value).replace(/[&<>"']/g, (ch) => ESC_MAP[/** @type {keyof typeof ESC_MAP} */ (ch)])}"`;
 }
 
 /**

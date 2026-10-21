@@ -22,6 +22,15 @@ let testRoot = null;
 
 let pruned = false;
 
+/** Yazımı uçuşta olan dosyalar. @type {Set<string>} */
+const writing = new Set();
+
+/**
+ * Uçuştaki yazım bitince yazılacak son değer.
+ * @type {Map<string, { kind: "html" | "data", key: string, value: unknown }>}
+ */
+const queued = new Map();
+
 /**
  * @param {string | null} root Mutlak dizin, ya da config yoluna dönmek için `null`.
  */
@@ -163,13 +172,24 @@ export function diskSetJson(kind, key, value) {
   const encoded = encodeCacheValue(value);
   if (encoded === null) return Promise.resolve();
 
+  // Aynı dosyaya uçuşta bir yazım varsa yenisi beklemeye alınır, ara
+  // değerler atlanır: Windows'ta eşzamanlı `rename` EPERM ile düşüyor, en
+  // son değer ise (TTL sonrası tazeleme) kaybolmamalı.
+  if (writing.has(file)) {
+    queued.set(file, { kind, key, value });
+    return Promise.resolve();
+  }
+  writing.add(file);
+
   const write = (/** @type {string | Buffer} */ payload) => {
-    const tmp = `${file}.${process.pid}.tmp`;
+    // PID tek başına yetmez: aynı süreçteki iki yazım aynı tmp'yi paylaşırdı.
+    const tmp = `${file}.${process.pid}.${crypto.randomBytes(4).toString("hex")}.tmp`;
     return fs
       .mkdir(path.dirname(file), { recursive: true })
       .then(() => fs.writeFile(tmp, frame(key, payload)))
       .then(() => fs.rename(tmp, file))
       .catch((error) => {
+        fs.rm(tmp, { force: true }).catch(() => {});
         console.warn(
           "[disk-cache] write failed",
           error instanceof Error ? error.message : error,
@@ -177,8 +197,18 @@ export function diskSetJson(kind, key, value) {
       });
   };
 
-  if (typeof encoded === "string" || Buffer.isBuffer(encoded)) return write(encoded);
-  return encoded.then(write);
+  const done = () => {
+    writing.delete(file);
+    const next = queued.get(file);
+    if (!next) return undefined;
+    queued.delete(file);
+    return diskSetJson(next.kind, next.key, next.value);
+  };
+  const pending =
+    typeof encoded === "string" || Buffer.isBuffer(encoded)
+      ? write(encoded)
+      : encoded.then(write);
+  return pending.then(done, done);
 }
 
 /**

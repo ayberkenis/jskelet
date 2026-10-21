@@ -192,9 +192,9 @@ class CodegenContext {
     const preserve = PRESERVE_WS.has(node.name.toLowerCase());
 
     if (bound) {
-      this.append(
-        `"<${node.name}" + helpers.attrs({${this.attrsObject(node.attrs)}}) + ">"`,
-      );
+      this.appendStatic(`<${node.name}`);
+      this.emitBoundAttrs(node.attrs);
+      this.appendStatic(">");
     } else {
       this.appendStatic(`<${node.name}${staticAttrString(node.attrs)}>`);
     }
@@ -204,6 +204,49 @@ class CodegenContext {
       this.emitNodes(node.children);
       if (preserve) this.preserveWs -= 1;
       this.appendStatic(`</${node.name}>`);
+    }
+  }
+
+  /**
+   * Bağlı attribute taşıyan elemanın attribute'ları. Çıktı eskiden yazılan
+   * `helpers.attrs({...})` ile bayt bayt aynı, ama statik kısım derlemede
+   * kaçışlanıp çevredeki statik HTML'le birleşir; çalışma anında yalnızca
+   * bağlı değerler kontrol edilir. Ölçümde nesne kurup `Object.entries`
+   * üzerinden yürümek attribute başına ~9 kat pahalıydı.
+   *
+   * Aynı ad iki kez yazılmışsa nesne literal'i gibi davranılır: ilk konumda,
+   * son değerle.
+   *
+   * @param {AttrNode[]} attrs
+   */
+  emitBoundAttrs(attrs) {
+    /** @type {Map<string, AttrNode>} */
+    const byName = new Map();
+    for (const attr of attrs) byName.set(attr.name, attr);
+
+    for (const [name, attr] of byName) {
+      if (!attr.bound || !attr.expr) {
+        this.appendStatic(staticAttr(name, attr.boolean ? true : (attr.value ?? true)));
+        continue;
+      }
+      if (attr.expr.type === "Literal") {
+        this.appendStatic(staticAttr(name, attr.expr.value));
+        continue;
+      }
+
+      const tmp = this.nextTemp();
+      const expr = codegenExpr(attr.expr, this.locals);
+      this.flushStatic();
+      this.line(`{`);
+      this.indent += 1;
+      this.line(`const ${tmp} = ${expr};`);
+      this.line(
+        `if (${tmp} != null && ${tmp} !== false) ${this.outVar} += ${tmp} === true ? ${JSON.stringify(
+          ` ${name}`,
+        )} : ${JSON.stringify(` ${name}="`)} + helpers.esc(${tmp}) + "\\"";`,
+      );
+      this.indent -= 1;
+      this.line(`}`);
     }
   }
 
@@ -367,6 +410,22 @@ function staticAttrString(attrs) {
     out += ` ${attr.name}="${escapeAttr(attr.value ?? "")}"`;
   }
   return out;
+}
+
+/** `helpers.esc` ile aynı tablo — derlemede kaçışlanan değer çalışma anındakiyle aynı baytları vermeli. */
+const ESC_MAP = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
+
+/**
+ * `helpers.attrs()`in tek bir attribute için çıktısı, derleme zamanında.
+ *
+ * @param {string} name
+ * @param {unknown} value
+ * @returns {string}
+ */
+function staticAttr(name, value) {
+  if (value == null || value === false) return "";
+  if (value === true) return ` ${name}`;
+  return ` ${name}="${String(value).replace(/[&<>"']/g, (ch) => ESC_MAP[/** @type {keyof typeof ESC_MAP} */ (ch)])}"`;
 }
 
 /**

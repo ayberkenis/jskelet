@@ -3,6 +3,7 @@
  */
 import fs from "node:fs";
 import path from "node:path";
+import process from "node:process";
 import { parseTemplate } from "./parse.js";
 import { codegen, normalizeIncludeId } from "./codegen.js";
 import { CompileError } from "./errors.js";
@@ -97,21 +98,35 @@ export async function compileAll(config, _options = {}) {
 }
 
 /**
- * Manifest yoksa veya herhangi bir `.jsk` daha yeniyse yeniden derler.
+ * Manifest yoksa veya (dev'de) herhangi bir `.jsk` daha yeniyse yeniden derler.
+ * Production'da manifest varsa mtime taraması atlanır — `jskelet build` CI
+ * güvencesi; ilk istekte yüzlerce `statSync` cold start'ı şişirmesin.
  * Dev sunucu restart'ında build watch kaçırmış olsa bile şablonlar güncel kalır.
  *
  * @param {{ root: string, dirs: Record<string, string> }} config
  * @returns {Promise<{ count: number, rebuilt: boolean }>}
  */
 export async function ensureTemplatesCompiled(config) {
+  const outDir = path.join(config.dirs.generated, "templates");
+  const manifestPath = path.join(outDir, "manifest.json");
+  const isProd = process.env.NODE_ENV === "production";
+
+  // Prod'da manifest varsa kaynak ağacını hiç gezme — cold start FS maliyeti.
+  if (isProd && fs.existsSync(manifestPath)) {
+    try {
+      const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+      return { count: Object.keys(manifest).length, rebuilt: false };
+    } catch {
+      return { count: 0, rebuilt: false };
+    }
+  }
+
   const viewRoots = getViewRoots(config);
   const jskFiles = discoverJskFiles(viewRoots);
   if (jskFiles.size === 0) {
     return { count: 0, rebuilt: false };
   }
 
-  const outDir = path.join(config.dirs.generated, "templates");
-  const manifestPath = path.join(outDir, "manifest.json");
   let needs = !fs.existsSync(manifestPath);
 
   if (!needs) {

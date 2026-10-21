@@ -886,7 +886,8 @@ tens of thousands of paths from here is the wrong layer — the right place is
 
 **Ceiling 800.** A higher value is clamped to 800 with a warning at load.
 In-process HTML plus compressed bodies also cannot exceed 256 MB; config
-cannot raise that budget. Only one compressed copy is kept (brotli or gzip).
+cannot raise that budget. Each entry keeps at most one brotli body and one
+gzip body.
 
 ### `cache().data`
 

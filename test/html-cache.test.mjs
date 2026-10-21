@@ -359,8 +359,8 @@ test("compressed bodies count toward the byte budget", async () => {
   assert.equal(getHtmlCacheSize(), 0);
 });
 
-test("only one compressed encoding is retained", async () => {
-  setHtmlCacheByteBudget(25);
+test("one compressed body per encoding is retained", async () => {
+  setHtmlCacheByteBudget(1000);
   const result = await withHtmlCache("/a", 60, async () => ({
     html: "a".repeat(10),
     status: 200,
@@ -368,7 +368,23 @@ test("only one compressed encoding is retained", async () => {
 
   rememberHtmlEncoding(result.encoded, "br", Buffer.alloc(10));
   rememberHtmlEncoding(result.encoded, "gzip", Buffer.alloc(10));
+  rememberHtmlEncoding(result.encoded, "br", Buffer.alloc(12));
+  rememberHtmlEncoding(result.encoded, "deflate", Buffer.alloc(10));
 
-  assert.deepEqual([...result.encoded.keys()], ["gzip"]);
+  assert.deepEqual([...result.encoded.keys()].sort(), ["br", "gzip"]);
+  assert.equal(result.encoded.get("br")?.length, 12);
   assert.equal(getHtmlCacheSize(), 1);
+});
+
+test("a second encoding counts toward the byte budget", async () => {
+  setHtmlCacheByteBudget(35);
+  const result = await withHtmlCache("/a", 60, async () => ({
+    html: "a".repeat(10),
+    status: 200,
+  }));
+
+  rememberHtmlEncoding(result.encoded, "br", Buffer.alloc(10));
+  assert.equal(getHtmlCacheSize(), 1);
+  rememberHtmlEncoding(result.encoded, "gzip", Buffer.alloc(20));
+  assert.equal(getHtmlCacheSize(), 0, "iki gövde bütçeyi aşınca girdi düşer");
 });

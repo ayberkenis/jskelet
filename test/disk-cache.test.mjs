@@ -68,6 +68,39 @@ test("a page is written to disk and promotes after L1 is cleared", async () => {
   assert.equal(getHtmlCacheSize(), 1);
 });
 
+test("cache hits do not rewrite the disk copy", async () => {
+  await tempRoot();
+
+  await withHtmlCache("/a?", 60, async () => ({ html: "bir kez", status: 200 }));
+  for (let i = 0; (await files("html")).length === 0 && i < 50; i += 1) await sleep(10);
+  const [name] = await files("html");
+  await fs.rm(path.join(root, "html", name));
+
+  for (let i = 0; i < 5; i += 1) {
+    const hit = await withHtmlCache("/a?", 60, async () => {
+      throw new Error("render çalışmamalıydı");
+    });
+    assert.equal(hit.cached, true);
+  }
+  await sleep(50);
+  assert.deepEqual(await files("html"), [], "HIT diske yeniden yazmamalı");
+});
+
+test("concurrent writes of one key leave a single file and no temp files", async () => {
+  await tempRoot();
+  const { diskSetJson } = await import("../src/server/disk-cache.js");
+
+  await Promise.all(
+    Array.from({ length: 8 }, (_, i) =>
+      diskSetJson("html", "/yaris?", { html: `v${i}`, status: 200, expiresAt: Date.now() + 60_000 }),
+    ),
+  );
+  for (let i = 0; i < 20; i += 1) await sleep(10);
+
+  assert.deepEqual((await files("html")).filter((n) => n.endsWith(".tmp")), []);
+  assert.equal((await files("html")).length, 1);
+});
+
 test("invalidation removes the file so the next read renders", async () => {
   await tempRoot();
 

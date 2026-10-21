@@ -434,7 +434,7 @@ Build çıktısı varlıkların brotli (kalite 11) ve gzip (seviye 9) kopyaları
 - Yalnızca `public/assets/` kapsanır: oradaki dosyalar hash'li ve `immutable`,
   yani içerikleri hiç değişmiyor ve her istekte yeniden sıkıştırmak boşa CPU.
   Build'de bir kez kalite 11 ile sıkıştırmak hem sunucu yükünü sıfırlar hem de
-  çalışma anında göze alınamayacak bir oran verir (istek anındaki kalite 5'e
+  çalışma anında göze alınamayacak bir oran verir (istek anındaki kalite 4'e
   karşı).
 - `public/` altındaki elle konmuş dosyalar küçük ve seyrek istendiği için
   çalışma anındaki sıkıştırmaya bırakılır.

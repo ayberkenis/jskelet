@@ -5,6 +5,20 @@
  */
 export declare function esc(value: unknown): string;
 /**
+ * `new Date(value).toLocaleDateString(locale, options)` karşılığı, biçimleyici
+ * önbellekli. Fark tek: seçenekler hiçbir tarih alanı (`year`, `month`,
+ * `day`, `weekday`, `dateStyle`) içermiyorsa `toLocaleDateString` yıl/ay/gün
+ * ekler, bu fonksiyon `Intl.DateTimeFormat` gibi yalnızca istenen alanları
+ * basar. Geçersiz tarih ve `null`/`undefined` boş string döner — `esc()`
+ * gibi, şablonda `"Invalid Date"` basılmasın.
+ *
+ * @param {Date | string | number | null | undefined} value
+ * @param {string | string[]} [locale]
+ * @param {Intl.DateTimeFormatOptions} [options]
+ * @returns {string}
+ */
+export declare function formatDate(value: Date | string | number | null | undefined, locale?: string | string[], options?: Intl.DateTimeFormatOptions): string;
+/**
  * `<script type="application/ld+json">` gövdesi için güvenli JSON.
  * `</script`, `<!--` ve U+2028/2029 kaçırılır.
  * @param {unknown} value

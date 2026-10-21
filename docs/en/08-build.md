@@ -451,7 +451,7 @@ Produces brotli (quality 11) and gzip (level 9) copies of the built assets:
   meaning their contents never change and recompressing them on every request is
   wasted CPU. Compressing once at build time with quality 11 both zeroes out the
   server load and gives a ratio you could never afford at runtime (as against
-  quality 5 at request time).
+  quality 4 at request time).
 - Files placed by hand under `public/` are left to runtime compression, because
   they are small and requested rarely.
 - Compressed extensions: `.css`, `.js`, `.mjs`, `.svg`, `.json`, `.xml`,
