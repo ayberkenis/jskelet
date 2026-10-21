@@ -176,7 +176,7 @@ internally.
 | `client` | `"client"` | Island runtime sources and entries |
 | `routes` | `"routes"` | Route modules |
 | `styles` | `"styles/globals.css"` | Tailwind/PostCSS entry **file** |
-| `generated` | `".jskelet"` | `manifest.json`, `templates/`, `metafile.json`, `images.json` |
+| `generated` | `".jskelet"` | `manifest.json`, `templates/`, `metafile.json`, `preload.json`, `images.json` |
 
 Even though `styles` is a file path it goes through the same resolution; keeping
 a separate field for it is not worth it.
@@ -986,8 +986,9 @@ the site keeps running on the in-process cache.
 
 Keys are split: `_jskelet:{namespace}:{buildId}:html:{path}?{query}` is the
 small meta JSON, the `:body` suffix is the brotli bytes of the HTML, and
-`:enc:br` / `:enc:gzip` hold the response encoding. `buildId` changes with
-every build, so old HTML becomes invalid on its own after a deploy.
+`:enc:br` / `:enc:gzip` hold the response encoding. `buildId` changes when
+the asset manifest or the view sources (layout, templates, components)
+change, so old HTML becomes invalid on its own after a deploy.
 Personalised (`storable: false`), `degraded` and non-200 responses are never
 written to the shared tier. Trade-offs and diagnosis:
 [06-caching.md](./06-caching.md).

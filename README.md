@@ -301,7 +301,7 @@ Only the specifiers in the `exports` map are supported:
 | `jskelet` | `route`, `fragment`, `createApp`, `startServer`, `notFound`, `redirect`, `seeOther`, `cache`, `asset`, `getConfig`, cookie helpers, HTML/data cache and prewarm helpers, Redis/Cloudflare status and purge helpers |
 | `jskelet/client` | `register`, `registerAll`, `hydrate`, `unmount`, `start`, `swap`, `startForms`, `createStore`, DOM helpers |
 | `jskelet/html` | `attrs`, `cn`, `cx`, `esc`, `jsonScript` |
-| `jskelet/tags` | `icon`, `image`, `link`, `preloadImage`, `csrfField` |
+| `jskelet/tags` | `icon`, `image`, `link`, `preloadImage`, `modulePreload`, `csrfField` |
 | `jskelet/cookies` | `parseCookies`, `setCookie`, `clearCookie`, `setSignedCookie`, `getSignedCookie`, `randomToken`, `safeEqual` |
 
 Anything reachable by a deeper path is internal and may change without notice.

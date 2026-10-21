@@ -4,6 +4,7 @@
  */
 import { compileAll } from "../../compile/compile-all.js";
 import * as log from "../../log.mjs";
+import { writeTemplatesFingerprint } from "../templates-fingerprint.mjs";
 
 /**
  * @param {import('../../config/index.js').ResolvedConfig} config
@@ -16,5 +17,8 @@ export async function buildTemplates(config) {
   } else {
     log.line(`${result.count} template${result.count === 1 ? "" : "s"} → .jskelet/templates`);
   }
+  // `.jsk` olmayan (EJS) projede de yazılır: HTML önbelleğinin isim alanı
+  // layout değişince yenilensin.
+  writeTemplatesFingerprint(config, result.outDir);
   return result.count;
 }

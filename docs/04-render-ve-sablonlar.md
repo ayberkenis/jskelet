@@ -68,7 +68,7 @@ controller data → import edilmiş render(data, helpers) → HTML
 | Döngü | `{#each list as item}` veya `as item, i` |
 | Include | `{#include "partials/header"}` (derlenmiş `.jsk`) |
 | Bileşen | PascalCase etiket; `:prop="expr"`, `prop="literal"`, boolean `disabled` |
-| Yerleşikler | `Link`, `Image`, `Icon`, `CsrfField`, `PreloadImage` |
+| Yerleşikler | `Link`, `Image`, `Icon`, `CsrfField`, `PreloadImage`, `ModulePreload` |
 
 İfade dili kasıtlı olarak dardır (erişim, karşılaştırma, ternary, `.length`).
 Atama, object literal ve rastgele fonksiyon çağrısı yok — mantık controller
@@ -113,7 +113,8 @@ script ve JSON-LD döngüleri için yerleşikler:
 
 | Etiket | Props | Çıktı |
 | --- | --- | --- |
-| `Stylesheets` | `styles`, `blocking` | `app.css` + sayfa sheet’leri (`data-jskelet-css`). `blocking` varsayılan `true` |
+| `Stylesheets` | `styles`, `blocking` | `app.css` + sayfa sheet’leri (`data-jskelet-css`). `blocking`: `true` (varsayılan), `false` veya media sorgusu |
+| `ModulePreload` | `src` (yol ya da dizi) | Kaynak modülün chunk'ı ve static import'ları için `modulepreload` linkleri |
 | `BodyScripts` | `entries`, `devtools`, `devBasePath` | `main.js`, entry’ler, isteğe bağlı overlay |
 | `JsonLd` | `items` (`structuredData`) | `application/ld+json` script’leri |
 
@@ -186,8 +187,10 @@ Dikkat edilecek noktalar:
   sheet'i global CSS'i de içeren birleşik varlıktır ve `app.css` yerine basılır.
   `<Stylesheets :blocking="false" />` (`stylesheets({ blocking: false })`)
   linki `media="print"` + `onload` ile basar; JS kapalıyken `<noscript>` yedeği
-  uygulanır. Boyama beklenmez, sheet gelince düzen kayabilir. Build çalışmadıysa
-  `hasAsset` false olur ve etiket hiç basılmaz.
+  uygulanır. Boyama beklenmez, sheet gelince düzen kayabilir.
+  `<Stylesheets blocking="(min-width: 1024px)" />` beklemeyi bir media
+  sorgusuna bağlar: eşleşen ekranda blocking, diğerlerinde `false` gibi.
+  Build çalışmadıysa `hasAsset` false olur ve etiket hiç basılmaz.
 - **`hasAsset` kontrolleri** build eksikken sayfanın 404 veren dosyaları
   istememesini sağlar (`Stylesheets` / `BodyScripts` içinde).
 - **Devtools script'i** yalnızca `NODE_ENV=development` iken basılır; prod
@@ -210,7 +213,7 @@ Dikkat edilecek noktalar:
 | `devtools` | `boolean` | `NODE_ENV === "development"` |
 | `devBasePath` | `string` | `brand.devBasePath`, varsayılan `/__jskelet/dev` |
 | `asset`, `hasAsset` | fonksiyon | Manifest erişimi (EJS local; `.jsk`’de ikinci `helpers` argümanı / yerleşik etiketler) |
-| html/tags yardımcıları | fonksiyon | `esc`, `attrs`, `cx`, `cn`, `jsonScript`, `link`, `image`, `icon`, `preloadImage`, `toKebab` — aynı ayrım |
+| html/tags yardımcıları | fonksiyon | `esc`, `attrs`, `cx`, `cn`, `jsonScript`, `link`, `image`, `icon`, `preloadImage`, `modulePreload`, `toKebab` — aynı ayrım |
 | `views/components/**` export'ları | fonksiyon | Otomatik kayıt (PascalCase etiket veya EJS local) |
 | `hooks.layoutContext()` çıktısındaki her alan | — | Doğrudan local olur |
 
@@ -444,11 +447,13 @@ Doğrudan çağırmak yerine yerleşik etiket kullanılır:
 ```jsk
 <Stylesheets :styles="styles" />
 <Stylesheets :styles="styles" :blocking="false" />
+<Stylesheets :styles="styles" blocking="(min-width: 1024px)" />
 ```
 
 ```js
 stylesheets({ styles: ["home.css"] });
 stylesheets({ styles: ["home.css"], blocking: false });
+stylesheets({ styles: ["home.css"], blocking: "(min-width: 1024px)" });
 ```
 
 - `styles` manifest anahtarlarıdır (`"home.css"` → `styles/pages/home.css`).
@@ -461,8 +466,52 @@ stylesheets({ styles: ["home.css"], blocking: false });
   `<noscript>` içindeki ikinci link, JS kapalıyken stillerin print'te
   kalmamasını sağlar. Inline `onload` çalışmayan bir CSP'de (`script-src`
   içinde `'unsafe-inline'` veya `script-src-attr` yok) sheet `print`'te kalır.
+- `blocking` bir media sorgusu da olabilir. Link o sorguyla basılır ve
+  `false` ile aynı `onload` + `<noscript>` yolunu kullanır. Sorgu eşleşen
+  ekranda sheet render-blocking'dir ve hemen uygulanır; eşleşmeyen ekranda
+  düşük öncelikle iner, boyamayı bekletmez ve yüklenince `all` olur. Geniş
+  ekranda CLS'i, dar ekranda LCP'yi korumak için. `.jsk`'de sabit sorgu
+  **literal** öznitelikle yazılır (`blocking="(min-width: 1024px)"`); başına
+  `:` koymak onu ifade olarak derlemeye çalışır ve derleme hatası verir.
+  Değişkenden gelecekse `:blocking="cssMedia"`. `"true"`, `"false"` ve boş
+  string sorgu sayılmaz, varsayılan blocking çıktısı basılır. CSP notu bu
+  modda da geçerlidir: inline `onload` engellenirse eşleşmeyen ekranda sheet
+  uygulanmaz.
 - `data-jskelet-css` dev hot-swap'ın doğru linki seçmesi içindir; her iki
   modda da yazılır.
+
+### `modulePreload(source)`
+
+Kritik island paketlerini `<link rel="modulepreload">` ile `<head>`'den ister.
+Bir island normalde üç turda iner: HTML, sonra `main.js`, sonra `import()` ile
+paketi. Helper ortadaki turu kaldırır.
+
+```jsk
+<ModulePreload src="client/bundles/chrome.js" />
+<ModulePreload :src="criticalIslands" />
+```
+
+```js
+modulePreload("client/bundles/chrome.js");
+modulePreload(["client/bundles/chrome.js", "client/islands/search.ts"]);
+// <link rel="modulepreload" href="/assets/js/chunks/chrome.X1Y2.js">
+// <link rel="modulepreload" href="/assets/js/chunks/chunk.Z3W4.js">
+```
+
+- Kaynak yolu proje köküne göredir (baştaki `./`, `/`, `@/` yok sayılır).
+  Uzantı eşleşmesi esnektir: kaynağı `.ts` olan modül `.js` diye istenebilir.
+- Build, esbuild metafile'ından `.jskelet/preload.json` üretir: her kaynak
+  modül için hash'li chunk'ı ve onun **static** import kapanışı. Dinamik
+  import'lar dahil edilmez; tembel kalmaları gerekir.
+- URL'ler `build.assets.prefix`'e uyar. Ortak chunk'lar tek çağrıda ve aynı
+  isteğin sonraki çağrılarında bir kez basılır.
+- `crossorigin` yazılmaz: `<script type="module">` ile aynı varsayılan kimlik
+  modu, preload'un tarayıcıda eşleşmesi için gereken bu.
+- Yalnızca bir entry'nin (statik ya da `import()` ile) eriştiği modüller
+  haritadadır. Bilinmeyen yol hiçbir şey basmaz, dev'de bir kez uyarır. Build
+  yoksa çıktı boştur.
+- Her sayfada değil, gerçekten ilk ekranda bağlanan island'lar için kullanın:
+  her preload, LCP kaynaklarıyla bant genişliği için yarışır.
 
 ### `preloadImage(props)`
 

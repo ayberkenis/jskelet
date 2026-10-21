@@ -167,6 +167,11 @@ onu `all` yapar; JS kapalıyken `<noscript>` içindeki normal link uygulanır.
 Bu, yukarıdaki CLS takasının tersidir: ilk boyama erken gelir, sheet gelince
 düzen kayabilir.
 
+İki takas ekrana göre ayrışıyorsa (geniş ekranda kayma pahalı, dar ekranda
+LCP) beklemeyi bir media sorgusuna bağlamak mümkün:
+`<Stylesheets blocking="(min-width: 1024px)" />`. Sorgu eşleşen ekranda link
+render-blocking, diğerlerinde `false` ile aynı yoldan iner.
+
 Aynı mantık ikonlarda da var: her ikon için ayrı istek yerine, build zamanında
 yalnızca kaynakta kullanılan sembollerden bir SVG sprite üretilir. Tüm Phosphor
 setini göndermek 1500+ ikon, yani birkaç megabayt; tarama sprite'ı tipik olarak

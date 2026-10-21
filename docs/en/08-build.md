@@ -147,7 +147,8 @@ The pipeline: PostCSS + `@tailwindcss/postcss` → minification with lightningcs
   is only a few kB bigger.
 - The global output is `app.css` and the layout loads it render-blocking on
   every page by default. `<Stylesheets :blocking="false" />` turns that wait
-  off ([04-rendering.md](./04-rendering.md)). The measurement-based reasoning
+  off, and `blocking="(min-width: 1024px)"` ties it to a media query
+  ([04-rendering.md](./04-rendering.md)). The measurement-based reasoning
   for not producing a separate "critical CSS" is in
   [02-architecture.md](./02-architecture.md).
 
@@ -180,7 +181,8 @@ Page CSS is for page-specific rules. Prefer one page file per route; multiple
 names in `styles` are still supported, but each carries the global CSS and
 therefore downloads redundant bytes. If no requested page name exists in the
 manifest, the layout safely falls back to `app.css`. `blocking: false` adds
-`media="print"` and `onload` to the combined link.
+`media="print"` and `onload` to the combined link; with a media query, `media`
+is that query.
 
 ### `@source` directives are mandatory
 
@@ -291,6 +293,15 @@ The esbuild metafile is written to the `.jskelet/metafile.json` file; the chunk
 analysis in the dev panel reads the input/output breakdown from there. If the
 write fails, the build does not go down — the analysis data is best-effort. **The
 runtime does not depend on this file.**
+
+### `preload.json`
+
+A small map is derived from the same metafile: source module path
+(`client/bundles/chrome.js`) → its hashed chunk and static import closure.
+`modulePreload()` / `<ModulePreload />` read only this, so the runtime never
+loads the large metafile or walks the graph. Without the file the helper emits
+nothing. When chunk URLs change, entry hashes change too, so the HTML cache
+namespace (`buildId`) renews on its own.
 
 ## Fonts
 

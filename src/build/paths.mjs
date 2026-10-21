@@ -92,6 +92,10 @@ export function writeManifest(manifest) {
  * Kimlik manifest'in **içine** yazılmaz: oradaki her anahtar `asset()`
  * yüzeyine sızıyor.
  *
+ * Bu yalnızca asset yarısı. Runtime `getBuildId()` buna şablon parmak izini
+ * ekler; watch modunda manifest yamalanırken view'lar değişmediği için ikisi
+ * ayrı tutulur.
+ *
  * @param {string} manifestJson
  */
 function writeBuildId(manifestJson) {

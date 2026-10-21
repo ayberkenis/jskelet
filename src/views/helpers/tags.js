@@ -8,6 +8,7 @@ import {
   asset,
   hasAsset,
   getSpriteIds,
+  modulePreloadUrls,
   optimizedImage,
 } from "../../server/assets.js";
 import {
@@ -23,6 +24,18 @@ const isDev = process.env.NODE_ENV === "development";
 
 /** Aynı eksik ikon için tek uyarı. */
 const warnedIcons = new Set();
+
+/** Aynı bilinmeyen preload kaynağı için tek uyarı. */
+const warnedPreloads = new Set();
+
+/**
+ * İstek başına basılmış modulepreload URL'leri. Layout ve sayfa ayrı ayrı
+ * `ModulePreload` çağırdığında ortak chunk ikinci kez basılmasın. Bağlam
+ * nesnesine alan eklemek yerine WeakMap: istek bitince kendiliğinden düşer.
+ *
+ * @type {WeakMap<object, Set<string>>}
+ */
+const preloadedByRequest = new WeakMap();
 
 /** `fill` Image varsayılan sınıfları — `cn`/`twMerge` olmadan sabit. */
 const IMAGE_FILL_CLASS = "absolute inset-0 h-full w-full object-cover";
@@ -204,6 +217,64 @@ export function preloadImage({ href, imagesrcset, imagesizes }) {
 }
 
 /**
+ * Kritik island paketleri için `<link rel="modulepreload">`.
+ *
+ * Bir island bugün üç turda iner: HTML → `main.js` → `import()` ile paket.
+ * Kaynak yolu (`client/bundles/chrome.js`) build'in `preload.json`
+ * haritasından hash'li chunk'a ve static import'larına çözülür ve hepsi
+ * `<head>`'den istenir; ortadaki tur kalkar. Dinamik import'lar listeye
+ * girmez, tembel kalmaları gerekir.
+ *
+ * URL'ler `build.assets.prefix`'e uyar. Ortak chunk'lar hem tek çağrıda hem
+ * aynı istekteki çağrılar arasında bir kez basılır. `crossorigin` yazılmaz:
+ * `<script type="module">` ile aynı varsayılan kimlik modu, preload'un
+ * eşleşmesi için gereken bu.
+ *
+ * Build yoksa boş string döner. Harita kaynağı tanımıyorsa (yanlış yol ya da
+ * hiçbir entry'den erişilmeyen modül) dev'de bir kez uyarır.
+ *
+ * @param {string | string[] | { src?: string | string[] }} source
+ * @returns {string}
+ */
+export function modulePreload(source) {
+  const raw =
+    source && typeof source === "object" && !Array.isArray(source) ? source.src : source;
+  const sources = (Array.isArray(raw) ? raw : [raw]).filter(
+    (item) => typeof item === "string" && item.trim(),
+  );
+  if (!sources.length) return "";
+
+  const context = getRequestContext();
+  let seen = context ? preloadedByRequest.get(context) : undefined;
+  if (!seen) {
+    seen = new Set();
+    if (context) preloadedByRequest.set(context, seen);
+  }
+
+  /** @type {string[]} */
+  const parts = [];
+  for (const item of sources) {
+    const urls = modulePreloadUrls(item);
+    if (urls === null) {
+      if (isDev && !warnedPreloads.has(item)) {
+        warnedPreloads.add(item);
+        console.warn(
+          `[modulePreload] not in the client build: ${item} — use a path relative to the project root that an entry imports.`,
+        );
+      }
+      continue;
+    }
+    for (const url of urls) {
+      if (seen.has(url)) continue;
+      seen.add(url);
+      parts.push(`<link rel="modulepreload" href="${esc(url)}">`);
+    }
+  }
+
+  return parts.join("\n    ");
+}
+
+/**
  * Phosphor ikonları — build zamanı üretilen SVG sprite'tan `<use>`.
  * `weight` sprite id'sine dahildir (regular/bold/fill).
  *
@@ -331,12 +402,19 @@ export function toKebab(name) {
  * açık boolean'dır (`:blocking="false"`); atlamak veya `true` aynı çıktıyı
  * verir.
  *
- * @param {{ styles?: string[], blocking?: boolean }} [props]
+ * String bir media sorgusu (`blocking="(min-width: 1024px)"`) beklemeyi o
+ * sorguya bağlar: eşleşen ekranda link render-blocking, eşleşmeyende
+ * `false` ile aynı yoldan iner ve yüklenince uygulanır. Geniş ekranda CLS,
+ * dar ekranda LCP önemliyse iki takası tek linkte birleştirir. Literal
+ * `"true"` / `"false"` string'leri sorgu sayılmaz; eski çıktı (blocking)
+ * korunur.
+ *
+ * @param {{ styles?: string[], blocking?: boolean | string }} [props]
  * @returns {string}
  */
 export function stylesheets(props = {}) {
   const styles = Array.isArray(props.styles) ? props.styles : [];
-  const blocking = props.blocking !== false;
+  const blocking = resolveBlocking(props.blocking);
   /** @type {string[]} */
   const parts = [];
   const available = [...new Set(styles.filter((sheet) => sheet && hasAsset(sheet)))];
@@ -354,23 +432,41 @@ export function stylesheets(props = {}) {
 }
 
 /**
+ * `true` → her zaman blocking, `string` → yalnızca o media'da blocking.
+ * `false` hiçbir ekranda eşleşmeyen `print` sorgusuna eşlenir; böylece iki
+ * yol tek çıktı biçimini paylaşır.
+ *
+ * @param {unknown} value
+ * @returns {true | string}
+ */
+function resolveBlocking(value) {
+  if (value === false) return "print";
+  if (typeof value !== "string") return true;
+  const media = value.trim();
+  if (!media || media === "true" || media === "false") return true;
+  return media;
+}
+
+/**
  * Tek bir manifest anahtarı için stylesheet linki.
  *
- * `blocking: false` iken `media="print"`: eşleşmeyen media tarayıcıda
- * render-blocking sayılmaz, indirme boyamayı bekletmez. `onload` sheet
- * inince `media`'yı `all` yapar. JS kapalıyken `onload` çalışmaz ve link
- * print'te kalır; `<noscript>` içindeki normal link o yolu kapatır.
+ * Koşullu yolda link verilen `media` ile basılır: eşleşmeyen media tarayıcıda
+ * render-blocking sayılmaz, indirme düşük öncelikle sürer ve boyamayı
+ * bekletmez. `onload` sheet inince `media`'yı `all` yapar; eşleşen ekranda bu
+ * bir şey değiştirmez, çünkü sheet zaten uygulanmıştı. JS kapalıyken `onload`
+ * çalışmaz ve eşleşmeyen ekranda sheet hiç uygulanmaz; `<noscript>` içindeki
+ * normal link o yolu kapatır.
  *
  * @param {string[]} parts
  * @param {string} name Manifest anahtarı (`app.css`, `home.css`, …)
- * @param {boolean} blocking
+ * @param {true | string} blocking `true` veya bekletilecek media sorgusu.
  */
 function pushStylesheet(parts, name, blocking) {
   if (!hasAsset(name)) return;
 
   const href = esc(asset(name));
   const id = esc(name);
-  if (blocking) {
+  if (blocking === true) {
     parts.push(
       `<link rel="stylesheet" href="${href}" data-jskelet-css="${id}">`,
     );
@@ -378,7 +474,7 @@ function pushStylesheet(parts, name, blocking) {
   }
 
   parts.push(
-    `<link rel="stylesheet" href="${href}" media="print" onload="this.media='all'" data-jskelet-css="${id}">\n    <noscript><link rel="stylesheet" href="${href}" data-jskelet-css="${id}"></noscript>`,
+    `<link rel="stylesheet" href="${href}" media="${esc(blocking)}" onload="this.media='all'" data-jskelet-css="${id}">\n    <noscript><link rel="stylesheet" href="${href}" data-jskelet-css="${id}"></noscript>`,
   );
 }
 

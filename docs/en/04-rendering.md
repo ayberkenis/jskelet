@@ -70,7 +70,7 @@ controller data → imported render(data, helpers) → HTML
 | Loop | `{#each list as item}` or `as item, i` |
 | Include | `{#include "partials/header"}` (compiled `.jsk`) |
 | Component | PascalCase tag; `:prop="expr"`, `prop="literal"`, boolean `disabled` |
-| Built-ins | `Link`, `Image`, `Icon`, `CsrfField`, `PreloadImage`, `Stylesheets`, `BodyScripts`, `JsonLd` |
+| Built-ins | `Link`, `Image`, `Icon`, `CsrfField`, `PreloadImage`, `ModulePreload`, `Stylesheets`, `BodyScripts`, `JsonLd` |
 
 The expression language is intentionally small (access, compare, ternary,
 `.length`). No assignments, object literals, or arbitrary calls — keep logic in
@@ -187,8 +187,10 @@ Points to watch:
   `<Stylesheets :blocking="false" />` (`stylesheets({ blocking: false })`)
   emits the links with `media="print"` plus `onload`, and a `<noscript>`
   fallback when JS is off. Painting is not held, and the layout can shift
-  when the sheet arrives. If the build has not run, `hasAsset` is false
-  inside the tag and nothing is emitted.
+  when the sheet arrives. `<Stylesheets blocking="(min-width: 1024px)" />`
+  ties the wait to a media query: blocking where it matches, like `false`
+  elsewhere. If the build has not run, `hasAsset` is false inside the tag and
+  nothing is emitted.
 - **`<BodyScripts />` emits `main.js`, page `entries`, and the
   development-only overlay.** The overlay script exists only when
   `NODE_ENV=development`; it is absent from production output.
@@ -212,7 +214,7 @@ Points to watch:
 | `devtools` | `boolean` | `NODE_ENV === "development"` |
 | `devBasePath` | `string` | `brand.devBasePath`, defaults to `/__jskelet/dev` |
 | `asset`, `hasAsset` | function | Manifest access (EJS local; in `.jsk` the second `helpers` argument / built-in tags) |
-| html/tags helpers | function | `esc`, `attrs`, `cx`, `cn`, `jsonScript`, `link`, `image`, `icon`, `preloadImage`, `toKebab` — same split |
+| html/tags helpers | function | `esc`, `attrs`, `cx`, `cn`, `jsonScript`, `link`, `image`, `icon`, `preloadImage`, `modulePreload`, `toKebab` — same split |
 | exports of `views/components/**` | function | Automatic registration (PascalCase tags or EJS locals) |
 | every field returned by `hooks.layoutContext()` | — | Becomes a local directly |
 
@@ -450,11 +452,13 @@ The built-in tag is the usual call site:
 ```jsk
 <Stylesheets :styles="styles" />
 <Stylesheets :styles="styles" :blocking="false" />
+<Stylesheets :styles="styles" blocking="(min-width: 1024px)" />
 ```
 
 ```js
 stylesheets({ styles: ["home.css"] });
 stylesheets({ styles: ["home.css"], blocking: false });
+stylesheets({ styles: ["home.css"], blocking: "(min-width: 1024px)" });
 ```
 
 - `styles` are manifest keys (`"home.css"` → `styles/pages/home.css`). Names
@@ -469,8 +473,55 @@ stylesheets({ styles: ["home.css"], blocking: false });
   when JS is off. Under a CSP that blocks inline handlers (no
   `'unsafe-inline'` in `script-src`, and no `script-src-attr`) the sheet
   stays on `print`.
+- `blocking` can also be a media query. The link is emitted with that query
+  and uses the same `onload` + `<noscript>` path as `false`. Where the query
+  matches, the sheet is render-blocking and applies immediately; elsewhere it
+  downloads at low priority, does not hold painting, and switches to `all`
+  once loaded. Use it to protect CLS on wide screens and LCP on narrow ones.
+  In `.jsk`, write a fixed query as a **literal** attribute
+  (`blocking="(min-width: 1024px)"`); a leading `:` tries to compile it as an
+  expression and fails. Use `:blocking="cssMedia"` when it comes from a
+  variable. `"true"`, `"false"`, and the empty string are not queries and
+  produce the default blocking output. The CSP note applies here too: if
+  inline `onload` is blocked, the sheet never applies where the query does
+  not match.
 - `data-jskelet-css` is how dev hot-swap picks the right link; it is written
   in both modes.
+
+### `modulePreload(source)`
+
+Requests critical island bundles from the `<head>` with
+`<link rel="modulepreload">`. An island normally downloads in three round
+trips: the HTML, then `main.js`, then its bundle through `import()`. The helper
+removes the middle one.
+
+```jsk
+<ModulePreload src="client/bundles/chrome.js" />
+<ModulePreload :src="criticalIslands" />
+```
+
+```js
+modulePreload("client/bundles/chrome.js");
+modulePreload(["client/bundles/chrome.js", "client/islands/search.ts"]);
+// <link rel="modulepreload" href="/assets/js/chunks/chrome.X1Y2.js">
+// <link rel="modulepreload" href="/assets/js/chunks/chunk.Z3W4.js">
+```
+
+- The source path is relative to the project root (a leading `./`, `/`, or
+  `@/` is ignored). Extensions match loosely: a `.ts` module can be requested
+  as `.js`.
+- The build derives `.jskelet/preload.json` from the esbuild metafile: for each
+  source module, its hashed chunk and that chunk's **static** import closure.
+  Dynamic imports are left out; they should stay lazy.
+- URLs follow `build.assets.prefix`. Shared chunks are emitted once per call
+  and once across later calls in the same request.
+- No `crossorigin` is written: it uses the same default credentials mode as
+  `<script type="module">`, which the browser needs to match the preload.
+- Only modules an entry reaches (statically or through `import()`) are in the
+  map. An unknown path emits nothing and warns once in development. Without a
+  build the output is empty.
+- Use it for islands that actually mount in the first viewport, not on every
+  page: each preload competes with LCP resources for bandwidth.
 
 ### `preloadImage(props)`
 

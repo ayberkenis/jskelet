@@ -102,7 +102,7 @@ None of the directory names are fixed; all of them can be overridden via
 | `client` | `client` | Island runtime sources and entries |
 | `routes` | `routes` | Route modules (loaded before features) |
 | `styles` | `styles/globals.css` | Tailwind/PostCSS entry **file** |
-| `generated` | `.jskelet` | Intermediate build output: `manifest.json`, `metafile.json`, `images.json`, `templates/` |
+| `generated` | `.jskelet` | Intermediate build output: `manifest.json`, `metafile.json`, `preload.json`, `images.json`, `templates/` |
 
 In addition to these the framework always derives two paths and accepts no
 separate setting for them: `public/assets` (hashed build output) and
@@ -285,7 +285,7 @@ only these specifiers:
 | `jskelet/server` | The same module as `jskelet` (an alias for readability) |
 | `jskelet/client` | Browser runtime: `register`, `registerAll`, `hydrate`, `observeDocument`, `start`, `createStore`, DOM helpers, `startSafeImages` |
 | `jskelet/html` | `esc`, `attrs`, `cx`, `cn`, `jsonScript` |
-| `jskelet/tags` | `link`, `image`, `icon`, `preloadImage`, `toKebab` |
+| `jskelet/tags` | `link`, `image`, `icon`, `preloadImage`, `modulePreload`, `toKebab` |
 | `jskelet/log` | Console output helpers (`banner`, `event`, `task`, `size`, `ms`, …) |
 | `jskelet/register` | Alias + extension hooks via `node --import jskelet/register` |
 | `jskelet/layout` | The path to the framework's default `layout.jsk` file |

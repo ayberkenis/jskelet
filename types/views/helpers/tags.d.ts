@@ -58,6 +58,29 @@ export declare function preloadImage({ href, imagesrcset, imagesizes }: {
     imagesizes?: string;
 }): string;
 /**
+ * Kritik island paketleri için `<link rel="modulepreload">`.
+ *
+ * Bir island bugün üç turda iner: HTML → `main.js` → `import()` ile paket.
+ * Kaynak yolu (`client/bundles/chrome.js`) build'in `preload.json`
+ * haritasından hash'li chunk'a ve static import'larına çözülür ve hepsi
+ * `<head>`'den istenir; ortadaki tur kalkar. Dinamik import'lar listeye
+ * girmez, tembel kalmaları gerekir.
+ *
+ * URL'ler `build.assets.prefix`'e uyar. Ortak chunk'lar hem tek çağrıda hem
+ * aynı istekteki çağrılar arasında bir kez basılır. `crossorigin` yazılmaz:
+ * `<script type="module">` ile aynı varsayılan kimlik modu, preload'un
+ * eşleşmesi için gereken bu.
+ *
+ * Build yoksa boş string döner. Harita kaynağı tanımıyorsa (yanlış yol ya da
+ * hiçbir entry'den erişilmeyen modül) dev'de bir kez uyarır.
+ *
+ * @param {string | string[] | { src?: string | string[] }} source
+ * @returns {string}
+ */
+export declare function modulePreload(source: string | string[] | {
+    src?: string | string[];
+}): string;
+/**
  * Phosphor ikonları — build zamanı üretilen SVG sprite'tan `<use>`.
  * `weight` sprite id'sine dahildir (regular/bold/fill).
  *
@@ -109,12 +132,19 @@ export declare function toKebab(name: string): string;
  * açık boolean'dır (`:blocking="false"`); atlamak veya `true` aynı çıktıyı
  * verir.
  *
- * @param {{ styles?: string[], blocking?: boolean }} [props]
+ * String bir media sorgusu (`blocking="(min-width: 1024px)"`) beklemeyi o
+ * sorguya bağlar: eşleşen ekranda link render-blocking, eşleşmeyende
+ * `false` ile aynı yoldan iner ve yüklenince uygulanır. Geniş ekranda CLS,
+ * dar ekranda LCP önemliyse iki takası tek linkte birleştirir. Literal
+ * `"true"` / `"false"` string'leri sorgu sayılmaz; eski çıktı (blocking)
+ * korunur.
+ *
+ * @param {{ styles?: string[], blocking?: boolean | string }} [props]
  * @returns {string}
  */
 export declare function stylesheets(props?: {
     styles?: string[];
-    blocking?: boolean;
+    blocking?: boolean | string;
 }): string;
 /**
  * Layout gövde sonu script'leri: `main.js`, controller `entries`, isteğe

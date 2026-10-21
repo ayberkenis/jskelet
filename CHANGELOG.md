@@ -69,6 +69,13 @@ one is listed under a **Breaking** heading.
 
 ### Fixed
 
+- Shared HTML cache keys (Redis and the `.jskelet/cache/` disk tier) now
+  change when the layout or other view sources change, not only when CSS/JS
+  assets do. `buildId` is `{assets}-{templates}`, where `templates` is a
+  fingerprint of `.jsk` / `.ejs` / component files under the view roots, the
+  layout file, and the framework version. Previously a layout-only change kept
+  serving the old `<head>` from Redis until the TTL expired, even after a
+  restart or deploy.
 - `hydrate()` mounts zero-box hosts (`hidden` / no layout box) through
   `mountWhenReady()` instead of calling `mountIsland()` immediately, so
   `data-island-idle` on a hidden host still waits for `load` plus idle time.
@@ -87,6 +94,19 @@ one is listed under a **Breaking** heading.
   emit each stylesheet with `media="print"` and an `onload` that switches it
   to `all`, plus a `<noscript>` fallback, so the links do not block rendering.
   The default stays render-blocking.
+- `stylesheets({ blocking: "(min-width: 1024px)" })` and
+  `<Stylesheets blocking="(min-width: 1024px)" />` make stylesheets
+  render-blocking only where the media query matches. On other screens they
+  load without blocking and apply once loaded, with the same `<noscript>`
+  fallback as `blocking: false`.
+- `modulePreload("client/bundles/chrome.js")` and
+  `<ModulePreload src="client/bundles/chrome.js" />` emit
+  `<link rel="modulepreload">` tags for a client module's hashed chunk and its
+  static imports, so critical island bundles start downloading with the HTML
+  instead of waiting for `main.js` and its `import()`. URLs follow
+  `build.assets.prefix`, shared chunks are emitted once per request, and
+  dynamic imports stay lazy. The client build writes the source-to-chunk map
+  to `.jskelet/preload.json`; without a build the helper emits nothing.
 - Dev tools **Server** tab can clear the HTML cache for the open page, every
   HTML entry, or the data cache. Live stats include HTML/data entry counts;
   new endpoints under `devBasePath`: `POST /cache/clear-html`,

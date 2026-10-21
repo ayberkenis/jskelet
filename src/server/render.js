@@ -97,6 +97,7 @@ async function getEngine() {
     Icon: (props) => tags.icon(props),
     CsrfField: () => tags.csrfField(),
     PreloadImage: (props) => tags.preloadImage(props),
+    ModulePreload: (props) => tags.modulePreload(props),
     Stylesheets: (props) => tags.stylesheets(props),
     BodyScripts: (props) => tags.bodyScripts(props),
     JsonLd: (props) => tags.jsonLd(props),

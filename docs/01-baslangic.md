@@ -98,7 +98,7 @@ ile ezilebilir. Aşağıdaki değerler varsayılanlardır (`src/config/defaults.
 | `client` | `client` | Island runtime kaynakları ve entry'ler |
 | `routes` | `routes` | Route modülleri (feature'lardan önce yüklenir) |
 | `styles` | `styles/globals.css` | Tailwind/PostCSS giriş **dosyası** |
-| `generated` | `.jskelet` | Build ara çıktıları: `manifest.json`, `metafile.json`, `images.json`, `templates/` |
+| `generated` | `.jskelet` | Build ara çıktıları: `manifest.json`, `metafile.json`, `preload.json`, `images.json`, `templates/` |
 
 Bunlara ek olarak framework iki yolu her zaman türetir ve ayrı ayar kabul
 etmez: `public/assets` (hash'li build çıktısı) ve `public/fonts` (self-host
@@ -278,7 +278,7 @@ yalnızca bu belirteçleri kullanın:
 | `jskelet/server` | `jskelet` ile aynı modül (okunurluk için takma ad) |
 | `jskelet/client` | Tarayıcı runtime'ı: `register`, `registerAll`, `hydrate`, `observeDocument`, `start`, `createStore`, DOM yardımcıları, `startSafeImages` |
 | `jskelet/html` | `esc`, `attrs`, `cx`, `cn`, `jsonScript` |
-| `jskelet/tags` | `link`, `image`, `icon`, `preloadImage`, `toKebab` |
+| `jskelet/tags` | `link`, `image`, `icon`, `preloadImage`, `modulePreload`, `toKebab` |
 | `jskelet/log` | Konsol çıktısı yardımcıları (`banner`, `event`, `task`, `size`, `ms`, …) |
 | `jskelet/register` | `node --import jskelet/register` ile alias + uzantı hook'ları |
 | `jskelet/layout` | Framework'ün varsayılan `layout.jsk` dosyasının yolu |

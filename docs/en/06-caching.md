@@ -878,12 +878,25 @@ _jskelet:{namespace}:{buildId}:data:{key}
 _jskelet:{namespace}:events
 ```
 
-`buildId` changes with every build (`jskelet build` writes it to
-`.jskelet/build.json`) and it is a **required** part: the stored HTML embeds
-hashed asset paths, so after a deploy the old HTML is invalid. Because the id
-sits in the prefix, a new version automatically writes into a new namespace and
-the old keys die with their TTL — no manual cleanup and no `FLUSHDB`. When the
-build has not been run the id is `dev`.
+`buildId` is a **required** part: the stored HTML embeds hashed asset paths and
+the `<head>` the layout produced, so after either changes the old HTML is
+invalid. It has two halves, `{assets}-{templates}`:
+
+- `assets` is the hash of the asset manifest (`jskelet build` writes it to
+  `.jskelet/build.json`). It is `dev` when the build has not been run.
+- `templates` is a fingerprint of everything under the view roots that shapes
+  HTML — `.jsk`, `.ejs`, component `.js` / `.mjs` files, the layout file — plus
+  the framework version. The build records it in
+  `.jskelet/templates/build.json`; production reads that record, development
+  recomputes it from source each time the server process starts.
+
+Because the id sits in the prefix, a new version automatically writes into a
+new namespace and the old keys die with their TTL — no manual cleanup and no
+`FLUSHDB`. A layout change that touches no CSS or JS still gets a new
+namespace, so the old `<head>` does not come back from Redis after a restart
+or deploy. Route handlers and `jskelet.config.mjs` are not part of the
+fingerprint; when they change what a page renders, use `invalidateHtmlCache()`
+or `clearHtmlCache()`.
 
 `namespace` separates several applications sharing one Redis. The event channel
 deliberately does **not** carry `buildId`: during a deploy the old and the new

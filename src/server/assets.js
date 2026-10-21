@@ -19,6 +19,7 @@ import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { getConfig } from "../config/index.js";
+import { getTemplatesFingerprint } from "../build/templates-fingerprint.mjs";
 
 const isDev = process.env.NODE_ENV === "development";
 
@@ -119,27 +120,42 @@ export function hasAsset(name) {
 let buildId = null;
 
 /**
- * Bu build'i tanımlayan kısa kimlik (`build.json` → `id`).
+ * Bu build'i tanımlayan kısa kimlik: `<asset>-<şablon>`.
  *
  * Paylaşımlı önbellek anahtarlarının isim alanı bu: saklanan HTML hash'li
- * varlık yollarını gömdüğü için bir deploy'dan sonra eski HTML **geçersizdir**.
+ * varlık yollarını ve layout'un ürettiği `<head>`'i gömdüğü için ikisinden
+ * biri değişince eski HTML **geçersizdir**. Asset kısmı `build.json` → `id`
+ * (manifest hash'i), şablon kısmı view kaynaklarının parmak izi
+ * (`templates-fingerprint.mjs`). Yalnızca manifest'e bakmak, CSS/JS'e
+ * dokunmayan bir layout değişikliğinde eski HTML'i Redis'ten TTL boyunca
+ * geri getiriyordu.
  *
- * Build çalışmadıysa `"dev"` döner — build çıktısı olmadan da ayağa kalkma
- * kuralı burada da geçerli.
+ * Build çalışmadıysa asset kısmı `"dev"` olur — build çıktısı olmadan da
+ * ayağa kalkma kuralı burada da geçerli. Parmak izi hesaplanamazsa (config
+ * yok) yalnızca asset kısmı döner.
  *
  * @returns {string}
  */
 export function getBuildId() {
   if (!isDev && buildId) return buildId;
 
+  let assets = "dev";
   try {
     const file = path.join(getConfig().dirs.generated, "build.json");
     const id = JSON.parse(fs.readFileSync(file, "utf8")).id;
-    buildId = typeof id === "string" && id ? id : "dev";
+    if (typeof id === "string" && id) assets = id;
   } catch {
-    buildId = "dev";
+    // Build yok.
   }
 
+  let templates = "";
+  try {
+    templates = getTemplatesFingerprint(getConfig());
+  } catch {
+    // Config yüklenmemiş (birim testleri).
+  }
+
+  buildId = templates ? `${assets}-${templates}` : assets;
   return buildId;
 }
 
@@ -211,6 +227,80 @@ export function optimizedImage(src) {
   const table = loadImages();
   if (!src) return undefined;
   return table[src];
+}
+
+/**
+ * @typedef {{ generated: string, table: Record<string, string[]>,
+ *   byStem: Map<string, string> }} PreloadState
+ */
+
+/** @type {PreloadState | null} */
+let preloads = null;
+
+/**
+ * `preload.json` (client build) yükler. Dev'de her çağrıda okunur: watch
+ * rebuild chunk hash'lerini değiştirir. Uzantısız eşleşme tablosu, kaynağı
+ * `.ts` olan bir modülün `client/x.js` diye istenebilmesi için.
+ *
+ * @returns {PreloadState}
+ */
+function loadPreloads() {
+  const generated = getConfig().dirs.generated;
+  if (!isDev && preloads && preloads.generated === generated) return preloads;
+
+  /** @type {Record<string, string[]>} */
+  let table = {};
+  try {
+    const raw = JSON.parse(fs.readFileSync(path.join(generated, "preload.json"), "utf8"));
+    if (raw && typeof raw === "object") table = raw;
+  } catch {
+    // Build yok: helper sessizce hiçbir şey basmaz.
+  }
+
+  /** @type {Map<string, string>} */
+  const byStem = new Map();
+  for (const key of Object.keys(table)) byStem.set(stripScriptExt(key), key);
+
+  preloads = { generated, table, byStem };
+  return preloads;
+}
+
+/**
+ * @param {string} file
+ * @returns {string}
+ */
+function stripScriptExt(file) {
+  return file.replace(/\.(?:m?js|m?ts)$/i, "");
+}
+
+/**
+ * Kaynak modül yolunu (`client/bundles/chrome.js`) hash'li chunk'ına ve onun
+ * static import kapanışına çevirir; CDN prefix uygulanmış URL'ler döner, ilk
+ * eleman modülün kendisi.
+ *
+ * Yol proje köküne göredir; baştaki `./`, `/` ve `@/` yok sayılır. `null`
+ * → harita var ama kaynak içinde yok (yanlış yol ya da hiçbir entry'den
+ * erişilmeyen modül). Build hiç çalışmadıysa boş dizi döner: build çıktısı
+ * olmadan ayağa kalkma kuralı.
+ *
+ * @param {string} source
+ * @returns {string[] | null}
+ */
+export function modulePreloadUrls(source) {
+  const { table, byStem } = loadPreloads();
+  if (!byStem.size) return [];
+
+  const normalized = String(source ?? "")
+    .trim()
+    .replace(/\\/g, "/")
+    .replace(/^(?:\.\/|@\/|\/)+/, "");
+  const key = Object.hasOwn(table, normalized)
+    ? normalized
+    : byStem.get(stripScriptExt(normalized));
+  if (!key) return null;
+
+  const prefix = assetPrefix();
+  return table[key].map((url) => applyAssetPrefix(prefix, url));
 }
 
 /** @type {{ url: string, ids: Set<string> } | null} */

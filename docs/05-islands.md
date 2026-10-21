@@ -90,6 +90,12 @@ değiştirici gibi sayfa genelinde geçerli island'lar için.
 <header data-island="header" data-island-eager></header>
 ```
 
+Eager bağlanmak indirmeyi hızlandırmaz: paket yine HTML'den sonra `main.js`'i,
+ondan sonra da `import()`'u bekler. Üst kısımdaki kritik island'lar için
+layout `<head>`'ine `<ModulePreload src="client/islands/header.js" />`
+eklemek bu ortadaki turu kaldırır; paket ve static import'ları HTML ile
+birlikte istenir ([04-render-ve-sablonlar.md](./04-render-ve-sablonlar.md)).
+
 ### `data-island-idle`
 
 Görünür olsa bile `load` olayı tamamlanıp ana iş parçacığı boşalana kadar

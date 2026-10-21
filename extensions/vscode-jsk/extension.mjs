@@ -15,6 +15,7 @@ const BUILTINS = [
   "Icon",
   "CsrfField",
   "PreloadImage",
+  "ModulePreload",
   "Stylesheets",
   "BodyScripts",
   "JsonLd",

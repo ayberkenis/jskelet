@@ -8,6 +8,7 @@ const BASE = process.env.BASE ?? "http://localhost:3210";
 /** @type {Array<[string, number, RegExp?]>} */
 const CASES = [
   ["/", 200, /Son yazılar/],
+  ["/", 200, /<link rel="modulepreload" href="[^"]*\/chunks\/theme-toggle\.[^"]+\.js">/],
   ["/blog", 200, /data-island="search"/],
   ["/blog/html-cache-ve-swr", 200, /data-jskelet-css="blog-post\.css"/],
   ["/blog/html-cache-ve-swr", 200, /og\/blog\/html-cache-ve-swr\.png/],

@@ -16,6 +16,9 @@
        çekmek LCP görseliyle bant genişliği için yarışıyor. #}
     {{{ fontPreloadHtml }}}
     <Stylesheets :styles="styles" />
+    {# Header'daki tema düğmesi eager bağlanıyor; paketi `main.js`'i
+       beklemeden `<head>`'den istenir. #}
+    <ModulePreload src="client/islands/theme-toggle.js" />
     {{{ headMeta }}}
     <JsonLd :items="structuredData" />
   </head>

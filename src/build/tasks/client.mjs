@@ -168,6 +168,9 @@ export async function buildClient(config, { watch = false } = {}) {
   const entryDir = path.join(config.dirs.client, "entries");
   const outDir = path.join(paths.assets, "js");
 
+  // Entry'siz turda erken dönülüyor; eski harita silinmiş chunk'ları göstermesin.
+  fs.rmSync(path.join(paths.generated, "preload.json"), { force: true });
+
   if (!fs.existsSync(entryDir)) {
     log.detail("no entries, skipped");
     return {};
@@ -243,14 +246,14 @@ export async function buildClient(config, { watch = false } = {}) {
     });
     const result = await context.rebuild();
     await context.watch();
-    writeMetafile(result.metafile);
+    writeMetafile(result.metafile, config);
     const manifest = toManifest(result.metafile, config, entryRoot);
     log.detail(summarizeClientBuild(manifest, result.metafile));
     return manifest;
   }
 
   const result = await esbuild.build(options);
-  writeMetafile(result.metafile);
+  writeMetafile(result.metafile, config);
   const manifest = toManifest(result.metafile, config, entryRoot);
   const bytes = Object.values(result.metafile.outputs).reduce(
     (sum, output) => sum + output.bytes,
@@ -284,11 +287,13 @@ function summarizeClientBuild(manifest, metafile) {
 
 /**
  * Metafile diske yazılır: dev panelindeki chunk analizi giriş/çıkış
- * kırılımını buradan okur. Çalışma zamanı bu dosyaya bağımlı değildir.
+ * kırılımını buradan okur. Çalışma zamanı bu dosyaya bağımlı değildir;
+ * `modulePreload()` için gereken kısım ayrıca `preload.json` olarak yazılır.
  *
  * @param {esbuild.Metafile} [metafile]
+ * @param {import('../../config/index.js').ResolvedConfig} config
  */
-function writeMetafile(metafile) {
+function writeMetafile(metafile, config) {
   if (!metafile) return;
   try {
     fs.mkdirSync(paths.generated, { recursive: true });
@@ -299,6 +304,72 @@ function writeMetafile(metafile) {
   } catch {
     // Analiz verisi en iyi çaba; build'i düşürmez.
   }
+
+  try {
+    fs.writeFileSync(
+      path.join(paths.generated, "preload.json"),
+      `${JSON.stringify(toPreloadMap(metafile, config.root, config.dirs.public))}\n`,
+    );
+  } catch {
+    // Harita yoksa `modulePreload()` hiçbir şey basmaz; sayfa yine çalışır.
+  }
+}
+
+/**
+ * esbuild metafile → `{ "client/bundles/chrome.js": ["/assets/js/chunks/chrome.X.js", …] }`
+ *
+ * Anahtar kaynak yolu (`absWorkingDir`'e göre), değer o modülün chunk'ı ve
+ * **static** import kapanışı; ilk eleman modülün kendisi. Runtime'ın metafile
+ * grafiğini gezmemesi için kapanış burada hesaplanır. Dinamik import'lar
+ * listeye girmez: onları preload etmek, tembel yüklemenin amacını bozar.
+ *
+ * Entry'ler de (`client/entries/main.js`) anahtar olur; dinamik import edilen
+ * her modül esbuild'de kendi `entryPoint`'ini taşıdığı için ayrı bir kayıt
+ * gerekmez. Chunk grubu barrel'ları gibi sanal namespace'ler atlanır.
+ *
+ * Bu haritanın HTML'e gömdüğü chunk URL'leri değişince entry hash'i de
+ * değişir (esbuild hash'i import edilen chunk adlarını içerir), yani
+ * `buildId` ve HTML cache isim alanı kendiliğinden yenilenir.
+ *
+ * @param {esbuild.Metafile} metafile
+ * @param {string} root Proje kökü (`absWorkingDir`).
+ * @param {string} publicDir
+ * @returns {Record<string, string[]>}
+ */
+export function toPreloadMap(metafile, root, publicDir) {
+  const toUrl = (/** @type {string} */ outputPath) =>
+    `/${path
+      .relative(publicDir, path.resolve(root, outputPath))
+      .split(path.sep)
+      .join("/")}`;
+
+  /** @type {Record<string, string[]>} */
+  const map = {};
+
+  for (const [outputPath, output] of Object.entries(metafile.outputs)) {
+    const source = output.entryPoint;
+    if (!source || !/\.m?js$/.test(outputPath)) continue;
+    if (/^[a-z][\w-]*:/i.test(source)) continue;
+
+    /** @type {string[]} */
+    const order = [];
+    const seen = new Set([outputPath]);
+    const queue = [outputPath];
+    while (queue.length) {
+      const current = /** @type {string} */ (queue.shift());
+      order.push(toUrl(current));
+      for (const dependency of metafile.outputs[current]?.imports ?? []) {
+        if (dependency.kind !== "import-statement" || dependency.external) continue;
+        if (seen.has(dependency.path)) continue;
+        seen.add(dependency.path);
+        queue.push(dependency.path);
+      }
+    }
+
+    map[source.split(path.sep).join("/")] = order;
+  }
+
+  return map;
 }
 
 /**
@@ -323,7 +394,7 @@ function rebuildReporter(config, entryRoot) {
 
       build.onEnd((result) => {
         if (result.metafile) {
-          writeMetafile(result.metafile);
+          writeMetafile(result.metafile, config);
           // Entry adları hash'li: yeni hash manifest'e yazılmazsa HTML eski
           // (artık var olmayan) bundle'ı ister ve island'ların hiçbiri açılmaz.
           for (const [key, url] of Object.entries(

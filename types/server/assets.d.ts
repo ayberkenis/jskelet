@@ -28,13 +28,19 @@ export declare function asset(name: string, options?: AssetOptions): string;
  */
 export declare function hasAsset(name: string): boolean;
 /**
- * Bu build'i tanımlayan kısa kimlik (`build.json` → `id`).
+ * Bu build'i tanımlayan kısa kimlik: `<asset>-<şablon>`.
  *
  * Paylaşımlı önbellek anahtarlarının isim alanı bu: saklanan HTML hash'li
- * varlık yollarını gömdüğü için bir deploy'dan sonra eski HTML **geçersizdir**.
+ * varlık yollarını ve layout'un ürettiği `<head>`'i gömdüğü için ikisinden
+ * biri değişince eski HTML **geçersizdir**. Asset kısmı `build.json` → `id`
+ * (manifest hash'i), şablon kısmı view kaynaklarının parmak izi
+ * (`templates-fingerprint.mjs`). Yalnızca manifest'e bakmak, CSS/JS'e
+ * dokunmayan bir layout değişikliğinde eski HTML'i Redis'ten TTL boyunca
+ * geri getiriyordu.
  *
- * Build çalışmadıysa `"dev"` döner — build çıktısı olmadan da ayağa kalkma
- * kuralı burada da geçerli.
+ * Build çalışmadıysa asset kısmı `"dev"` olur — build çıktısı olmadan da
+ * ayağa kalkma kuralı burada da geçerli. Parmak izi hesaplanamazsa (config
+ * yok) yalnızca asset kısmı döner.
  *
  * @returns {string}
  */
@@ -55,6 +61,25 @@ export type OptimizedImage = {
  * @returns {OptimizedImage | undefined}
  */
 export declare function optimizedImage(src?: string): OptimizedImage | undefined;
+export type PreloadState = {
+    generated: string;
+    table: Record<string, string[]>;
+    byStem: Map<string, string>;
+};
+/**
+ * Kaynak modül yolunu (`client/bundles/chrome.js`) hash'li chunk'ına ve onun
+ * static import kapanışına çevirir; CDN prefix uygulanmış URL'ler döner, ilk
+ * eleman modülün kendisi.
+ *
+ * Yol proje köküne göredir; baştaki `./`, `/` ve `@/` yok sayılır. `null`
+ * → harita var ama kaynak içinde yok (yanlış yol ya da hiçbir entry'den
+ * erişilmeyen modül). Build hiç çalışmadıysa boş dizi döner: build çıktısı
+ * olmadan ayağa kalkma kuralı.
+ *
+ * @param {string} source
+ * @returns {string[] | null}
+ */
+export declare function modulePreloadUrls(source: string): string[] | null;
 /**
  * Sprite'taki sembol kimlikleri. Sprite yalnızca kaynakta **statik olarak**
  * görülen ikon adlarını içerir; adı çalışma anında hesaplanan bir `icon()`

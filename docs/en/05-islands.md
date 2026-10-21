@@ -93,6 +93,13 @@ whole page, such as header behaviour, a cookie banner or a theme switcher.
 <header data-island="header" data-island-eager></header>
 ```
 
+Mounting eagerly does not download sooner: the bundle still waits for
+`main.js` after the HTML, then for its `import()`. For critical above-the-fold
+islands, adding `<ModulePreload src="client/islands/header.js" />` to the
+layout `<head>` removes that middle round trip; the bundle and its static
+imports are requested alongside the HTML
+([04-rendering.md](./04-rendering.md)).
+
 ### `data-island-idle`
 
 Held back until the `load` event completes and the main thread frees up, even

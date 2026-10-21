@@ -106,4 +106,11 @@ export { prewarm, prewarmProgress, extractSameOriginLinks, isOnVisitPrewarm } fr
 export { createProxy } from "./server/middleware/upstream-proxy.js";
 export { getConfig, loadConfig } from "./config/index.js";
 export { attrs, cn, cx, esc, jsonScript } from "./views/helpers/html.js";
-export { csrfField, icon, image, link, preloadImage } from "./views/helpers/tags.js";
+export {
+  csrfField,
+  icon,
+  image,
+  link,
+  modulePreload,
+  preloadImage,
+} from "./views/helpers/tags.js";

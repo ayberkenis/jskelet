@@ -131,6 +131,7 @@ export function collectKnownComponents(componentDirs, jskFiles) {
     "Icon",
     "CsrfField",
     "PreloadImage",
+    "ModulePreload",
     "Stylesheets",
     "BodyScripts",
     "JsonLd",

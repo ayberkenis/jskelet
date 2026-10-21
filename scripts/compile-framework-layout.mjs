@@ -28,6 +28,7 @@ const { code } = compileSource(source, {
     "Icon",
     "CsrfField",
     "PreloadImage",
+    "ModulePreload",
     "Stylesheets",
     "BodyScripts",
     "JsonLd",

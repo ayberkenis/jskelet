@@ -143,7 +143,8 @@ minifikasyon → `writeAsset("app.css", …)`.
   yalnızca birkaç kB daha büyük olur.
 - Global çıktı `app.css`'tir ve layout onu her sayfada varsayılan olarak
   render-blocking yükler. `<Stylesheets :blocking="false" />` bu beklemeyi
-  kapatır ([04-render-ve-sablonlar.md](./04-render-ve-sablonlar.md)). Ayrı bir
+  kapatır, `blocking="(min-width: 1024px)"` onu bir media sorgusuna bağlar
+  ([04-render-ve-sablonlar.md](./04-render-ve-sablonlar.md)). Ayrı bir
   "critical CSS" üretilmemesinin ölçüm gerekçesi
   [02-mimari.md](./02-mimari.md)'de.
 
@@ -174,7 +175,7 @@ Sayfa CSS'i sayfaya özel kurallar içindir. Bir route için tek sayfa dosyası
 tercih edin; `styles` dizisinde birden fazla ad hâlâ desteklenir ama her biri
 global CSS'i taşıdığı için gereksiz tekrar indirir. Sayfa adı manifest'te yoksa
 layout güvenli biçimde `app.css`e döner. `blocking: false` birleşik linke
-`media="print"` ve `onload` ekler.
+`media="print"` ve `onload` ekler; media sorgusu verilirse `media` o sorgu olur.
 
 ### `@source` direktifleri zorunludur
 
@@ -284,6 +285,15 @@ esbuild metafile'ı `.jskelet/metafile.json` dosyasına yazılır; dev panelinde
 chunk analizi giriş/çıkış kırılımını buradan okur. Yazma başarısız olursa build
 düşmez — analiz verisi en iyi çabadır. **Çalışma zamanı bu dosyaya bağımlı
 değildir.**
+
+### `preload.json`
+
+Aynı metafile'dan küçük bir harita da çıkarılır: kaynak modül yolu
+(`client/bundles/chrome.js`) → hash'li chunk'ı ve static import kapanışı.
+`modulePreload()` / `<ModulePreload />` yalnızca bunu okur, böylece runtime
+büyük metafile'ı yüklemez ve grafiği gezmez. Dosya yoksa helper hiçbir şey
+basmaz. Chunk URL'leri değişince entry hash'leri de değiştiği için HTML
+önbelleğinin isim alanı (`buildId`) kendiliğinden yenilenir.
 
 ## Fontlar
 

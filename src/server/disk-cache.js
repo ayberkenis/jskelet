@@ -101,7 +101,8 @@ function unframe(raw) {
 
 /**
  * Eski build kimliğinin dizinini siler. Redis'te o anahtarlar TTL ile ölür;
- * dosyada karşılığı bu. Dev'de kimlik `dev` kaldığı için prune bir şey silmez.
+ * dosyada karşılığı bu. Kimlik şablon parmak izini de taşıdığı için dev'de
+ * layout değişikliğinden sonraki ilk yazış da eski dizini temizler.
  *
  * @param {string} dir
  */

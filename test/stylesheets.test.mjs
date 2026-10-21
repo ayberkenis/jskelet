@@ -62,4 +62,29 @@ test("stylesheets blocking default and media=print opt-out", async () => {
     stylesheets({ styles: ["home.css", "missing.css"], blocking: false }),
     asyncSheet(home, "home.css"),
   );
+
+  const mediaSheet = (href, name, media) =>
+    [
+      `<link rel="stylesheet" href="${href}" media="${media}" onload="this.media='all'" data-jskelet-css="${name}">`,
+      `<noscript><link rel="stylesheet" href="${href}" data-jskelet-css="${name}"></noscript>`,
+    ].join("\n    ");
+
+  assert.equal(
+    stylesheets({ styles: ["home.css"], blocking: "(min-width: 1024px)" }),
+    mediaSheet(home, "home.css", "(min-width: 1024px)"),
+  );
+  assert.equal(
+    stylesheets({ blocking: "  screen and (min-width: 64em)  " }),
+    mediaSheet(app, "app.css", "screen and (min-width: 64em)"),
+  );
+  assert.equal(
+    stylesheets({ blocking: '(min-width: 1px)" onerror="x' }),
+    mediaSheet(app, "app.css", "(min-width: 1px)&quot; onerror=&quot;x"),
+  );
+
+  // `.jsk` literal öznitelikleri string geçer; bunlar sorgu değil.
+  const appBlocking = `<link rel="stylesheet" href="${app}" data-jskelet-css="app.css">`;
+  assert.equal(stylesheets({ blocking: "false" }), appBlocking);
+  assert.equal(stylesheets({ blocking: "true" }), appBlocking);
+  assert.equal(stylesheets({ blocking: "   " }), appBlocking);
 });

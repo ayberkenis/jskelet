@@ -860,12 +860,25 @@ _jskelet:{namespace}:{buildId}:data:{anahtar}
 _jskelet:{namespace}:events
 ```
 
-`buildId` her build'de değişir (`jskelet build` bunu `.jskelet/build.json`
-dosyasına yazar) ve **zorunlu bir parçadır**: saklanan HTML hash'li varlık
-yollarını gömüyor, yani bir deploy'dan sonra eski HTML geçersizdir. Kimlik
-önekte durduğu için yeni sürüm kendiliğinden yeni bir isim alanına yazar, eski
-anahtarlar TTL ile ölür — elle temizlik ya da `FLUSHDB` gerekmez. Build
-çalıştırılmadıysa kimlik `dev` olur.
+`buildId` **zorunlu bir parçadır**: saklanan HTML hash'li varlık yollarını ve
+layout'un ürettiği `<head>`'i gömüyor, yani ikisinden biri değişince eski HTML
+geçersizdir. İki yarısı var, `{asset}-{şablon}`:
+
+- `asset`, asset manifest'inin hash'idir (`jskelet build` bunu
+  `.jskelet/build.json` dosyasına yazar). Build çalıştırılmadıysa `dev` olur.
+- `şablon`, view kökleri altında HTML'i şekillendiren her şeyin parmak izidir —
+  `.jsk`, `.ejs`, bileşen `.js` / `.mjs` dosyaları, layout dosyası — artı
+  framework sürümü. Build bunu `.jskelet/templates/build.json` dosyasına yazar;
+  production bu kaydı okur, development sunucu süreci her açıldığında
+  kaynaktan yeniden hesaplar.
+
+Kimlik önekte durduğu için yeni sürüm kendiliğinden yeni bir isim alanına
+yazar, eski anahtarlar TTL ile ölür — elle temizlik ya da `FLUSHDB` gerekmez.
+CSS'e ve JS'e dokunmayan bir layout değişikliği de yeni isim alanı alır;
+eski `<head>` yeniden başlatma ya da deploy sonrasında Redis'ten geri gelmez.
+Route handler'ları ve `jskelet.config.mjs` parmak izine girmez; bir sayfanın
+çıktısını onlar değiştiriyorsa `invalidateHtmlCache()` ya da
+`clearHtmlCache()` kullanın.
 
 `namespace` aynı Redis'i paylaşan birden fazla uygulamayı ayırır. Olay kanalı
 bilinçli olarak `buildId` **taşımaz**: deploy sırasında eski ve yeni sürüm yan

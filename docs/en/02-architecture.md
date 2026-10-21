@@ -171,6 +171,11 @@ it to `all`, and a plain link inside `<noscript>` applies when JS is off.
 That is the reverse of the CLS tradeoff above: first paint arrives sooner,
 and the layout can shift when the sheet arrives.
 
+When the two tradeoffs split by screen (shifts are costly on wide screens,
+LCP on narrow ones), the wait can be tied to a media query:
+`<Stylesheets blocking="(min-width: 1024px)" />`. Where the query matches the
+link is render-blocking; elsewhere it loads the same way as `false`.
+
 The same logic applies to icons: instead of a separate request per icon, an SVG
 sprite is produced at build time from only the symbols actually used in the
 source. Shipping the whole Phosphor set is 1500+ icons, that is several
