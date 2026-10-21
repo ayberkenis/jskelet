@@ -98,9 +98,11 @@ export declare function csrfField(): string;
  */
 export declare function toKebab(name: string): string;
 /**
- * Layout `<head>` stylesheet'leri. `hasAsset` false olanları basmaz —
- * build yokken 404 link'i istememek için. `.jsk` ifade dilinde `asset()` /
- * `hasAsset()` çağrılamadığı için layout bu etiketi kullanır.
+ * Layout `<head>` stylesheet'leri. Sayfa sheet'i varsa global CSS'i zaten
+ * taşıyan bu birleşik varlık basılır; yoksa `app.css` kullanılır. `hasAsset`
+ * false olanları basmaz — build yokken 404 link'i istememek için. `.jsk`
+ * ifade dilinde `asset()` / `hasAsset()` çağrılamadığı için layout bu etiketi
+ * kullanır.
  *
  * `blocking` varsayılan `true`: `<link rel="stylesheet">` boyamayı bekletir.
  * Ölçümde bu, sheet geç gelince oluşan CLS'ten daha ucuz. `false` yalnızca
