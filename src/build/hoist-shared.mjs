@@ -71,6 +71,8 @@ const HOISTABLE_EXT = /\.(?:[cm]?[jt]s|json)$/i;
  * @property {Map<string, number>} registered Proxy üzerinden erişilen modül → kimlik.
  * @property {Map<string, string>} edges `importer\0specifier` → hedef modül.
  * @property {Map<string, "esm" | "cjs">} formats
+ * @property {Map<string, Map<string, number>>} dynamic Hoisted modülü
+ *   `import()` eden dosya → specifier → kimlik; kaynakta yerinde çözülür.
  */
 
 /**
@@ -181,6 +183,7 @@ export function planHoist(metafile, { root, entries, hoist, groupOptions = null 
     registered: new Map(),
     edges: new Map(),
     formats: new Map(),
+    dynamic: new Map(),
   };
 
   const inputs = metafile.inputs ?? {};
@@ -309,6 +312,18 @@ export function planHoist(metafile, { root, entries, hoist, groupOptions = null 
   [...new Set(needsProxy)].sort().forEach((file, index) => {
     plan.registered.set(file, index);
   });
+
+  for (const [file, input] of Object.entries(inputs)) {
+    if (!isFileInput(file)) continue;
+    for (const item of input.imports ?? []) {
+      if (item.kind !== "dynamic-import" || !item.original) continue;
+      const id = plan.registered.get(item.path);
+      if (id == null) continue;
+      const map = plan.dynamic.get(file) ?? new Map();
+      map.set(item.original, id);
+      plan.dynamic.set(file, map);
+    }
+  }
 
   return plan;
 }
@@ -574,18 +589,34 @@ export function registerSource(plan, root, exportsByFile) {
 }
 
 /**
- * Çatıyı yükleyen onLoad yalnızca aynı adlı dosyalarda JS'e geçsin; her
- * modül için Go → JS turu build'i belirgin yavaşlatır.
+ * Hoisted bir modülü hedefleyen `import("…")` çağrılarını kaynakta çözer.
  *
- * @param {string} into
- * @returns {RegExp}
+ * Proxy'ye giden bir `import()` esbuild için yeni bir entry'dir ve birkaç
+ * yüz baytlık ayrı bir dosya üretir; değer zaten çatıda olduğu için o dosya
+ * yalnızca fazladan bir istek. `.then` ile ertelenir: çağrı, register daha
+ * çalışmadan çatının kendi grafiğinden yapılmış olabilir.
+ *
+ * Yalnızca düz string specifier'lar (araya yorum girebilir) eşleşir; şablonlu
+ * ya da değişkenli `import()` proxy yoluna düşer ve yine çalışır.
+ *
+ * @param {string} source
+ * @param {Map<string, number>} specifiers
+ * @returns {string}
  */
-function hostFilter(into) {
-  const stem = path.posix
-    .basename(into.replace(/\\/g, "/"))
-    .replace(/\.(?:[cm]?[jt]s)$/i, "")
-    .replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return new RegExp(`(?:^|[\\\\/])${stem}\\.m?[jt]s$`);
+export function rewriteDynamicImports(source, specifiers) {
+  let code = source;
+  for (const [specifier, id] of specifiers) {
+    const literal = specifier.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const call = new RegExp(
+      `\\bimport\\s*\\(\\s*(?:\\/\\*[\\s\\S]*?\\*\\/\\s*)*(["'\`])${literal}\\1\\s*\\)`,
+      "g",
+    );
+    code = code.replace(
+      call,
+      `Promise.resolve().then(() => globalThis.${GLOBAL_KEY}[${id}])`,
+    );
+  }
+  return code;
 }
 
 /**
@@ -673,18 +704,25 @@ export function hoistSharedPlugin({ root, hoist, analyze }) {
         };
       });
 
-      build.onLoad({ filter: hostFilter(hoist.into) }, async (args) => {
+      // Plan `onStart`'ta hesaplandığı için filtre dosya adıyla daraltılamaz;
+      // ilgisiz dosyalar iki Map aramasıyla geri döner.
+      build.onLoad({ filter: /\.(?:[cm]?[jt]s)$/ }, async (args) => {
         if (args.namespace !== "file" || !plan?.host || !plan.registered.size) {
           return undefined;
         }
-        if (toInput(args.path) !== plan.host) return undefined;
+        const file = toInput(args.path);
+        const isHost = file === plan.host;
+        const dynamic = plan.dynamic.get(file);
+        if (!isHost && !dynamic) return undefined;
 
-        const source = await fs.readFile(args.path, "utf8");
+        let source = await fs.readFile(args.path, "utf8");
+        if (dynamic) source = rewriteDynamicImports(source, dynamic);
         // Sona eklenir: çatının kendi import sırası (polyfill önce vb.) korunur;
         // register yine çatının gövdesinden önce değerlendirilir.
+        if (isHost) source += `\nimport ${JSON.stringify(REGISTER_SPECIFIER)};\n`;
         return {
-          contents: `${source}\nimport ${JSON.stringify(REGISTER_SPECIFIER)};\n`,
-          loader: /\.m?ts$/i.test(args.path) ? "ts" : "js",
+          contents: source,
+          loader: /\.[cm]?ts$/i.test(args.path) ? "ts" : "js",
           resolveDir: path.dirname(args.path),
           // İçerik plugin'den gelince esbuild watch dosyayı kendiliğinden izlemez.
           watchFiles: [args.path],

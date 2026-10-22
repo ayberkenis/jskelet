@@ -304,6 +304,12 @@ How it works:
 4. Imports from outside the shell resolve to a tiny proxy (a few dozen bytes)
    that reads the values from there. Each importer gets its own proxy, so
    proxies never form a shared chunk.
+5. An `import("…")` that targets a hoisted module emits no file; it is
+   rewritten in the source to a `Promise.resolve()` of the value already in
+   the shell. Application code can use lazy `import()` without checking
+   whether the module ended up in the shell. Only plain string specifiers
+   are rewritten; a variable or template `` import(`./${name}.js`) `` falls
+   back to the proxy path and emits a small file.
 
 `exclude` only keeps the matched module itself out of the shell. The
 application files it uses (shared helpers such as `client/lib/dates.js`) are

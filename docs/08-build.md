@@ -297,6 +297,11 @@ Nasıl çalışır:
 4. Çatı dışından gelen import'lar, değerleri oradan okuyan küçük bir proxy'ye
    (birkaç düzine bayt) çözülür. Proxy her import eden dosya için ayrıdır; bu
    yüzden proxy'ler de ortak chunk oluşturmaz.
+5. Hoisted bir modülü hedefleyen `import("…")` dosya üretmez; kaynakta
+   `Promise.resolve()` ile çatıdaki değere çözülür. Uygulamada tembel
+   `import()` yazarken modülün çatıda olup olmadığını düşünmek gerekmez.
+   Yalnızca düz string specifier'lar çözülür; değişkenli ya da şablonlu
+   `` import(`./${ad}.js`) `` proxy yoluna düşer ve küçük bir dosya üretir.
 
 `exclude` yalnızca eşleşen modülün kendisini çatı dışında tutar. Onun
 kullandığı uygulama dosyaları (`client/lib/dates.js` gibi ortak yardımcılar)

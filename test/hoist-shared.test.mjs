@@ -13,6 +13,7 @@ import {
   parseUsage,
   planHoist,
   proxySource,
+  rewriteDynamicImports,
 } from "../src/build/hoist-shared.mjs";
 import { buildClient } from "../src/build/tasks/client.mjs";
 import { normalizeBuild } from "../src/config/index.js";
@@ -395,6 +396,70 @@ export function mount() { return format("n"); }
     const main = await import(pathToFileURL(path.join(root, "public", manifest["main.js"])).href);
     assert.equal((await main.islands.markets()).mount(), "date:m");
     assert.equal((await main.islands.news()).mount(), "date:n");
+  } finally {
+    delete globalThis.__jskeletHoist;
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("rewriteDynamicImports resolves literal import() calls in place", () => {
+  const specifiers = new Map([["../lib/api.js", 2]]);
+  const code = rewriteDynamicImports(
+    [
+      `const a = import("../lib/api.js");`,
+      `const b = import( /* lazy */ '../lib/api.js' );`,
+      "const c = import(`../lib/api.js`);",
+      `const d = import("../lib/other.js");`,
+      "const e = import(`../lib/${name}.js`);",
+    ].join("\n"),
+    specifiers,
+  );
+  assert.equal(code.match(/globalThis\.__jskeletHoist\[2\]/g)?.length, 3);
+  assert.match(code, /import\("\.\.\/lib\/other\.js"\)/);
+  assert.match(code, /import\(`\.\.\/lib\/\$\{name\}\.js`\)/);
+});
+
+test("buildClient: import() of a hoisted module emits no extra file", async () => {
+  const { root, config } = makeFixture(
+    {
+      "client/entries/main.js": `
+import { request } from "../lib/api.js";
+export const ping = () => request("main");
+export const lazyApi = () => import("../lib/api.js");
+export const islands = {
+  a: () => import("../islands/a.js"),
+  b: () => import("../islands/b.js"),
+};
+`,
+      "client/lib/api.js": `
+export const calls = [];
+export function request(name) { calls.push(name); return name; }
+`,
+      "client/islands/a.js": `
+export async function mount() {
+  const { request } = await import("../lib/api.js");
+  return request("a");
+}
+`,
+      "client/islands/b.js": `
+import { request } from "../lib/api.js";
+export function mount() { return request("b"); }
+`,
+    },
+    true,
+  );
+  try {
+    initBuildPaths(config);
+    const manifest = await buildClient(config);
+    // main + iki island; import() için ayrı giriş dosyası yok.
+    assert.equal(listJs(path.join(root, "public", "assets", "js")).length, 3);
+
+    const main = await import(pathToFileURL(path.join(root, "public", manifest["main.js"])).href);
+    const api = await main.lazyApi();
+    assert.equal(await (await main.islands.a()).mount(), "a");
+    assert.equal((await main.islands.b()).mount(), "b");
+    assert.equal(main.ping(), "main");
+    assert.deepEqual(api.calls, ["a", "b", "main"]);
   } finally {
     delete globalThis.__jskeletHoist;
     fs.rmSync(root, { recursive: true, force: true });

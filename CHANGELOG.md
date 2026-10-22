@@ -169,6 +169,12 @@ one is listed under a **Breaking** heading.
   `node_modules` files reached only through an excluded vendor stay with it. Only the names islands actually import are kept, so the
   shell stays tree-shaken. In the blog example, every page now loads `main.js`
   plus its own islands. Before, it also loaded a 3.8 KB shared chunk.
+  An `import("…")` of a module that is already in the shell emits no file;
+  it resolves to the shell's copy through `Promise.resolve()`. Before, each
+  such call left a small entry file of its own (a few hundred bytes up to a
+  couple of KB), so lazy imports can now be written without checking where
+  the module ended up. Variable or template specifiers still go through a
+  small proxy file.
 - `start({ rootMargin })` sets how far ahead the visibility observer starts
   loading an island (`IntersectionObserver` syntax, default `"200px 0px"`).
   `"100% 0px"` starts one screen early. An invalid value warns and falls
