@@ -310,6 +310,17 @@ How it works:
    whether the module ended up in the shell. Only plain string specifiers
    are rewritten; a variable or template `` import(`./${name}.js`) `` falls
    back to the proxy path and emits a small file.
+6. esbuild's own shared code (interop helpers, the `process.env` define) is
+   needed by the shell and every island, so it still lands in a separate
+   chunk. At the end of the build every chunk the shell imports statically is
+   folded into the shell, and the other files that use it read the values
+   through `globalThis.__jskeletShared`. The critical path of every page is a
+   single file: the shell. The reads go through a namespace object, so
+   esbuild's lazily initialized variables stay live. Islands do not import
+   the shell's hashed name; if they did, the shell's and the island's names
+   would depend on each other and a cached old island could load an old copy
+   of the shell. If folding fails (for example on an import form it does not
+   recognize), the build prints a warning and writes esbuild's output as is.
 
 `exclude` only keeps the matched module itself out of the shell. The
 application files it uses (shared helpers such as `client/lib/dates.js`) are
@@ -335,8 +346,9 @@ as `groups`: a bare package, a `./` path prefix or an `@/` prefix.
 - A proxy export is a snapshot of the value. A later reassignment of an
   `export let` does not reach islands; use a function or an object field for
   mutable state.
-- CommonJS modules need esbuild's interop helpers. When main and islands both
-  use them, a small runtime chunk can remain; prefer the ESM build of a vendor.
+- CommonJS modules need esbuild's interop helpers; those helpers sit in the
+  shell even on pages that use no island. The ESM build of a vendor comes out
+  smaller.
 - Proxies only work after the shell has run. The layout prints `main.js`
   before other entries and islands load from `main`, so the order is
   guaranteed. If you pick another entry for `into`, it must load before the

@@ -302,6 +302,17 @@ Nasıl çalışır:
    `import()` yazarken modülün çatıda olup olmadığını düşünmek gerekmez.
    Yalnızca düz string specifier'lar çözülür; değişkenli ya da şablonlu
    `` import(`./${ad}.js`) `` proxy yoluna düşer ve küçük bir dosya üretir.
+6. esbuild'in kendi ortak kodu (interop yardımcıları, `process.env`
+   define'ı) çatı ile island'ların hepsine gerektiği için yine ayrı bir chunk'a
+   düşer. Build sonunda çatının static import ettiği bütün chunk'lar çatıya
+   gömülür; onları kullanan diğer dosyalar değerleri
+   `globalThis.__jskeletShared` üzerinden okur. Her sayfanın kritik yolu tek
+   dosyadır: çatı. Okuma namespace nesnesi üzerinden yapıldığı için esbuild'in
+   tembel başlatılan değişkenleri canlı kalır. Island'lar çatının hash'li adını
+   import etmez; etseydi çatı ile island'ın adları birbirine bağlanır ve
+   önbellekteki eski bir island çatının eski kopyasını yüklerdi. Gömme
+   başarısız olursa (tanınmayan bir import biçimi gibi) build uyarı basar ve
+   esbuild'in çıktısını olduğu gibi yazar.
 
 `exclude` yalnızca eşleşen modülün kendisini çatı dışında tutar. Onun
 kullandığı uygulama dosyaları (`client/lib/dates.js` gibi ortak yardımcılar)
@@ -328,9 +339,9 @@ eşleyicileri kullanır: bare paket, `./` yol öneki ya da `@/` öneki.
 - Proxy export'u değerin anlık kopyasıdır. Sonradan yeniden atanan bir
   `export let` island'lara yansımaz; değişen durum için fonksiyon ya da nesne
   alanı kullanın.
-- CommonJS modüller esbuild'in interop yardımcılarına muhtaçtır. Çatı ve
-  island'lar ikisi de bunları kullanıyorsa küçük bir runtime chunk'ı
-  kalabilir; vendor'ın ESM sürümünü tercih edin.
+- CommonJS modüller esbuild'in interop yardımcılarına muhtaçtır; bu
+  yardımcılar island'ları kullanmayan sayfalarda da çatıda durur. Vendor'ın
+  ESM sürümü daha küçük çıkar.
 - Proxy'ler ancak çatı çalıştıktan sonra çalışır. Layout `main.js`'i diğer
   entry'lerden önce basar ve island'lar `main`'den yüklenir, yani sıra
   garantidir. `into` için başka bir entry seçerseniz o entry her sayfada diğer

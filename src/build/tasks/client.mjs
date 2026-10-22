@@ -17,6 +17,7 @@ import process from "node:process";
 import * as esbuild from "esbuild";
 import { chunkGroupsPlugin } from "../chunk-groups.mjs";
 import { analyzeHoist, hoistSharedPlugin } from "../hoist-shared.mjs";
+import { inlineHostChunks } from "../inline-chunks.mjs";
 import { paths, patchManifest, pruneAssets } from "../paths.mjs";
 import * as log from "../../log.mjs";
 
@@ -247,6 +248,18 @@ export async function buildClient(config, { watch = false, report = log.detail }
   plugins.push(aliasPlugin(config.root));
   if (groupPlugin) plugins.push(groupPlugin);
 
+  const getPlan = () => hoistShared?.getPlan() ?? null;
+  const target = ["chrome111", "edge111", "firefox111", "safari16.4"];
+  const sourcemap = process.env.NODE_ENV === "development";
+  plugins.push(
+    outputWriter({
+      root: config.root,
+      target,
+      sourcemap,
+      host: hoist ? () => getPlan()?.host ?? null : () => null,
+    }),
+  );
+
   options = {
     entryPoints,
     outdir: outDir,
@@ -254,11 +267,15 @@ export async function buildClient(config, { watch = false, report = log.detail }
     bundle: true,
     splitting,
     format: "esm",
-    target: ["chrome111", "edge111", "firefox111", "safari16.4"],
+    target,
     minify: true,
     // Prod'da map dosyaları `public/assets` altında herkese açık kalırdı.
-    sourcemap: process.env.NODE_ENV === "development",
+    sourcemap,
     metafile: true,
+    // Çıktı `outputWriter`'da yazılır. esbuild'in kendisi yazsaydı watch
+    // turunda değişmeyen dosyaları atlayabilir ve çatıya gömülmüş chunk'ın
+    // yerine eskisini bırakabilirdi.
+    write: false,
     entryNames: "[name].[hash]",
     chunkNames: "chunks/[name].[hash]",
     legalComments: "none",
@@ -272,8 +289,6 @@ export async function buildClient(config, { watch = false, report = log.detail }
       ? { logOverride: { "import-is-undefined": "silent" } }
       : {}),
   };
-
-  const getPlan = () => hoistShared?.getPlan() ?? null;
 
   if (watch) {
     const context = await esbuild.context({
@@ -450,6 +465,58 @@ export function toPreloadMap(metafile, root, publicDir, plan = null) {
   }
 
   return map;
+}
+
+/**
+ * Bellekteki esbuild çıktısını diske yazar. `hoistShared` açıksa önce
+ * çatının static chunk'larını (esbuild yardımcıları, `process.env` define'ı)
+ * çatıya gömer; her sayfanın kritik yolu tek dosyaya iner.
+ *
+ * Gömme başarısız olursa uyarıp esbuild'in çıktısını olduğu gibi yazar: bir
+ * istek fazla ama çalışan sayfa, build hatasından iyidir.
+ *
+ * @param {{
+ *   root: string,
+ *   target: string[],
+ *   sourcemap: boolean,
+ *   host: () => string | null,
+ * }} options
+ * @returns {esbuild.Plugin}
+ */
+function outputWriter({ root, target, sourcemap, host }) {
+  return {
+    name: "jskelet-output-writer",
+    setup(build) {
+      build.onEnd(async (result) => {
+        if (result.errors.length || !result.outputFiles) return;
+
+        let files = result.outputFiles;
+        const hostSource = host();
+        if (hostSource && result.metafile) {
+          try {
+            const inlined = await inlineHostChunks(files, result.metafile, {
+              root,
+              host: hostSource,
+              target,
+              sourcemap,
+            });
+            if (inlined) files = inlined.files;
+          } catch (error) {
+            log.warn(
+              `[build] could not fold shared chunks into ${path.posix.basename(hostSource)}: ${
+                /** @type {Error} */ (error).message
+              }`,
+            );
+          }
+        }
+
+        for (const file of files) {
+          fs.mkdirSync(path.dirname(file.path), { recursive: true });
+          fs.writeFileSync(file.path, file.contents);
+        }
+      });
+    },
+  };
 }
 
 /**

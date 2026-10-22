@@ -175,6 +175,13 @@ one is listed under a **Breaking** heading.
   couple of KB), so lazy imports can now be written without checking where
   the module ended up. Variable or template specifiers still go through a
   small proxy file.
+  esbuild's shared runtime chunk (interop helpers and the `process.env`
+  define) is folded into the shell too. Every chunk the shell imports
+  statically now ends up inside it, and other files read those values
+  from the shell instead of importing the chunk. The critical path is now
+  `main.js` alone, without the extra ~1 KB request on every page. Source
+  maps still point to the original files. If folding fails, the build
+  warns and keeps esbuild's output.
 - `start({ rootMargin })` sets how far ahead the visibility observer starts
   loading an island (`IntersectionObserver` syntax, default `"200px 0px"`).
   `"100% 0px"` starts one screen early. An invalid value warns and falls

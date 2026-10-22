@@ -15,6 +15,7 @@ import {
   proxySource,
   rewriteDynamicImports,
 } from "../src/build/hoist-shared.mjs";
+import { leadingImports, parseImportNames } from "../src/build/inline-chunks.mjs";
 import { buildClient } from "../src/build/tasks/client.mjs";
 import { normalizeBuild } from "../src/config/index.js";
 
@@ -490,6 +491,81 @@ export function mount() { return legacy.legacy; }
     assert.equal((await main.islands.a()).mount(), "yes");
   } finally {
     delete globalThis.__jskeletHoist;
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("leadingImports only reads the import statements at the top", () => {
+  const text = `import{a as e,b as t}from"./chunk.X.js";import"./side.js";var s='import"./no.js"';`;
+  const found = leadingImports(text);
+  assert.deepEqual(
+    found.map((item) => [item.specifier, item.names]),
+    [
+      ["./chunk.X.js", "a as e,b as t"],
+      ["./side.js", null],
+    ],
+  );
+  assert.equal(text.slice(found[0].start, found[0].end), `import{a as e,b as t}from"./chunk.X.js";`);
+  assert.deepEqual(parseImportNames("a as e, b ,default as d"), { e: "a", b: "b", d: "default" });
+});
+
+const RUNTIME_FIXTURE = {
+  "client/entries/main.js": `
+import { legacy } from "../lib/legacy.cjs";
+export const fromMain = [legacy, process.env.NODE_ENV];
+export const islands = { a: () => import("../islands/a.js") };
+`,
+  "client/lib/legacy.cjs": `module.exports = { legacy: "yes" };`,
+  "client/islands/a.js": `
+import legacy from "../lib/legacy.cjs";
+export function mount() { return [legacy.legacy, Object.keys(process.env).join()]; }
+`,
+};
+
+test("buildClient: esbuild's shared runtime chunk is folded into main", async () => {
+  const { root, config } = makeFixture(RUNTIME_FIXTURE, true);
+  try {
+    initBuildPaths(config);
+    const manifest = await buildClient(config);
+    const js = listJs(path.join(root, "public", "assets", "js"));
+    // main + island; interop yardımcıları ve `process.env` ayrı chunk değil.
+    assert.equal(js.length, 2);
+
+    const preload = JSON.parse(
+      fs.readFileSync(path.join(root, ".jskelet", "preload.json"), "utf8"),
+    );
+    assert.deepEqual(preload["client/entries/main.js"], [manifest["main.js"]]);
+
+    const main = await import(pathToFileURL(path.join(root, "public", manifest["main.js"])).href);
+    assert.deepEqual(main.fromMain, ["yes", "production"]);
+    assert.deepEqual((await main.islands.a()).mount(), ["yes", "NODE_ENV"]);
+  } finally {
+    delete globalThis.__jskeletHoist;
+    delete globalThis.__jskeletShared;
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("buildClient: folded output keeps source maps to the original files", async () => {
+  const { root, config } = makeFixture(RUNTIME_FIXTURE, true);
+  const previous = process.env.NODE_ENV;
+  process.env.NODE_ENV = "development";
+  try {
+    initBuildPaths(config);
+    await buildClient(config);
+    const maps = fs
+      .readdirSync(path.join(root, "public", "assets", "js"), { recursive: true })
+      .filter((file) => String(file).endsWith(".map"))
+      .map((file) =>
+        JSON.parse(fs.readFileSync(path.join(root, "public", "assets", "js", String(file)), "utf8")),
+      );
+    assert.equal(maps.length, 2);
+    const sources = maps.flatMap((map) => map.sources);
+    assert.ok(sources.some((source) => source.endsWith("client/islands/a.js")));
+    assert.ok(sources.some((source) => source.endsWith("client/entries/main.js")));
+  } finally {
+    if (previous === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = previous;
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
