@@ -298,11 +298,22 @@ Nasıl çalışır:
    (birkaç düzine bayt) çözülür. Proxy her import eden dosya için ayrıdır; bu
    yüzden proxy'ler de ortak chunk oluşturmaz.
 
-`exclude` ve `groups` ile eşleşen modüller, onların çektiği her şey ve onları
-import eden her modül hoist edilmez. Hariç tutulan bir vendor'ın
-bağımlılıkları onunla kalır, ama niyetin açık görünmesi için onları da listeye
-yazın. `exclude` `groups` ile aynı eşleyicileri kullanır: bare paket, `./` yol
-öneki ya da `@/` öneki.
+`exclude` yalnızca eşleşen modülün kendisini çatı dışında tutar. Onun
+kullandığı uygulama dosyaları (`client/lib/dates.js` gibi ortak yardımcılar)
+kendi sayaçlarıyla değerlendirilir: yeterince kök kullanıyorsa çatıya girer ve
+hariç tutulan modül onlara proxy üzerinden erişir. Böylece sayfaya özel bir
+island `exclude` ile çatıdan çıkarılabilir ve ortak yardımcıları küçük parçalara
+düşmez. İki kural değişmez:
+
+- Hariç tutulan modülü import eden bir modül de hoist edilmez; edilseydi
+  hariç tutulan modülü çatıya geri çekerdi.
+- `node_modules` içinde olup **yalnızca** hariç tutulan modül üzerinden erişilen
+  dosyalar onunla kalır (`lightweight-charts` → `fancy-canvas`). Uygulama kodu
+  aynı paketi doğrudan da import ediyorsa o paket normal sayaçla
+  değerlendirilir.
+
+`groups` üyeleri de aynı şekilde yerinde kalır. `exclude`, `groups` ile aynı
+eşleyicileri kullanır: bare paket, `./` yol öneki ya da `@/` öneki.
 
 **Takaslar:**
 

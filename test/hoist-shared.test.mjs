@@ -102,6 +102,35 @@ test("planHoist: excluded vendors and their dependencies stay out", () => {
   assert.ok(!plan.hoisted.has("l/chart-helper.js"), "importers of a vendor stay with it");
 });
 
+test("planHoist: exclude keeps the module out but hoists its app dependencies", () => {
+  const plan = planHoist(
+    metafile({
+      "e/main.js": {
+        imports: [dyn("c/markets.js"), dyn("c/news.js"), dyn("c/board.js"), dyn("c/feed.js")],
+      },
+      "c/markets.js": { imports: [stat("l/dates.js"), stat("l/only-markets.js")] },
+      "c/news.js": { imports: [stat("l/dates.js")] },
+      "c/board.js": { imports: [stat("l/page-helper.js")] },
+      "c/feed.js": { imports: [stat("l/page-helper.js")] },
+      "l/page-helper.js": { imports: [stat("l/legacy.js")] },
+      "l/legacy.js": {},
+      "l/dates.js": {},
+      "l/only-markets.js": {},
+    }),
+    {
+      root: "/app",
+      entries: ["e/main.js"],
+      hoist: { into: "main.js", minImporters: 2, exclude: ["./c/markets.js", "./l/legacy.js"] },
+    },
+  );
+
+  assert.ok(!plan.hoisted.has("c/markets.js"));
+  assert.ok(plan.hoisted.has("l/dates.js"), "shared helper of an excluded module is hoisted");
+  assert.ok(plan.registered.has("l/dates.js"), "the excluded module reaches it via proxy");
+  assert.ok(!plan.hoisted.has("l/only-markets.js"), "single-root helpers stay with their island");
+  assert.ok(!plan.hoisted.has("l/page-helper.js"), "importers of an excluded module stay out");
+});
+
 test("planHoist: group members are never hoisted", () => {
   const plan = planHoist(
     metafile({
@@ -325,6 +354,47 @@ test("buildClient: hoistShared folds shared modules into main and keeps behaviou
     // Aynı `log.js` örneği: island'ın çağrıları çatının dizisine düşer.
     assert.deepEqual(calls, ["main", "get /a", "get /b"]);
     assert.equal(answer, 42);
+  } finally {
+    delete globalThis.__jskeletHoist;
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("buildClient: excluded island reaches hoisted helpers through a proxy", async () => {
+  const { root, config } = makeFixture(
+    {
+      "client/entries/main.js": `
+export const islands = {
+  markets: () => import("../islands/markets.js"),
+  news: () => import("../islands/news.js"),
+};
+`,
+      "client/lib/dates.js": `export const format = (d) => "date:" + d;`,
+      "client/islands/markets.js": `
+import { format } from "../lib/dates.js";
+export function mount() { return format("m"); }
+`,
+      "client/islands/news.js": `
+import { format } from "../lib/dates.js";
+export function mount() { return format("n"); }
+`,
+    },
+    { exclude: ["./client/islands/markets.js"] },
+  );
+  try {
+    initBuildPaths(config);
+    const manifest = await buildClient(config);
+    const metafile = JSON.parse(
+      fs.readFileSync(path.join(root, ".jskelet", "metafile.json"), "utf8"),
+    );
+    const owners = Object.entries(metafile.outputs)
+      .filter(([, output]) => "client/lib/dates.js" in (output.inputs ?? {}))
+      .map(([, output]) => output.entryPoint);
+    assert.deepEqual(owners, ["client/entries/main.js"]);
+
+    const main = await import(pathToFileURL(path.join(root, "public", manifest["main.js"])).href);
+    assert.equal((await main.islands.markets()).mount(), "date:m");
+    assert.equal((await main.islands.news()).mount(), "date:n");
   } finally {
     delete globalThis.__jskeletHoist;
     fs.rmSync(root, { recursive: true, force: true });

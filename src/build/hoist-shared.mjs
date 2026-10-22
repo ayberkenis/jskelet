@@ -252,10 +252,33 @@ export function planHoist(metafile, { root, entries, hoist, groupOptions = null 
   const pinned = [...staticDeps.keys()].filter((file) =>
     isPinned(file, root, exclude, groupOptions),
   );
-  // Sabitlenmiş bir vendor'ın kendi bağımlılıkları da onunla kalır
-  // (`lightweight-charts` → `fancy-canvas`); çatı zaten çekiyorsa çatıda.
+  const pinnedSet = new Set(pinned);
+
+  // Sabitlenmiş modüllere girmeden köklerden erişilenler. Bir vendor
+  // dosyası buraya hiç düşmüyorsa yalnızca o vendor'ın içinden çekiliyordur.
+  const free = new Set();
+  const queue = [...roots, host].filter((file) => !pinnedSet.has(file));
+  for (const file of queue) free.add(file);
+  while (queue.length) {
+    const current = /** @type {string} */ (queue.pop());
+    for (const next of staticDeps.get(current) ?? []) {
+      if (free.has(next) || pinnedSet.has(next)) continue;
+      free.add(next);
+      queue.push(next);
+    }
+  }
+
+  // `exclude` yalnızca modülün kendisini dışarıda tutar: uygulama dosyası
+  // bağımlılıkları (`dates.js`) kendi sayaçlarıyla değerlendirilir ve
+  // hariç tutulan modül onlara proxy üzerinden erişir. Vendor'ın yalnızca
+  // kendi kullandığı paketler (`lightweight-charts` → `fancy-canvas`)
+  // onunla kalır; çatıya çekmek ağır kodu her sayfaya taşırdı.
   const removed = new Set(
-    [...reach(pinned, staticDeps)].filter((file) => !hostClosure.has(file)),
+    [...reach(pinned, staticDeps)].filter(
+      (file) =>
+        !hostClosure.has(file) &&
+        (pinnedSet.has(file) || (file.includes("node_modules/") && !free.has(file))),
+    ),
   );
   const tainted = reach(removed, staticImporters);
 

@@ -660,7 +660,7 @@ Client JS (esbuild) bundling knobs and optional CDN / S3 asset publishing.
 | `client.hoistShared` | `true \| { into?, minImporters?, exclude? } \| null` | `null` | Folds shared modules into the shell entry instead of small shared chunks. `true` = defaults. |
 | `client.hoistShared.into` | `string` | `"main.js"` | Shell entry: a path relative to the root (`client/entries/main.js`) or a manifest name. If it is not an entry, the build warns and hoists nothing. |
 | `client.hoistShared.minImporters` | `number` | `2` | A module is hoisted when this many roots (entries / islands) reach it. Must be an integer ≥ 2; otherwise warns and uses 2. |
-| `client.hoistShared.exclude` | `string[]` | `[]` | Modules that stay in their own file (heavy vendors). Same matchers as `groups`. Group members are never hoisted either. |
+| `client.hoistShared.exclude` | `string[]` | `[]` | Modules that stay in their own file (heavy vendors, page-specific islands). Only the module itself stays out; shared application helpers still go into the shell and are reached through a proxy. Same matchers as `groups`. Group members are never hoisted either. |
 
 esbuild has no native `manualChunks`. The framework pulls imports that land in a
 group into the same shared chunk via a barrel. Trade-off: tree-shaking inside a

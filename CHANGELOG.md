@@ -154,7 +154,11 @@ one is listed under a **Breaking** heading.
   every module reached by at least `minImporters` islands or entries, goes
   into the shell. Islands then contain only their own code. `exclude`
   (bare packages or path prefixes, like `groups`) and group members stay in
-  their own files. Only the names islands actually import are kept, so the
+  their own files. `exclude` only keeps the matched module out: the shared
+  application helpers it uses (for example `dates.js`) can still go into the
+  shell, and the excluded module reaches them through a proxy, so
+  page-specific code can be excluded without leaving small shared chunks.
+  `node_modules` files reached only through an excluded vendor stay with it. Only the names islands actually import are kept, so the
   shell stays tree-shaken. In the blog example, every page now loads `main.js`
   plus its own islands. Before, it also loaded a 3.8 KB shared chunk.
 - `start({ rootMargin })` sets how far ahead the visibility observer starts

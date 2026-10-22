@@ -647,7 +647,7 @@ Client JS (esbuild) bundling knobs ve opsiyonel CDN / S3 asset dağıtımı.
 | `client.hoistShared` | `true \| { into?, minImporters?, exclude? } \| null` | `null` | Ortak modülleri küçük paylaşılan chunk'lar yerine çatı entry'sine toplar. `true` = varsayılanlar. |
 | `client.hoistShared.into` | `string` | `"main.js"` | Çatı entry'si: köke göre yol (`client/entries/main.js`) ya da manifest adı. Entry değilse build uyarır ve hiçbir şey taşınmaz. |
 | `client.hoistShared.minImporters` | `number` | `2` | Bir modül bu kadar kök (entry / island) ona eriştiğinde taşınır. ≥ 2 tam sayı olmalı; değilse uyarıp 2 kullanır. |
-| `client.hoistShared.exclude` | `string[]` | `[]` | Kendi dosyasında kalacak modüller (ağır vendor'lar). `groups` ile aynı eşleyiciler. Grup üyeleri de hiç taşınmaz. |
+| `client.hoistShared.exclude` | `string[]` | `[]` | Kendi dosyasında kalacak modüller (ağır vendor'lar, sayfaya özel island'lar). Yalnızca modülün kendisi dışarıda kalır; ortak uygulama yardımcıları yine çatıya girip proxy ile erişilir. `groups` ile aynı eşleyiciler. Grup üyeleri de hiç taşınmaz. |
 
 esbuild native `manualChunks` sunmaz. Framework, gruba düşen import'ları bir
 barrel üzerinden aynı paylaşılan chunk'a çeker. Bedel: grup içi tree-shaking

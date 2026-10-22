@@ -305,11 +305,21 @@ How it works:
    that reads the values from there. Each importer gets its own proxy, so
    proxies never form a shared chunk.
 
-Modules matched by `exclude` and `groups`, everything those modules pull in,
-and anything that imports them are not hoisted. An excluded vendor's
-dependencies stay with it, but list them as well to keep the intent obvious.
-`exclude` uses the same matchers as `groups`: a bare package, a `./` path
-prefix or an `@/` prefix.
+`exclude` only keeps the matched module itself out of the shell. The
+application files it uses (shared helpers such as `client/lib/dates.js`) are
+judged on their own counts: if enough roots use them they go into the shell,
+and the excluded module reaches them through a proxy. A page-specific island
+can therefore be taken out of the shell with `exclude` without its shared
+helpers falling into small chunks. Two rules stay:
+
+- A module that imports an excluded module is not hoisted either; hoisting
+  it would pull the excluded module back into the shell.
+- Files under `node_modules` reached **only** through an excluded module stay
+  with it (`lightweight-charts` → `fancy-canvas`). If application code also
+  imports that package directly, it is judged by the normal count.
+
+`groups` members stay in place the same way. `exclude` uses the same matchers
+as `groups`: a bare package, a `./` path prefix or an `@/` prefix.
 
 **Trade-offs:**
 
