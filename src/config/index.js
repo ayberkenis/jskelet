@@ -1702,8 +1702,11 @@ export async function loadConfig(options = {}) {
     );
   } else {
     try {
-      // Windows'ta mutlak yol import'u için file:// şeması gerekir.
-      const module = await import(pathToFileURL(configPath).href);
+      // Windows'ta mutlak yol import'u için file:// şeması gerekir. `force`
+      // ile yeniden okurken sorgu eklenir; yoksa ESM önbelleği eski modülü
+      // döndürür ve "yeniden yükleme" eski ayarlarla devam eder.
+      const href = pathToFileURL(configPath).href;
+      const module = await import(options.force ? `${href}?t=${Date.now()}` : href);
       source = module.default ?? module;
       loaded = true;
     } catch (error) {

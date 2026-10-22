@@ -161,11 +161,21 @@ export function listClientEntries(entryDir) {
 }
 
 /**
+ * Watch modundaki esbuild context'i. Plugin'ler (gruplama, hoisting) ve
+ * `define` context kurulurken sabitlenir; config değişince bu context atılıp
+ * yenisi kurulmadıkça yeni ayarlar hiç görülmez.
+ *
+ * @type {esbuild.BuildContext | null}
+ */
+let watchContext = null;
+
+/**
  * @param {import('../../config/index.js').ResolvedConfig} config
- * @param {{ watch?: boolean }} [options]
+ * @param {{ watch?: boolean, report?: (line: string) => void }} [options]
+ *   `report` adım özetini alır; varsayılan adım satırının altına yazar.
  * @returns {Promise<Record<string, string>>}
  */
-export async function buildClient(config, { watch = false } = {}) {
+export async function buildClient(config, { watch = false, report = log.detail } = {}) {
   const entryDir = path.join(config.dirs.client, "entries");
   const outDir = path.join(paths.assets, "js");
 
@@ -173,14 +183,14 @@ export async function buildClient(config, { watch = false } = {}) {
   fs.rmSync(path.join(paths.generated, "preload.json"), { force: true });
 
   if (!fs.existsSync(entryDir)) {
-    log.detail("no entries, skipped");
+    report("no entries, skipped");
     return {};
   }
 
   const entryPoints = listClientEntries(entryDir);
 
   if (!entryPoints.length) {
-    log.detail("no entries, skipped");
+    report("no entries, skipped");
     return {};
   }
 
@@ -270,11 +280,12 @@ export async function buildClient(config, { watch = false } = {}) {
       ...options,
       plugins: [...options.plugins, rebuildReporter(config, entryRoot, getPlan)],
     });
+    watchContext = context;
     const result = await context.rebuild();
     await context.watch();
     writeMetafile(result.metafile, config, getPlan());
     const manifest = toManifest(result.metafile, config, entryRoot);
-    log.detail(summarizeClientBuild(manifest, result.metafile, getPlan()));
+    report(summarizeClientBuild(manifest, result.metafile, getPlan()));
     return manifest;
   }
 
@@ -285,10 +296,32 @@ export async function buildClient(config, { watch = false } = {}) {
     (sum, output) => sum + output.bytes,
     0,
   );
-  log.detail(
-    `${summarizeClientBuild(manifest, result.metafile, getPlan())}, ${log.size(bytes)}`,
-  );
+  report(`${summarizeClientBuild(manifest, result.metafile, getPlan())}, ${log.size(bytes)}`);
   return manifest;
+}
+
+/**
+ * Watch context'ini yeni config'le baştan kurar. Eski context önce atılır:
+ * ikisi aynı anda izlerse eski ayarlarla yazılan bir tur yenisinin
+ * manifest'ini ezebilir.
+ *
+ * @param {import('../../config/index.js').ResolvedConfig} config
+ * @returns {Promise<string>} Adım özeti (`1 entry, 5 files, …`).
+ */
+export async function restartClientWatch(config) {
+  const previous = watchContext;
+  watchContext = null;
+  await previous?.dispose();
+
+  // Yeni hash'ler manifest'e `rebuildReporter`'ın `onEnd`'i ile yazılır.
+  let summary = "";
+  await buildClient(config, {
+    watch: true,
+    report: (line) => {
+      summary = line;
+    },
+  });
+  return summary;
 }
 
 /**

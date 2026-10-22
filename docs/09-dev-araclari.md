@@ -71,8 +71,21 @@ WATCH_DIRS = [
 ]
 ```
 
-Ayrıca `jskelet.config.mjs` dosyasının kendisi izlenir: config değişince hem
-sunucu hem build yeni ayarlarla açılmalı.
+Ayrıca `jskelet.config.mjs` dosyasının kendisi izlenir. Config değişince
+sunucu yeniden başlar. Build süreci yaşamaya devam eder ve dosyayı kendisi
+okur: `build.client` (`splitting`, `groups`, `chunkGroup`, `hoistShared`),
+`clientEnv` ya da client dizini değiştiyse esbuild context'i atılıp yeni
+ayarlarla kurulur ve olay satırında görünür:
+
+```
+10:26:51  ✓ client     rebuilt with new config  1 entry, 6 files    94ms
+```
+
+Bu alanlar aynı kaldıysa (ör. yalnızca `headers()` değişti) client build'e
+dokunulmaz. Kaydedilen config yüklenemiyorsa (sözdizimi hatası) build önceki
+ayarlarla devam eder ve bir uyarı basar; düzeltip kaydetmek yeter. CSS, font
+ve ikon adımları yeniden çalışmaz; `paths` gibi bunları etkileyen bir ayar
+için dev sunucusunu yeniden başlatın.
 
 İzlenen uzantılar: `.js`, `.mjs`, `.json`, `.jsk`, `.ejs`.
 

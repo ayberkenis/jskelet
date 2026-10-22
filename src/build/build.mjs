@@ -102,8 +102,10 @@ if (fs.existsSync(config.dirs.styles)) {
   );
 }
 
-const { buildClient } = await import("./tasks/client.mjs");
+const { buildClient, restartClientWatch } = await import("./tasks/client.mjs");
 Object.assign(manifest, await task("Client JS", () => buildClient(config, { watch })));
+
+if (watch) watchClientConfig();
 
 // Görsel optimizasyonu `sharp` gerektirir ve watch turunda pahalı. Paket
 // kurulu değilse adım sessizce atlanır: `image()` orijinal dosyaya döner,
@@ -144,6 +146,92 @@ if (child) {
     elapsed: Date.now() - started,
     watching: watch,
     label: watch ? "Ready" : "Built",
+  });
+}
+
+/**
+ * Client bundle'ını etkileyen config kısmı. Hook'lar (`chunkGroup`) kaynak
+ * metniyle karşılaştırılır; aynı fonksiyon her yüklemede yeni bir nesne.
+ *
+ * @param {import('../config/index.js').ResolvedConfig} resolved
+ * @returns {string}
+ */
+function clientSignature(resolved) {
+  return JSON.stringify(
+    { client: resolved.build?.client, env: resolved.clientEnv, dir: resolved.dirs.client },
+    (_key, value) => (typeof value === "function" ? String(value) : value),
+  );
+}
+
+/**
+ * Watch modunda `jskelet.config.mjs`'i izler; `build.client`, `clientEnv` ya
+ * da client dizini değiştiyse esbuild context'i yeni ayarlarla kurulur.
+ *
+ * Dev sunucusu config değişince yalnızca sunucu sürecini yeniden başlatır; bu
+ * süreç yaşamaya devam ettiği için gruplama / hoisting denemeleri elle
+ * restart istiyordu. CSS ve diğer adımlar config'e bağlı değil, dokunulmaz.
+ */
+function watchClientConfig() {
+  const file = path.join(config.root, "jskelet.config.mjs");
+  if (!fs.existsSync(file)) return;
+
+  let signature = clientSignature(config);
+  // Windows'ta `fs.watch` tek kaydetmede birden fazla olay üretebiliyor;
+  // gerçekten değişmeyen dosya mtime ile elenir.
+  let mtime = fs.statSync(file).mtimeMs;
+  /** @type {NodeJS.Timeout | null} */
+  let timer = null;
+  /** @type {Promise<void>} */
+  let queue = Promise.resolve();
+
+  const reload = async () => {
+    const next = await loadConfig({ force: true });
+    // Kaydedilmiş ama bozuk bir config varsayılanlara döner; o anki deneme
+    // yüzünden çalışan ayarlar atılmasın.
+    if (!next.loaded) {
+      log.warn("jskelet.config.mjs failed to load; client build keeps the previous settings");
+      return;
+    }
+
+    const nextSignature = clientSignature(next);
+    if (nextSignature === signature) return;
+    signature = nextSignature;
+
+    const startedAt = Date.now();
+    try {
+      const summary = await restartClientWatch(next);
+      log.event({
+        scope: "client",
+        message: "rebuilt with new config",
+        note: summary,
+        time: Date.now() - startedAt,
+      });
+    } catch (error) {
+      log.errorBox({
+        title: "Client Build Error",
+        name: "BuildError",
+        message: error instanceof Error ? error.message.split("\n")[0] : String(error),
+        lines: ["fix jskelet.config.mjs or a client file and save again"],
+      });
+    }
+  };
+
+  fs.watch(file, () => {
+    let current = 0;
+    try {
+      current = fs.statSync(file).mtimeMs;
+    } catch {
+      return;
+    }
+    if (current === mtime) return;
+    mtime = current;
+
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => {
+      timer = null;
+      // Arka arkaya kaydetmeler sıraya girer; iki context aynı anda kurulmasın.
+      queue = queue.then(reload, reload);
+    }, 150);
   });
 }
 

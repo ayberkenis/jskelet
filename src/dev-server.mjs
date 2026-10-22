@@ -380,7 +380,9 @@ function watchSources() {
     }
   }
 
-  // Config değişince sunucu da build de yeni ayarlarla açılmalı.
+  // Config değişince sunucu yeniden başlar. Build süreci yaşamaya devam eder
+  // ve dosyayı kendisi izler: `build.client` değiştiyse yalnızca esbuild
+  // context'ini yeniden kurar (`build.mjs` → `watchClientConfig`).
   const configFile = path.join(ROOT, "jskelet.config.mjs");
   if (fs.existsSync(configFile)) {
     touched(configFile);

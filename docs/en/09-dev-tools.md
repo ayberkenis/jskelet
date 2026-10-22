@@ -77,8 +77,22 @@ WATCH_DIRS = [
 ]
 ```
 
-The `jskelet.config.mjs` file itself is watched as well: when the config
-changes, both the server and the build must come up with the new settings.
+The `jskelet.config.mjs` file itself is watched as well. When the config
+changes, the server restarts. The build process keeps running and reads the
+file itself: if `build.client` (`splitting`, `groups`, `chunkGroup`,
+`hoistShared`), `clientEnv` or the client directory changed, the esbuild
+context is disposed and set up again with the new settings, which shows up as
+an event line:
+
+```
+10:26:51  ✓ client     rebuilt with new config  1 entry, 6 files    94ms
+```
+
+If those fields are unchanged (for example only `headers()` changed), the
+client build is left alone. If the saved config fails to load (a syntax
+error), the build keeps the previous settings and prints a warning; fix it and
+save again. The CSS, font and icon steps do not rerun; restart the dev server
+for settings that affect them, such as `paths`.
 
 Watched extensions: `.js`, `.mjs`, `.json`, `.jsk`, `.ejs`.
 

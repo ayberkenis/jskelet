@@ -110,6 +110,14 @@ one is listed under a **Breaking** heading.
 
 ### Fixed
 
+- In `jskelet dev` (and `jskelet build --watch`), changing `build.client`
+  (`splitting`, `groups`, `chunkGroup`, `hoistShared`), `clientEnv` or the
+  client directory in `jskelet.config.mjs` now rebuilds the client bundle with
+  the new settings. Before, only the server restarted and the esbuild watch
+  context kept the old config until the dev server was restarted by hand. A
+  config that fails to load keeps the previous settings. `loadConfig({ force:
+  true })` also re-imports the file now; it used to get the cached module
+  back from Node.
 - The blog example's `search`, `tabs` and `contact-form` islands passed
   arguments to `qs()` / `qsa()` in the wrong order (`selector, root` instead of
   `root, selector`), so they failed to mount.
