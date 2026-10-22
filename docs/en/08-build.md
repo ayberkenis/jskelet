@@ -321,6 +321,10 @@ How it works:
    would depend on each other and a cached old island could load an old copy
    of the shell. If folding fails (for example on an import form it does not
    recognize), the build prints a warning and writes esbuild's output as is.
+   After folding, rewritten files are rehashed from their new contents, and
+   `import()` specifiers in the shell are pointed at the new names. A
+   browser or CDN therefore cannot serve the old island (and that 1 KB
+   chunk request).
 
 `exclude` only keeps the matched module itself out of the shell. The
 application files it uses (shared helpers such as `client/lib/dates.js`) are

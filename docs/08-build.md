@@ -312,7 +312,10 @@ Nasıl çalışır:
    import etmez; etseydi çatı ile island'ın adları birbirine bağlanır ve
    önbellekteki eski bir island çatının eski kopyasını yüklerdi. Gömme
    başarısız olursa (tanınmayan bir import biçimi gibi) build uyarı basar ve
-   esbuild'in çıktısını olduğu gibi yazar.
+   esbuild'in çıktısını olduğu gibi yazar. Gömme bittikten sonra yeniden
+   yazılan dosyaların hash'i içerikten hesaplanır; çatıdaki `import()`
+   specifier'ları da yeni ada çekilir. Böylece tarayıcı veya CDN eski
+   island'ı (ve o 1 KB'lık chunk isteğini) sunamaz.
 
 `exclude` yalnızca eşleşen modülün kendisini çatı dışında tutar. Onun
 kullandığı uygulama dosyaları (`client/lib/dates.js` gibi ortak yardımcılar)

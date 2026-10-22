@@ -180,8 +180,10 @@ one is listed under a **Breaking** heading.
   statically now ends up inside it, and other files read those values
   from the shell instead of importing the chunk. The critical path is now
   `main.js` alone, without the extra ~1 KB request on every page. Source
-  maps still point to the original files. If folding fails, the build
-  warns and keeps esbuild's output.
+  maps still point to the original files. Rewritten files are rehashed
+  from their new contents, so a cached island cannot keep serving the old
+  file and its 1 KB chunk request. If folding fails, the build warns and
+  keeps esbuild's output.
 - `start({ rootMargin })` sets how far ahead the visibility observer starts
   loading an island (`IntersectionObserver` syntax, default `"200px 0px"`).
   `"100% 0px"` starts one screen early. An invalid value warns and falls

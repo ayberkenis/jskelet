@@ -254,6 +254,7 @@ export async function buildClient(config, { watch = false, report = log.detail }
   plugins.push(
     outputWriter({
       root: config.root,
+      outDir,
       target,
       sourcemap,
       host: hoist ? () => getPlan()?.host ?? null : () => null,
@@ -477,13 +478,14 @@ export function toPreloadMap(metafile, root, publicDir, plan = null) {
  *
  * @param {{
  *   root: string,
+ *   outDir: string,
  *   target: string[],
  *   sourcemap: boolean,
  *   host: () => string | null,
  * }} options
  * @returns {esbuild.Plugin}
  */
-function outputWriter({ root, target, sourcemap, host }) {
+function outputWriter({ root, outDir, target, sourcemap, host }) {
   return {
     name: "jskelet-output-writer",
     setup(build) {
@@ -514,9 +516,33 @@ function outputWriter({ root, target, sourcemap, host }) {
           fs.mkdirSync(path.dirname(file.path), { recursive: true });
           fs.writeFileSync(file.path, file.contents);
         }
+        // `write: false` esbuild'in eski çıktıyı silmesini kapatır; hash
+        // değişince önceki ada sahip dosya dizinde kalırdı.
+        pruneOutputs(outDir, files);
       });
     },
   };
+}
+
+/**
+ * @param {string} dir
+ * @param {esbuild.OutputFile[]} files
+ */
+function pruneOutputs(dir, files) {
+  if (!fs.existsSync(dir)) return;
+  const keep = new Set(files.map((file) => path.resolve(file.path).replace(/\\/g, "/")));
+  const walk = (/** @type {string} */ current) => {
+    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+      const full = path.join(current, entry.name);
+      if (entry.isDirectory()) {
+        walk(full);
+        if (fs.readdirSync(full).length === 0) fs.rmdirSync(full);
+      } else if (!keep.has(path.resolve(full).replace(/\\/g, "/"))) {
+        fs.rmSync(full, { force: true });
+      }
+    }
+  };
+  walk(dir);
 }
 
 /**

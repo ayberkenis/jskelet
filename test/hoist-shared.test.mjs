@@ -15,7 +15,12 @@ import {
   proxySource,
   rewriteDynamicImports,
 } from "../src/build/hoist-shared.mjs";
-import { leadingImports, parseImportNames } from "../src/build/inline-chunks.mjs";
+import {
+  contentHash,
+  leadingImports,
+  parseImportNames,
+  rehashRewritten,
+} from "../src/build/inline-chunks.mjs";
 import { buildClient } from "../src/build/tasks/client.mjs";
 import { normalizeBuild } from "../src/config/index.js";
 
@@ -509,6 +514,60 @@ test("leadingImports only reads the import statements at the top", () => {
   assert.deepEqual(parseImportNames("a as e, b ,default as d"), { e: "a", b: "b", d: "default" });
 });
 
+test("contentHash ignores the sourceMappingURL comment", () => {
+  const body = "export const n=1;\n";
+  assert.equal(contentHash(body), contentHash(`${body}//# sourceMappingURL=a.OLD.js.map\n`));
+  assert.notEqual(contentHash(body), contentHash("export const n=2;\n"));
+  assert.equal(contentHash(body).length, 8);
+});
+
+test("rehashRewritten renames rewritten files and updates importers", () => {
+  const root = path.join(os.tmpdir(), "jsk-rehash");
+  const islandPath = path.join(root, "out", "chunks", "a.AAAAAAAA.js");
+  const mainPath = path.join(root, "out", "main.BBBBBBBB.js");
+  const fake = (file, text) => ({
+    path: file,
+    contents: Buffer.from(text),
+    hash: "",
+    get text() {
+      return Buffer.from(this.contents).toString("utf8");
+    },
+  });
+  const files = [
+    fake(islandPath, "export const mount=()=>1;"),
+    fake(mainPath, `export const a=()=>import("./chunks/a.AAAAAAAA.js");`),
+  ];
+  const toRel = (abs) => path.relative(root, abs).split(path.sep).join("/");
+  const metafile = {
+    outputs: {
+      [toRel(islandPath)]: { bytes: 1, imports: [], inputs: {}, exports: [] },
+      [toRel(mainPath)]: {
+        bytes: 1,
+        imports: [{ path: toRel(islandPath), kind: "dynamic-import", external: false }],
+        inputs: {},
+        exports: [],
+      },
+    },
+    inputs: {},
+  };
+  const next = rehashRewritten(
+    /** @type {any} */ (files),
+    /** @type {any} */ (metafile),
+    root,
+    [toRel(islandPath), toRel(mainPath)],
+  );
+  const island = next.find((file) => path.posix.basename(file.path.replace(/\\/g, "/")).startsWith("a."));
+  const main = next.find((file) => path.posix.basename(file.path.replace(/\\/g, "/")).startsWith("main."));
+  assert.ok(island && main);
+  assert.notEqual(path.basename(island.path), "a.AAAAAAAA.js");
+  assert.equal(path.basename(island.path), `a.${contentHash(island.text)}.js`);
+  assert.ok(main.text.includes(path.basename(island.path)));
+  assert.notEqual(path.basename(main.path), "main.BBBBBBBB.js");
+  assert.equal(path.basename(main.path), `main.${contentHash(main.text)}.js`);
+  assert.equal(metafile.outputs[toRel(island.path)]?.bytes, island.contents.byteLength);
+  assert.equal(metafile.outputs[toRel(islandPath)], undefined);
+});
+
 const RUNTIME_FIXTURE = {
   "client/entries/main.js": `
 import { legacy } from "../lib/legacy.cjs";
@@ -536,7 +595,17 @@ test("buildClient: esbuild's shared runtime chunk is folded into main", async ()
     );
     assert.deepEqual(preload["client/entries/main.js"], [manifest["main.js"]]);
 
-    const main = await import(pathToFileURL(path.join(root, "public", manifest["main.js"])).href);
+    const islandFile = js.find((file) => file.includes(`${path.sep}chunks${path.sep}`));
+    assert.ok(islandFile);
+    const islandText = fs.readFileSync(islandFile, "utf8");
+    // Hash eski içeriğe ait kalsa contentHash yeni gövdeyle eşleşmezdi.
+    assert.equal(path.basename(islandFile), `a.${contentHash(islandText)}.js`);
+    const mainFile = path.join(root, "public", manifest["main.js"]);
+    const mainText = fs.readFileSync(mainFile, "utf8");
+    assert.ok(mainText.includes(path.basename(islandFile)));
+    assert.equal(path.basename(mainFile), `main.${contentHash(mainText)}.js`);
+
+    const main = await import(pathToFileURL(mainFile).href);
     assert.deepEqual(main.fromMain, ["yes", "production"]);
     assert.deepEqual((await main.islands.a()).mount(), ["yes", "NODE_ENV"]);
   } finally {
@@ -553,12 +622,19 @@ test("buildClient: folded output keeps source maps to the original files", async
   try {
     initBuildPaths(config);
     await buildClient(config);
-    const maps = fs
-      .readdirSync(path.join(root, "public", "assets", "js"), { recursive: true })
-      .filter((file) => String(file).endsWith(".map"))
-      .map((file) =>
-        JSON.parse(fs.readFileSync(path.join(root, "public", "assets", "js", String(file)), "utf8")),
-      );
+    const jsDir = path.join(root, "public", "assets", "js");
+    const names = fs.readdirSync(jsDir, { recursive: true }).map(String);
+    for (const name of names.filter((file) => file.endsWith(".js"))) {
+      const text = fs.readFileSync(path.join(jsDir, name), "utf8");
+      const parsed = path.basename(name).match(/^(.+)\.([A-Z2-7]{8})\.js$/);
+      assert.ok(parsed);
+      assert.equal(parsed[2], contentHash(text));
+      assert.ok(text.includes(`sourceMappingURL=${parsed[1]}.${parsed[2]}.js.map`));
+      assert.ok(fs.existsSync(`${path.join(jsDir, name)}.map`));
+    }
+    const maps = names
+      .filter((file) => file.endsWith(".map"))
+      .map((file) => JSON.parse(fs.readFileSync(path.join(jsDir, file), "utf8")));
     assert.equal(maps.length, 2);
     const sources = maps.flatMap((map) => map.sources);
     assert.ok(sources.some((source) => source.endsWith("client/islands/a.js")));

@@ -13,24 +13,31 @@
  *    `globalThis.__jskeletShared[<chunk adı>]` altına konur.
  * 2. Bu chunk'ları import eden diğer çıktılarda import satırı silinir ve
  *    yerel adlar `define` ile o namespace'in alanlarına çevrilir.
+ * 3. Yeniden yazılan dosyaların hash'i içerikten hesaplanır. esbuild'in
+ *    hash'i eski içeriğe aitti; aynı adla yazsaydık tarayıcı/CDN eski
+ *    island'ı ve o 1 KB'lık chunk isteğini sunmaya devam ederdi. Adı
+ *    değişen dosyayı import edenler (çatıdaki `import()`) de güncellenir
+ *    ve onlar da yeniden hash'lenir.
  *
  * Neden çatının adına `import` değil: çatı island'ların hash'li adlarını
  * içerir; island da çatının hash'li adını içerseydi döngü olurdu ve
  * yalnızca çatı değiştiğinde island'ın adı değişmeden içeriği değişirdi.
- * Namespace okuması ise chunk adına bağlıdır; o ad zaten island'ın
- * hash'ine girer.
  *
  * Neden namespace üzerinden: esbuild'in tembel init'li değişkenleri
  * (`var O; E = () => { O = … }`) canlı bağlantıdır; anlık kopya `undefined`
  * yakalardı.
  */
+import { createHash } from "node:crypto";
 import path from "node:path";
 import * as esbuild from "esbuild";
 
 export const SHARED_GLOBAL = "__jskeletShared";
 const OUTPUT_NS = "jskelet-output";
 const SETUP_SPECIFIER = "jskelet-inline:setup";
-const MAP_COMMENT = /\n?\/\/# sourceMappingURL=([^\s]+)\s*$/;
+const MAP_COMMENT = /\/\/# sourceMappingURL=([^\s]+)\s*$/;
+/** esbuild `[hash]` ile aynı alfabe: RFC 4648 base32, dolgusuz, 8 karakter. */
+const HASHED_JS = /^(.+)\.([A-Z2-7]{8})(\.m?js)$/i;
+const BASE32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 
 /**
  * @typedef {object} InlineOptions
@@ -60,6 +67,54 @@ function normalize(file) {
  */
 export function chunkKey(file) {
   return path.posix.basename(file).replace(/\.m?js$/, "");
+}
+
+/**
+ * Kaynak haritası yorumunu çıkarır: hash dosya adını içerir, yorum da hash'i;
+ * ikisini birlikte hash'lemek döngü olur.
+ *
+ * @param {string} text
+ * @returns {string}
+ */
+export function hashableText(text) {
+  return text.replace(MAP_COMMENT, "");
+}
+
+/**
+ * @param {string} text
+ * @returns {string}
+ */
+export function contentHash(text) {
+  const digest = createHash("sha256").update(hashableText(text)).digest();
+  let acc = 0n;
+  let n = 0n;
+  let out = "";
+  for (const byte of digest) {
+    acc = (acc << 8n) | BigInt(byte);
+    n += 8n;
+    while (n >= 5n) {
+      n -= 5n;
+      out += BASE32[Number((acc >> n) & 31n)];
+    }
+  }
+  if (n > 0n) out += BASE32[Number((acc << (5n - n)) & 31n)];
+  return out.slice(0, 8);
+}
+
+/**
+ * @param {string} file
+ * @returns {{ dir: string, stem: string, hash: string, ext: string } | null}
+ */
+export function parseHashedName(file) {
+  const posix = file.replace(/\\/g, "/");
+  const match = HASHED_JS.exec(path.posix.basename(posix));
+  if (!match) return null;
+  return {
+    dir: path.dirname(file),
+    stem: match[1],
+    hash: match[2].toUpperCase(),
+    ext: match[3],
+  };
 }
 
 /**
@@ -278,7 +333,10 @@ export async function inlineHostChunks(files, metafile, options) {
   ];
 
   updateMetafile(metafile, { hostOutput, chunks, files: rewritten, root });
-  return { files: next, inlined: chunks };
+  return {
+    files: rehashRewritten(next, metafile, root, [hostOutput, ...importers.keys()]),
+    inlined: chunks,
+  };
 }
 
 /**
@@ -404,4 +462,148 @@ function updateMetafile(metafile, { hostOutput, chunks, files, root }) {
     const output = path.relative(root, file.path).split(path.sep).join("/");
     if (metafile.outputs[output]) metafile.outputs[output].bytes = file.contents.byteLength;
   }
+}
+
+/**
+ * @param {string} filePath
+ * @param {string | Uint8Array} contents
+ * @returns {esbuild.OutputFile}
+ */
+function makeFile(filePath, contents) {
+  const bytes = typeof contents === "string" ? Buffer.from(contents) : contents;
+  return {
+    path: filePath,
+    contents: bytes,
+    hash: "",
+    get text() {
+      return Buffer.from(this.contents).toString("utf8");
+    },
+  };
+}
+
+/**
+ * @param {string} file
+ * @returns {string}
+ */
+function posixBase(file) {
+  return path.posix.basename(file.replace(/\\/g, "/"));
+}
+
+/**
+ * Bekleyen dosyalardan, diğer bekleyenlerin adını içermeyeni seç: island
+ * çatıyı import etmez, çatı island'ı eder; island önce hash'lenir, çatı
+ * yeni adı gövdesine alır, sonra kendi hash'i o adı da kapsar.
+ *
+ * @param {Set<string>} pending
+ * @param {Map<string, esbuild.OutputFile>} byPath
+ * @returns {string}
+ */
+function pickNext(pending, byPath) {
+  for (const abs of pending) {
+    const text = byPath.get(abs)?.text ?? "";
+    const mentionsOther = [...pending].some(
+      (other) => other !== abs && text.includes(posixBase(other)),
+    );
+    if (!mentionsOther) return abs;
+  }
+  return /** @type {string} */ ([...pending][0]);
+}
+
+/**
+ * @param {esbuild.Metafile} metafile
+ * @param {string} from
+ * @param {string} to
+ */
+function renameMetafile(metafile, from, to) {
+  const info = metafile.outputs[from];
+  if (info) {
+    delete metafile.outputs[from];
+    metafile.outputs[to] = info;
+  }
+  if (metafile.outputs[`${from}.map`]) {
+    metafile.outputs[`${to}.map`] = metafile.outputs[`${from}.map`];
+    delete metafile.outputs[`${from}.map`];
+  }
+  for (const output of Object.values(metafile.outputs)) {
+    for (const item of output.imports ?? []) {
+      if (item.path === from) item.path = to;
+    }
+  }
+}
+
+/**
+ * Gömme içeriği değiştirdiği halde esbuild'in hash'i eski kalır. Yeniden
+ * yazılan dosyalar içerikten hash'lenir; onları import eden dosyalardaki
+ * specifier'lar güncellenir ve (henüz hash'lenmedilerse) kuyruğa alınır.
+ *
+ * Bir kez hash'lenen dosya kuyruğa dönmez: island ↔ çatı döngüsü olmasın
+ * diye. Karşılıklı `import()` eden iki island'da geri kenarın specifier'ı
+ * yine güncellenir, dosya adı o son metni yansıtmasa da önbellek kırılır.
+ *
+ * @param {esbuild.OutputFile[]} files
+ * @param {esbuild.Metafile} metafile
+ * @param {string} root
+ * @param {string[]} rewritten Metafile'a göreli, içeriği değişmiş JS yolları.
+ * @returns {esbuild.OutputFile[]}
+ */
+export function rehashRewritten(files, metafile, root, rewritten) {
+  const toAbs = (/** @type {string} */ output) => normalize(path.join(root, output));
+  const toRel = (/** @type {string} */ abs) =>
+    path.relative(root, abs).split(path.sep).join("/");
+
+  /** @type {Map<string, esbuild.OutputFile>} */
+  const byPath = new Map(files.map((file) => [normalize(file.path), file]));
+  const pending = new Set(
+    rewritten.map(toAbs).filter((abs) => byPath.has(abs) && parseHashedName(abs)),
+  );
+  const done = new Set();
+
+  while (pending.size) {
+    const abs = pickNext(pending, byPath);
+    pending.delete(abs);
+    const file = byPath.get(abs);
+    const parsed = file ? parseHashedName(abs) : null;
+    if (!file || !parsed) continue;
+
+    let hash = contentHash(file.text);
+    let nextAbs = normalize(path.join(parsed.dir, `${parsed.stem}.${hash}${parsed.ext}`));
+    while (nextAbs !== abs && byPath.has(nextAbs)) {
+      hash = contentHash(hash + file.text);
+      nextAbs = normalize(path.join(parsed.dir, `${parsed.stem}.${hash}${parsed.ext}`));
+    }
+
+    done.add(nextAbs);
+    if (nextAbs === abs) continue;
+
+    const oldBase = posixBase(abs);
+    const newBase = `${parsed.stem}.${hash}${parsed.ext}`;
+    const swap = (/** @type {string} */ from, /** @type {string} */ to) => {
+      const current = byPath.get(from);
+      if (!current) return;
+      const text = current.text.includes(oldBase)
+        ? current.text.split(oldBase).join(newBase)
+        : current.text;
+      byPath.delete(from);
+      byPath.set(to, makeFile(to, text));
+    };
+    swap(abs, nextAbs);
+    swap(`${abs}.map`, `${nextAbs}.map`);
+    renameMetafile(metafile, toRel(abs), toRel(nextAbs));
+
+    for (const [otherAbs, other] of [...byPath]) {
+      if (otherAbs === nextAbs || otherAbs === `${nextAbs}.map`) continue;
+      if (!other.text.includes(oldBase)) continue;
+      byPath.set(otherAbs, makeFile(otherAbs, other.text.split(oldBase).join(newBase)));
+      if (/\.m?js$/.test(otherAbs) && !done.has(otherAbs) && parseHashedName(otherAbs)) {
+        pending.add(otherAbs);
+      }
+    }
+  }
+
+  for (const file of byPath.values()) {
+    const output = toRel(file.path);
+    if (metafile.outputs[output]) metafile.outputs[output].bytes = file.contents.byteLength;
+  }
+
+  return [...byPath.values()];
 }
