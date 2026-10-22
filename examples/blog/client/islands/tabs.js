@@ -12,8 +12,8 @@ import { on, qsa } from "jskelet/client";
  * @returns {() => void}
  */
 export function mount(element) {
-  const buttons = qsa("[data-tab]", element);
-  const panels = qsa("[data-tab-panel]", element);
+  const buttons = qsa(element, "[data-tab]");
+  const panels = qsa(element, "[data-tab-panel]");
   const inFlight = new Map();
 
   const activate = async (name) => {

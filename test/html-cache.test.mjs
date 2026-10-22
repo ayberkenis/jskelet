@@ -96,6 +96,64 @@ test("concurrent requests for the same key share one render", async () => {
   assert.equal(calls, 1);
 });
 
+test("clearing the cache forgets a render that is still running", async () => {
+  let calls = 0;
+  /** @type {() => void} */
+  let release = () => {};
+  const gate = new Promise((resolve) => {
+    release = () => resolve(undefined);
+  });
+
+  const slow = withHtmlCache("/a", 60, async () => {
+    calls += 1;
+    await gate;
+    return { html: "eski", status: 200 };
+  });
+  clearHtmlCache();
+  const fresh = withHtmlCache("/a", 60, async () => {
+    calls += 1;
+    return { html: "yeni", status: 200 };
+  });
+
+  assert.equal((await fresh).html, "yeni", "temizlemeden önceki tura katılmamalı");
+  release();
+  await slow;
+  assert.equal(calls, 2);
+  assert.equal(getHtmlCacheEntries().find((e) => e.key === "/a")?.html ?? "yeni", "yeni");
+});
+
+test("a purged key starts a new render instead of joining the old one", async () => {
+  /** @type {() => void} */
+  let release = () => {};
+  const gate = new Promise((resolve) => {
+    release = () => resolve(undefined);
+  });
+
+  const slow = withHtmlCache("/haber/a", 60, async () => {
+    await gate;
+    return { html: "purge öncesi", status: 200 };
+  });
+  invalidateHtmlCache("/haber/a", { hard: true });
+  const fresh = await withHtmlCache("/haber/a", 60, async () => ({
+    html: "purge sonrası",
+    status: 200,
+  }));
+
+  assert.equal(fresh.html, "purge sonrası");
+  release();
+  await slow;
+});
+
+test("entries carry one weak validator, the same Express would compute", async () => {
+  const result = await withHtmlCache("/etag", 60, async () => ({ html: "merhaba", status: 200 }));
+  assert.match(String(result.etag), /^W\/"7-[A-Za-z0-9+/]{27}"$/);
+
+  const hit = await withHtmlCache("/etag", 60, async () => {
+    throw new Error("render çalışmamalıydı");
+  });
+  assert.equal(hit.etag, result.etag);
+});
+
 test("404 and degraded results are not stored", async () => {
   await withHtmlCache("/yok", 60, async () => ({ html: "404", status: 404 }));
   assert.equal(getHtmlCacheSize(), 0, "404 önbelleğe girmemeli");

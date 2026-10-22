@@ -79,6 +79,12 @@ Every island is handed to an `IntersectionObserver`
 observation anyway; ones off screen are never downloaded until they are
 scrolled to. Once an element becomes visible it is unobserved.
 
+The look-ahead distance is set with `start({ rootMargin })`. Percentages are
+relative to the viewport: `"100% 0px"` starts downloading an island's code
+when the user is one screen away from it. A larger value brings scroll-time
+downloads forward, not the initial load; heavy islands far below the fold
+still wait.
+
 The mounting work is also deferred to idle time (`requestIdleCallback`,
 `timeout: 500`; `setTimeout(fn, 0)` if it is not supported): if many islands
 that become visible at the same time turn into a single long task, TBT and INP
@@ -160,7 +166,10 @@ runtime does not resolve `.ts`; TypeScript is compiled only on the esbuild
 client path.
 
 Code splitting (`splitting: true`) is on: modules shared by two entries end up
-in a common chunk and are not downloaded twice.
+in a common chunk and are not downloaded twice. Every island also counts as a
+separate entry, so as islands multiply this can turn into many tiny shared
+chunks; `build.client.hoistShared` folds the shared modules into `main.js`
+instead ([08-build.md](./08-build.md#folding-shared-modules-into-the-shell-buildclienthoistshared)).
 
 `client/islands/` is not a requirement, only the common layout; island modules
 can live anywhere reachable from an entry. The `@/` alias works both on the
@@ -211,7 +220,7 @@ Sets up a `MutationObserver` on `document.body` and also catches islands added
 to the DOM later (infinite scroll, portals, fragment loading). It returns the
 `MutationObserver` instance so it can be `disconnect()`ed if needed.
 
-### `start()`
+### `start(options?)`
 
 The typical bootstrap: it waits for `DOMContentLoaded` (if necessary), then
 calls `hydrate()` and `observeDocument()`.
@@ -220,6 +229,17 @@ calls `hydrate()` and `observeDocument()`.
 registerAll({ /* … */ });
 start();
 ```
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `rootMargin` | `"200px 0px"` | Look-ahead distance of the visibility observer; `IntersectionObserver` syntax. |
+
+```js
+start({ rootMargin: "100% 0px" }); // download one screen ahead
+```
+
+An invalid value (`"1 screen"`) prints a console warning and falls back to the
+default; islands still mount.
 
 ### Mount behaviour and errors
 

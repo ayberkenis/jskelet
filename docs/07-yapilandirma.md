@@ -62,6 +62,7 @@ export default {
 
   devGateBypass: ["/api/healthcheck", "/robots.txt"],
   preconnect: ["https://cdn.ornek.com"],
+  earlyHints: false,
 
   security: {
     trustProxy: true,
@@ -348,6 +349,35 @@ bir yapılandırmadır.
 preconnect: ["https://cdn.ornek.com", "https://api.ornek.com"]
 ```
 
+## `earlyHints`
+
+**Tip:** `boolean | { assets?: string[] }` — **Varsayılan:** `false`
+
+Sayfa render edilirken bir `103 Early Hints` yanıtı gönderir; tarayıcı HTML
+gelmeden üçüncü taraf origin'lere bağlanır ve varlıkları indirmeye başlar.
+Yalnızca yanıt render bekleyecekse gider (MISS, dinamik ya da `private`
+sayfa). HTML önbelleğinden dönen sayfa yaklaşık bir milisaniyede gidiyor;
+önüne ayrı bir 103 koymanın kazancı yok.
+
+| Değer | 103'e ne girer |
+| --- | --- |
+| `true` | `preconnect` origin'leri (CDN `build.assets.prefix` dahil) + `modulepreload` olarak `main.js` |
+| `{ assets: [...] }` | `preconnect` origin'leri + listedeki manifest anahtarları |
+
+Varlığın türü uzantısından gelir: `.js` → `modulepreload`, `.css` →
+`preload; as=style`, `.woff2` → `preload; as=font; crossorigin`. Manifest'te
+olmayan anahtar atlanır (build yoksa ipucu da yok). `app.css` varsayılan
+listede değil: sayfa kendi `styles` çıktısını yüklüyorsa ortak sheet'i önden
+indirmek boşa bant genişliği.
+
+Varsayılan kapalı, çünkü bazı eski proxy'ler ve HTTP istemcileri 1xx yanıtını
+nihai yanıt sanıyor. Sitenin önündeki katman (Cloudflare, güncel bir nginx)
+103'ü taşıyorsa açın.
+
+```js
+earlyHints: { assets: ["main.js", "inter-400.woff2"] }
+```
+
 ## `security`
 
 **Tip:** `object` — **Varsayılan:**
@@ -600,9 +630,9 @@ Elle URL kurmak için `remoteImageUrl(src, { width })` (`jskelet`).
 
 ## `build`
 
-**Tip:** `{ client?: { splitting?, groups?, chunkGroup? }, assets?: { prefix?, upload? } }`
+**Tip:** `{ client?: { splitting?, groups?, chunkGroup?, hoistShared? }, assets?: { prefix?, upload? } }`
 — **Varsayılan:**
-`{ client: { splitting: true, groups: {}, chunkGroup: null }, assets: { prefix: "", upload: { enabled: false, … } } }`
+`{ client: { splitting: true, groups: {}, chunkGroup: null, hoistShared: null }, assets: { prefix: "", upload: { enabled: false, … } } }`
 
 Client JS (esbuild) bundling knobs ve opsiyonel CDN / S3 asset dağıtımı.
 `fonts` / `icons` / `images` / `clientEnv` hâlâ top-level kalır.
@@ -611,9 +641,13 @@ Client JS (esbuild) bundling knobs ve opsiyonel CDN / S3 asset dağıtımı.
 
 | Alan | Tip | Varsayılan | Anlamı |
 | --- | --- | --- | --- |
-| `client.splitting` | `boolean` | `true` | esbuild code splitting. `false` iken `groups` / `chunkGroup` yok sayılır (bir kez uyarı). |
+| `client.splitting` | `boolean` | `true` | esbuild code splitting. `false` iken `groups` / `chunkGroup` / `hoistShared` yok sayılır (bir kez uyarı). |
 | `client.groups` | `Record<string, string[]>` | `{}` | İsim → matcher listesi. Bare paket (`chart.js`), yol öneki (`./client/chrome/`) veya `@/` öneki. |
 | `client.chunkGroup` | `(id: string) => string \| null \| undefined` | `null` | Modül kimliğini (mutlak yol veya bare specifier) grup adına map eder. **`groups` ile çakışınca hook kazanır.** |
+| `client.hoistShared` | `true \| { into?, minImporters?, exclude? } \| null` | `null` | Ortak modülleri küçük paylaşılan chunk'lar yerine çatı entry'sine toplar. `true` = varsayılanlar. |
+| `client.hoistShared.into` | `string` | `"main.js"` | Çatı entry'si: köke göre yol (`client/entries/main.js`) ya da manifest adı. Entry değilse build uyarır ve hiçbir şey taşınmaz. |
+| `client.hoistShared.minImporters` | `number` | `2` | Bir modül bu kadar kök (entry / island) ona eriştiğinde taşınır. ≥ 2 tam sayı olmalı; değilse uyarıp 2 kullanır. |
+| `client.hoistShared.exclude` | `string[]` | `[]` | Kendi dosyasında kalacak modüller (ağır vendor'lar). `groups` ile aynı eşleyiciler. Grup üyeleri de hiç taşınmaz. |
 
 esbuild native `manualChunks` sunmaz. Framework, gruba düşen import'ları bir
 barrel üzerinden aynı paylaşılan chunk'a çeker. Bedel: grup içi tree-shaking
@@ -621,6 +655,13 @@ zayıflar — bir üyeyi kullanan sayfa grubun geri kalanını da indirebilir
 (webpack `manualChunks` ile aynı takas). Çıktı dosya adı genelde
 `chunks/chunk.<hash>.js` kalır; grup adı config anahtarıdır, dosya adı değil.
 Ayrıntı: [08-build.md](./08-build.md).
+
+`hoistShared` başka bir sorunu çözer: her island ayrı bir entry sayıldığı için
+esbuild `main.js` ile paylaşılan yardımcıları her kombinasyon için ayrı küçük
+bir chunk'a böler. Hoisting bunları `main.js`'in içine koyar; sayfa çatıyı ve
+yalnızca kendi island'larını yükler. Nasıl çalıştığı ve takaslar (tutulan
+adlar, CommonJS, `export let`):
+[08-build.md](./08-build.md#ortak-modülleri-çatıya-toplama-buildclienthoistshared).
 
 ### `build.assets`
 

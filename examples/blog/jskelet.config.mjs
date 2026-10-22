@@ -15,8 +15,27 @@ export default {
   /** Üçüncü taraf kaynaklar; `<head>`in en başına preconnect olarak basılır. */
   preconnect: ["https://images.unsplash.com"],
 
+  /**
+   * Render sürerken 103 Early Hints: yukarıdaki preconnect + listedeki
+   * varlıklar. Cache'ten dönen sayfada gönderilmez. Gövde fontu her sayfada
+   * kullanıldığı için listede; `app.css` değil, çünkü yazı sayfaları kendi
+   * `blog-post.css`'ini yüklüyor.
+   */
+  earlyHints: { assets: ["main.js", "inter-400.woff2"] },
+
   /** Client bundle'a gömülecek env anahtarları (Next'teki `NEXT_PUBLIC_*`). */
   clientEnv: ["SITE_URL"],
+
+  /**
+   * Island'ların ortak kullandığı modüller (`jskelet/client` yardımcıları)
+   * ayrı küçük chunk'lar yerine her sayfada zaten yüklenen `main.js`'e girer.
+   * Ağır bir vendor eklenirse `exclude`'a yazılır, kendi island'ıyla iner.
+   */
+  build: {
+    client: {
+      hoistShared: { into: "client/entries/main.js", minImporters: 2, exclude: [] },
+    },
+  },
 
   /**
    * Kalıcı log sink'leri (varsayılan kapalı). Açmak için:

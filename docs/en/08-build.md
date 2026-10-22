@@ -260,6 +260,79 @@ may download the rest of the group. The group name is a config key; the output
 file is usually still `chunks/chunk.<hash>.js`. Config reference:
 [07-configuration.md](./07-configuration.md#build).
 
+### Folding shared modules into the shell (`build.client.hoistShared`)
+
+esbuild places a module according to the set of entries that reach it. Every
+dynamically imported island counts as its own entry, and esbuild cannot know
+that an island always loads after `main.js`. A helper used by `main.js` and
+three islands therefore ends up in a separate small chunk for each
+`main` + island combination. With dozens of islands, a page can request twenty
+or more files of 0–2 KB. `groups` only fixes this with hand-maintained lists.
+
+```js
+build: {
+  client: {
+    hoistShared: {
+      into: "client/entries/main.js", // or "main.js"
+      minImporters: 2,
+      // Heavy vendors stay in their own file and load with their island.
+      exclude: ["lightweight-charts", "fancy-canvas", "yup"],
+    },
+    groups: { charts: ["lightweight-charts", "fancy-canvas"] },
+  },
+},
+```
+
+With it on, these modules go into the shell entry itself:
+
+- everything `main.js` imports statically, and
+- every module reached statically by at least `minImporters` roots, where a
+  root is an entry or a dynamic import target such as an island.
+
+An island file then holds only its own code. Expected output: one shell file
+that loads (and can be preloaded) on every page, one file per island, and the
+vendor / group chunks you asked for. No shared fragments.
+
+How it works:
+
+1. An analysis pass (no writes) extracts the import graph and computes the set.
+2. A second pass marks the hoisted modules external and reads which **names**
+   the islands use from esbuild's output.
+3. A virtual register module appended to the end of the shell puts only those
+   names under `globalThis.__jskeletHoist`. The shell's own import order does
+   not change.
+4. Imports from outside the shell resolve to a tiny proxy (a few dozen bytes)
+   that reads the values from there. Each importer gets its own proxy, so
+   proxies never form a shared chunk.
+
+Modules matched by `exclude` and `groups`, everything those modules pull in,
+and anything that imports them are not hoisted. An excluded vendor's
+dependencies stay with it, but list them as well to keep the intent obvious.
+`exclude` uses the same matchers as `groups`: a bare package, a `./` path
+prefix or an `@/` prefix.
+
+**Trade-offs:**
+
+- The names islands use are kept in the shell even on pages that never load
+  that island. A module pulled in with `import * as` or `export *` is kept
+  whole. Large libraries belong in `exclude`.
+- A proxy export is a snapshot of the value. A later reassignment of an
+  `export let` does not reach islands; use a function or an object field for
+  mutable state.
+- CommonJS modules need esbuild's interop helpers. When main and islands both
+  use them, a small runtime chunk can remain; prefer the ESM build of a vendor.
+- Proxies only work after the shell has run. The layout prints `main.js`
+  before other entries and islands load from `main`, so the order is
+  guaranteed. If you pick another entry for `into`, it must load before the
+  other entries on every page.
+- The analysis adds two or three fast esbuild passes to each build, watch
+  rebuilds included.
+
+The step line shows how many modules are shared
+(`1 entry, 5 files, 12 shared modules → main.js`). In `preload.json`, hoisted
+application modules map to the shell's list, so
+`<ModulePreload src="client/lib/http.js" />` does not warn.
+
 ### The `@/` alias
 
 On the esbuild side, `@/` resolves to the project root and extension completion

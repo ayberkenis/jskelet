@@ -299,6 +299,22 @@ of the stale window on the edge header.
 An intermediate layer that only reads `Cache-Control` / `s-maxage` (nginx
 `proxy_cache`) no longer caches this HTML. Cloudflare reads `CDN-Cache-Control`.
 
+### Validator: `ETag` and 304
+
+Every cacheable response carries a weak `ETag` (`W/"<bytes>-<sha1>"`, the same
+format as Express's default). The value is computed once when the entry is
+written; there is no per-request hash. When a request sends the same value in
+`If-None-Match`, it gets `304 Not Modified` instead of the body.
+
+`max-age=0` makes the browser ask the server on every navigation; without a
+validator that question meant downloading the whole page every time. The
+validator is weak because the brotli, gzip and plain bodies of one page are
+semantically the same representation: whichever encoding it was fetched with,
+it gets a 304.
+
+Per-visitor and dynamic responses (`private, no-store`) and fragments carry no
+ETag.
+
 ## Storing the compressed body
 
 Every cached entry carries an `encoded` map and shares the same lifetime as the
@@ -312,6 +328,12 @@ sees `Content-Encoding`.
 
 `HEAD` requests are not compressed (there is no body). If the client accepts
 neither brotli nor gzip, plain HTML is sent.
+
+The stored brotli copy (quality 5) is produced **in the background** after the
+entry is written, and sharing to the Redis/disk tier follows it. The request
+that triggered the render does not wait for it: it compresses its own body at
+the cheaper quality (4) and sends it. That takes 0.7–2 ms, depending on page
+size, off the TTFB of a MISS.
 
 ## Per-request memoization: `cache()`
 

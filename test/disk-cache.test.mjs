@@ -101,6 +101,23 @@ test("concurrent writes of one key leave a single file and no temp files", async
   assert.equal((await files("html")).length, 1);
 });
 
+test("a drop during an in-flight write keeps the purged value off disk", async () => {
+  await tempRoot();
+  const { diskDrop, diskDropMatching, diskSetJson } = await import(
+    "../src/server/disk-cache.js"
+  );
+  const value = { html: "eski", status: 200, expiresAt: Date.now() + 60_000 };
+
+  const first = diskSetJson("html", "/a?", value);
+  diskDrop("html", ["/a?"]);
+  const second = diskSetJson("html", "/b?", value);
+  void diskDropMatching("html", (key) => key === "/b?");
+  await Promise.all([first, second]);
+  await sleep(20);
+
+  assert.deepEqual(await files("html"), []);
+});
+
 test("invalidation removes the file so the next read renders", async () => {
   await tempRoot();
 

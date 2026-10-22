@@ -18,7 +18,13 @@ import process from "node:process";
 import fs from "node:fs";
 import { pathToFileURL } from "node:url";
 import { setEdgeCacheHeaders } from "./cache-control.js";
-import { rememberHtmlEncoding, withHtmlCache } from "./html-cache.js";
+import {
+  hasHtmlCacheEntry,
+  htmlEtag,
+  rememberHtmlEncoding,
+  withHtmlCache,
+} from "./html-cache.js";
+import { sendEarlyHints } from "./early-hints.js";
 import { buildVaryPrefix } from "./cache-vary.js";
 import { getConfig, hook, FRAMEWORK_ROOT } from "../config/index.js";
 import { matchPattern } from "../config/pattern.js";
@@ -461,6 +467,12 @@ export function route(controller, options = {}) {
         Object.entries(ctx.query).map(([k, v]) => [k, String(v)]),
       ).toString()}`;
 
+    // Yalnızca render beklenecekse: cache'ten anında dönen yanıtın önüne
+    // ayrı bir 103 koymak kazançsız bir gidiş-dönüş.
+    if (req.method === "GET" && !(cacheable && hasHtmlCacheEntry(cacheKey))) {
+      sendEarlyHints(res);
+    }
+
     try {
       const result = await withRequestContext(context, () =>
         withHtmlCache(cacheKey, cacheable ? revalidate : 0, () =>
@@ -524,7 +536,11 @@ export function route(controller, options = {}) {
 
       // ETag kişiye özel HTML için kullanıcıya özgü bir doğrulayıcıdır ve
       // `no-store` ile birlikte hiçbir işe yaramaz; üretilmesi engellenir.
-      await sendHtml(req, res, result.html, result.encoded, { etag: publicCache });
+      await sendHtml(req, res, result.html, result.encoded, {
+        etag: publicCache,
+        etagValue: result.etag,
+        miss: !result.cached,
+      });
 
       // onVisit: yanıt gittikten sonra linkleri kuyruğa al — TTFB'yi şişirmez.
       // Yalnızca herkese açık, önbelleklenebilir 200 HTML; private / degraded
@@ -778,37 +794,52 @@ function resolveRevalidate(pathname, fallback) {
  * @param {import('express').Response} res
  * @param {string} body
  * @param {Map<string, Buffer>} [encoded]
- * @param {{ etag?: boolean }} [options] `etag: false` → `res.send()` atlanır,
- *   böylece Express kullanıcıya özel gövde için doğrulayıcı üretmez.
+ * @param {{ etag?: boolean, etagValue?: string, miss?: boolean }} [options]
+ *   `etag: false` → doğrulayıcı yazılmaz (kullanıcıya özel gövde).
+ *   `etagValue` cache girdisinin hazır ETag'i; yoksa burada hesaplanır.
+ *   `miss: true` → girdi az önce yazıldı, q5 brotli'si arkada üretiliyor.
  * @returns {Promise<void>}
  */
 async function sendHtml(req, res, body, encoded, options = {}) {
-  const encoding =
-    req.method === "HEAD" ? null : negotiateEncoding(req.headers["accept-encoding"]);
+  const head = req.method === "HEAD";
 
-  if (!encoding) {
-    if (options.etag === false) {
-      res.setHeader("Content-Length", String(Buffer.byteLength(body)));
-      res.end(req.method === "HEAD" ? undefined : body);
+  // Doğrulayıcı sıkıştırmadan önce: eskiden yalnızca ham yolda (`res.send`)
+  // yazılıyordu, yani brotli isteyen her tarayıcı `max-age=0` ile her
+  // gezinmede gövdenin tamamını yeniden indiriyordu.
+  if (options.etag !== false) {
+    res.setHeader("ETag", options.etagValue ?? htmlEtag(body));
+    res.setHeader("Vary", "Accept-Encoding");
+    if (req.fresh) {
+      res.removeHeader("Content-Type");
+      res.status(304).end();
       return;
     }
-    res.send(body);
+  }
+
+  const encoding = head ? null : negotiateEncoding(req.headers["accept-encoding"]);
+
+  if (!encoding) {
+    res.setHeader("Content-Length", String(Buffer.byteLength(body)));
+    res.end(head ? undefined : body);
     return;
   }
 
   // Public cache haritası veya private/fragment: HTML'i burada sıkıştır —
-  // middleware'in ikinci kez buffer'lamasını ve private yolda q=5 maliyetini kes.
+  // middleware'in ikinci kez buffer'lamasını kes.
   let buffer = encoded?.get(encoding);
   if (!buffer) {
-    // Saklanmayacak gövde her istekte yeniden sıkıştırılır; ucuz kalite.
-    buffer = await encodeText(body, encoding, { stored: Boolean(encoded) });
-    if (encoded) rememberHtmlEncoding(encoded, encoding, buffer);
+    // Saklanmayacak gövde her istekte yeniden sıkıştırılır: ucuz kalite.
+    // MISS'te brotli girdiye arkada q5 ile yazılıyor; bu yanıt onu beklemez
+    // ve ucuz kopyayı girdiye koymaz.
+    const keep = Boolean(encoded) && !(options.miss && encoding === "br");
+    buffer = await encodeText(body, encoding, { stored: keep });
+    if (keep && encoded) rememberHtmlEncoding(encoded, encoding, buffer);
   }
 
   res.setHeader("Content-Encoding", encoding);
   res.setHeader("Vary", "Accept-Encoding");
   res.setHeader("Content-Length", String(buffer.length));
-  res.end(req.method === "HEAD" ? undefined : buffer);
+  res.end(buffer);
 }
 
 /**

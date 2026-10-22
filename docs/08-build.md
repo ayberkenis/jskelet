@@ -252,6 +252,80 @@ geri kalanını da indirebilir. Grup adı config anahtarıdır; çıktı dosyas�
 çoğunlukla `chunks/chunk.<hash>.js` kalır. Config sözlüğü:
 [07-yapilandirma.md](./07-yapilandirma.md#build).
 
+### Ortak modülleri çatıya toplama (`build.client.hoistShared`)
+
+esbuild bir modülü, ona erişen entry kümesine göre yerleştirir. Dinamik import
+edilen her island ayrı bir entry sayılır ve esbuild island'ın her zaman
+`main.js`'ten sonra yüklendiğini bilemez. `main.js`'in ve üç island'ın
+kullandığı bir yardımcı bu yüzden her `main` + island kombinasyonu için ayrı
+bir küçük chunk'a düşer. Onlarca island'lı bir sitede bir sayfa 0–2 KB'lık
+yirmiden fazla dosya isteyebilir. `groups` bunu ancak elle tutulan listelerle
+çözer.
+
+```js
+build: {
+  client: {
+    hoistShared: {
+      into: "client/entries/main.js", // veya "main.js"
+      minImporters: 2,
+      // Ağır vendor'lar kendi dosyasında kalır, island'ıyla birlikte iner.
+      exclude: ["lightweight-charts", "fancy-canvas", "yup"],
+    },
+    groups: { charts: ["lightweight-charts", "fancy-canvas"] },
+  },
+},
+```
+
+Açıkken şu modüller doğrudan çatı entry'sine girer:
+
+- `main.js`'in static olarak çektiği her şey,
+- en az `minImporters` kökün static olarak eriştiği her modül. Kök, bir entry
+  ya da island gibi bir dinamik import hedefidir.
+
+Island dosyası böylece yalnızca kendi kodunu taşır. Beklenen çıktı: her
+sayfada yüklenen (ve preload edilebilen) tek bir çatı dosyası, island başına
+bir dosya ve istediğiniz vendor / grup chunk'ları. Ortak kırıntı kalmaz.
+
+Nasıl çalışır:
+
+1. Bir analiz turu (diske yazmadan) import grafiğini çıkarıp kümeyi hesaplar.
+2. İkinci tur, hoisted modülleri external işaretleyip island'ların onlardan
+   **hangi adları** kullandığını esbuild çıktısından okur.
+3. Çatının sonuna eklenen sanal bir register modülü yalnızca o adları
+   `globalThis.__jskeletHoist` altına koyar. Çatının kendi import sırası
+   değişmez.
+4. Çatı dışından gelen import'lar, değerleri oradan okuyan küçük bir proxy'ye
+   (birkaç düzine bayt) çözülür. Proxy her import eden dosya için ayrıdır; bu
+   yüzden proxy'ler de ortak chunk oluşturmaz.
+
+`exclude` ve `groups` ile eşleşen modüller, onların çektiği her şey ve onları
+import eden her modül hoist edilmez. Hariç tutulan bir vendor'ın
+bağımlılıkları onunla kalır, ama niyetin açık görünmesi için onları da listeye
+yazın. `exclude` `groups` ile aynı eşleyicileri kullanır: bare paket, `./` yol
+öneki ya da `@/` öneki.
+
+**Takaslar:**
+
+- Island'ların kullandığı adlar, o island'ı hiç yüklemeyen sayfalarda da çatıda
+  durur. `import * as` ya da `export *` ile çekilen modül bütünüyle tutulur.
+  Büyük kütüphaneler `exclude`'a yazılmalı.
+- Proxy export'u değerin anlık kopyasıdır. Sonradan yeniden atanan bir
+  `export let` island'lara yansımaz; değişen durum için fonksiyon ya da nesne
+  alanı kullanın.
+- CommonJS modüller esbuild'in interop yardımcılarına muhtaçtır. Çatı ve
+  island'lar ikisi de bunları kullanıyorsa küçük bir runtime chunk'ı
+  kalabilir; vendor'ın ESM sürümünü tercih edin.
+- Proxy'ler ancak çatı çalıştıktan sonra çalışır. Layout `main.js`'i diğer
+  entry'lerden önce basar ve island'lar `main`'den yüklenir, yani sıra
+  garantidir. `into` için başka bir entry seçerseniz o entry her sayfada diğer
+  entry'lerden önce yüklenmelidir.
+- Analiz her build'e (watch turları dahil) iki-üç hızlı esbuild turu ekler.
+
+Adım satırı paylaşılan modül sayısını yazar
+(`1 entry, 5 files, 12 shared modules → main.js`). `preload.json` içinde hoist
+edilen uygulama modülleri çatının listesine bağlanır; bu yüzden
+`<ModulePreload src="client/lib/http.js" />` uyarı vermez.
+
 ### `@/` alias'ı
 
 esbuild tarafında `@/` proje köküne çözülür ve uzantı tamamlama yapılır

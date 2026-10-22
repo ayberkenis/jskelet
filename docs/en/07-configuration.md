@@ -66,6 +66,7 @@ export default {
 
   devGateBypass: ["/api/healthcheck", "/robots.txt"],
   preconnect: ["https://cdn.example.com"],
+  earlyHints: false,
 
   security: {
     trustProxy: true,
@@ -354,6 +355,35 @@ empty list is a valid configuration.
 preconnect: ["https://cdn.example.com", "https://api.example.com"]
 ```
 
+## `earlyHints`
+
+**Type:** `boolean | { assets?: string[] }` — **Default:** `false`
+
+Sends a `103 Early Hints` response while the page is being rendered, so the
+browser connects to third-party origins and starts downloading assets before
+the HTML arrives. It is only sent when the response has to wait for a render
+(a MISS, a dynamic or `private` page). A page served from the HTML cache leaves
+in about a millisecond, so a separate 103 in front of it gains nothing.
+
+| Value | What goes into the 103 |
+| --- | --- |
+| `true` | The `preconnect` origins (including the CDN `build.assets.prefix`) + `main.js` as `modulepreload` |
+| `{ assets: [...] }` | The `preconnect` origins + the listed manifest keys |
+
+The type of each asset comes from its extension: `.js` → `modulepreload`,
+`.css` → `preload; as=style`, `.woff2` → `preload; as=font; crossorigin`. A key
+that is not in the manifest is skipped (no build, no hint). `app.css` is not
+in the default list: if a page loads its own `styles` output, downloading the
+shared sheet ahead of time wastes bandwidth.
+
+It is off by default because some older proxies and HTTP clients mistake a 1xx
+response for the final one. Turn it on if the path in front of the site
+(Cloudflare, a modern nginx) handles 103.
+
+```js
+earlyHints: { assets: ["main.js", "inter-400.woff2"] }
+```
+
 ## `security`
 
 **Type:** `object` — **Default:**
@@ -613,9 +643,9 @@ hand, use `remoteImageUrl(src, { width })` from `jskelet`.
 
 ## `build`
 
-**Type:** `{ client?: { splitting?, groups?, chunkGroup? }, assets?: { prefix?, upload? } }`
+**Type:** `{ client?: { splitting?, groups?, chunkGroup?, hoistShared? }, assets?: { prefix?, upload? } }`
 — **Default:**
-`{ client: { splitting: true, groups: {}, chunkGroup: null }, assets: { prefix: "", upload: { enabled: false, … } } }`
+`{ client: { splitting: true, groups: {}, chunkGroup: null, hoistShared: null }, assets: { prefix: "", upload: { enabled: false, … } } }`
 
 Client JS (esbuild) bundling knobs and optional CDN / S3 asset publishing.
 `fonts` / `icons` / `images` / `clientEnv` stay top-level.
@@ -624,9 +654,13 @@ Client JS (esbuild) bundling knobs and optional CDN / S3 asset publishing.
 
 | Field | Type | Default | Meaning |
 | --- | --- | --- | --- |
-| `client.splitting` | `boolean` | `true` | esbuild code splitting. When `false`, `groups` / `chunkGroup` are ignored (one warning). |
+| `client.splitting` | `boolean` | `true` | esbuild code splitting. When `false`, `groups` / `chunkGroup` / `hoistShared` are ignored (one warning). |
 | `client.groups` | `Record<string, string[]>` | `{}` | Name → matcher list. Bare package (`chart.js`), path prefix (`./client/chrome/`), or `@/` prefix. |
 | `client.chunkGroup` | `(id: string) => string \| null \| undefined` | `null` | Maps a module id (absolute path or bare specifier) to a group name. **When it conflicts with `groups`, the hook wins.** |
+| `client.hoistShared` | `true \| { into?, minImporters?, exclude? } \| null` | `null` | Folds shared modules into the shell entry instead of small shared chunks. `true` = defaults. |
+| `client.hoistShared.into` | `string` | `"main.js"` | Shell entry: a path relative to the root (`client/entries/main.js`) or a manifest name. If it is not an entry, the build warns and hoists nothing. |
+| `client.hoistShared.minImporters` | `number` | `2` | A module is hoisted when this many roots (entries / islands) reach it. Must be an integer ≥ 2; otherwise warns and uses 2. |
+| `client.hoistShared.exclude` | `string[]` | `[]` | Modules that stay in their own file (heavy vendors). Same matchers as `groups`. Group members are never hoisted either. |
 
 esbuild has no native `manualChunks`. The framework pulls imports that land in a
 group into the same shared chunk via a barrel. Trade-off: tree-shaking inside a
@@ -634,6 +668,13 @@ group weakens — a page that uses one member may download the rest of the group
 (same trade-off as webpack `manualChunks`). Output filenames usually stay
 `chunks/chunk.<hash>.js`; the group name is a config key, not the file name.
 Details: [08-build.md](./08-build.md).
+
+`hoistShared` solves a different problem: with every island counting as a
+separate entry, esbuild splits helpers shared with `main.js` into one small
+chunk per combination. Hoisting puts them in `main.js` itself, so a page loads
+the shell plus its own islands. How it works and the trade-offs (kept
+names, CommonJS, `export let`):
+[08-build.md](./08-build.md#folding-shared-modules-into-the-shell-buildclienthoistshared).
 
 ### `build.assets`
 

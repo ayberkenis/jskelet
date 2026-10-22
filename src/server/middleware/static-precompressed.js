@@ -27,6 +27,51 @@ const CONTENT_TYPES = {
 };
 
 /**
+ * `express.static`i yalnızca diskte dosyası olan yollarda çalıştırır.
+ *
+ * `send`, bulamadığı her yol (yani her sayfa isteği) ve her dizin için
+ * stack trace'li bir `http-errors` 404'ü üretip sonra `next()` diyor. Yük
+ * altında HIT yanıtının CPU'sunun ~%15'i bu hataları kurmaya gidiyordu. Aynı
+ * `stat` burada hatasız yapılır; dizinler `index: false` ile zaten hiç
+ * servis edilmiyor. Sonuç önbelleğe alınmaz: çalışırken `public/`e eklenen
+ * dosya hemen görünür.
+ *
+ * @param {string} publicDir
+ * @param {import('express').RequestHandler} serve
+ * @returns {import('express').RequestHandler}
+ */
+export function existingFilesOnly(publicDir, serve) {
+  const root = path.resolve(publicDir);
+
+  return (req, res, next) => {
+    if (req.method !== "GET" && req.method !== "HEAD") {
+      next();
+      return;
+    }
+
+    let decoded;
+    try {
+      decoded = decodeURIComponent(req.path);
+    } catch {
+      // Bozuk kodlamanın cevabı `send`in işi (400).
+      serve(req, res, next);
+      return;
+    }
+
+    const target = path.resolve(root, `.${decoded}`);
+    if (target !== root && !target.startsWith(root + path.sep)) {
+      next();
+      return;
+    }
+
+    fs.stat(target, (error, stat) => {
+      if (error || !stat.isFile()) next();
+      else serve(req, res, next);
+    });
+  };
+}
+
+/**
  * @param {string} publicDir
  * @returns {import('express').RequestHandler}
  */

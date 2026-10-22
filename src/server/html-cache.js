@@ -30,6 +30,7 @@
  * altına yazılır; bu tek makinenin yeniden açılışını karşılar, kümeyi değil.
  */
 
+import crypto from "node:crypto";
 import { getConfig } from "../config/index.js";
 import {
   DEFAULT_HTML_CACHE_MAX_ENTRIES,
@@ -67,7 +68,8 @@ import {
  *
  * @typedef {{ html: string, status: number, expiresAt: number,
  *   staleUntil: number, encoded: Map<string, Buffer>, deps: Set<string>,
- *   storedAt: number, sharedEncodings: number, produceMs: number }} HtmlEntry
+ *   storedAt: number, sharedEncodings: number, produceMs: number,
+ *   etag?: string }} HtmlEntry
  */
 
 /**
@@ -352,7 +354,7 @@ function drop(key) {
 /**
  * @param {string} key
  * @returns {{ html: string, status: number, encoded: Map<string, Buffer>,
- *   stale: boolean, early: boolean } | null}
+ *   etag: string | undefined, stale: boolean, early: boolean } | null}
  */
 function read(key) {
   const entry = store.get(key);
@@ -389,6 +391,7 @@ function read(key) {
     html: entry.html,
     status: entry.status,
     encoded: entry.encoded,
+    etag: entry.etag,
     stale,
     early: !stale && isEarly(entry, now),
   };
@@ -611,10 +614,40 @@ async function write(key, value, ttlSeconds, deps = null, produceMs = DEFAULT_PR
   sharedMissUntil.delete(key);
   if (!install(key, entry)) return;
 
-  // MISS yanıtı br ile gidebilsin: encode bitmeden dönme. share encode sonrası
-  // (storeEncoded açıkken br L2'ye de gider).
-  await preencodeEntry(key, entry);
-  share(key, entry);
+  // q5 brotli arkada üretilir: MISS yanıtı onu beklerse sayfa boyutuna göre
+  // 0.7–2 ms TTFB ekliyordu. O yanıtı `sendHtml` ucuz kaliteyle sıkıştırır.
+  // Paylaşım encode sonrası (storeEncoded açıkken br L2'ye de gider).
+  // Yumuşak invalidation girdiyi silmez, `expiresAt`'i sıfırlar; o arada
+  // gelen purge'dan sonra bayat kopyayı L2'ye geri yazmamak için kontrol.
+  const pending = preencodeEntry(key, entry).then(() => {
+    if (store.get(key) === entry && entry.expiresAt > Date.now()) share(key, entry);
+  });
+  pendingWrites.add(pending);
+  void pending.finally(() => pendingWrites.delete(pending));
+}
+
+/** Arkada süren encode + paylaşım turları. @type {Set<Promise<void>>} */
+const pendingWrites = new Set();
+
+/**
+ * L1'de bu anahtar için (taze ya da bayat) bir girdi var mı? Yanıtın render
+ * beklemeden gideceğini kestirmek için; L2'ye bakmaz.
+ *
+ * @param {string} key
+ * @returns {boolean}
+ */
+export function hasHtmlCacheEntry(key) {
+  return store.has(key);
+}
+
+/**
+ * Arkadaki encode ve L2 paylaşımlarının bitmesini bekler. Testler ve
+ * kapanış içindir; istek yolu beklemez.
+ *
+ * @returns {Promise<void>}
+ */
+export async function settleHtmlCacheWrites() {
+  while (pendingWrites.size) await Promise.all(pendingWrites);
 }
 
 /**
@@ -652,6 +685,7 @@ function install(key, entry) {
   // üreticinin döndürdüğü HTML ile gider, L1'e girmez.
   if (weight > activeByteBudget()) return false;
 
+  entry.etag ??= htmlEtag(entry.html);
   store.set(key, entry);
   ownedEncodings.add(entry.encoded);
   indexQueryless(key, true);
@@ -665,6 +699,20 @@ function install(key, entry) {
 
   evictOverflow();
   return store.has(key);
+}
+
+/**
+ * Zayıf doğrulayıcı, girdi başına bir kez. Zayıf olması bilinçli: aynı
+ * doğrulayıcı brotli, gzip ve ham gövdede geçerli (anlamca aynı temsil).
+ * Biçim Express'in varsayılanıyla aynı, böylece sıkıştırmasız yoldan
+ * verilmiş eski bir ETag de eşleşir.
+ *
+ * @param {string} html
+ * @returns {string}
+ */
+export function htmlEtag(html) {
+  const hash = crypto.createHash("sha1").update(html, "utf8").digest("base64").slice(0, 27);
+  return `W/"${Buffer.byteLength(html).toString(16)}-${hash}"`;
 }
 
 /**
@@ -728,7 +776,8 @@ function refresh(key, ttlSeconds, producer) {
   tokens.set(key, token);
 
   const task = produce(key, ttlSeconds, producer, token).finally(() => {
-    inflight.delete(key);
+    // Temizleme/invalidation bu turu unutup yenisini başlatmış olabilir.
+    if (inflight.get(key) === task) inflight.delete(key);
     if (tokens.get(key) === token) tokens.delete(key);
   });
 
@@ -849,7 +898,8 @@ function sleep(ms) {
  * @param {number} ttlSeconds 0 → cache yok
  * @param {() => Promise<{ html: string, status: number }>} producer
  * @returns {Promise<{ html: string, status: number, cached: boolean,
- *   stale?: boolean, early?: boolean, encoded?: Map<string, Buffer> }>}
+ *   stale?: boolean, early?: boolean, encoded?: Map<string, Buffer>,
+ *   etag?: string }>}
  */
 export async function withHtmlCache(key, ttlSeconds, producer) {
   if (!ttlSeconds) {
@@ -874,7 +924,11 @@ export async function withHtmlCache(key, ttlSeconds, producer) {
 
   invalidated.delete(key);
   const value = await refresh(key, ttlSeconds, producer);
-  return { ...value, encoded: store.get(key)?.encoded, cached: false };
+  const entry = store.get(key);
+  // Girdi bu turun HTML'ini taşımıyorsa (saklanmadı, ya da başka tur yazdı)
+  // doğrulayıcısı bu yanıta ait değil.
+  const own = entry && entry.html === value.html ? entry : undefined;
+  return { ...value, encoded: own?.encoded, etag: own?.etag, cached: false };
 }
 
 /**
@@ -901,6 +955,10 @@ function clearLocal() {
   storedBytes = 0;
   dependents.clear();
   tokens.clear();
+  // Uçuştaki turlar yazılamaz hâle geldi (token yok); yeni istekler onlara
+  // katılırsa temizlemeden önce üretilmiş HTML'i alırdı — dev'de eski hash'li
+  // varlıklara işaret eden stilsiz bir sayfa.
+  inflight.clear();
   invalidated.clear();
   purgedDeps.clear();
   sharedMissUntil.clear();
@@ -951,8 +1009,11 @@ function toMatcher(target) {
 function invalidateKey(key, hard) {
   // Uçuştaki tazeleme bu invalidation'dan önce başladıysa sonucu eski veriyle
   // üretilmiş demektir; token'ı düşürmek onu yazılamaz hâle getirir. Girdi
-  // henüz hiç yazılmamış olsa bile (ilk render sürüyor) bu geçerli.
+  // henüz hiç yazılmamış olsa bile (ilk render sürüyor) bu geçerli. Tur
+  // unutulur ki sonraki istek ona katılıp purge öncesi HTML'i beklemesin;
+  // yeni bir tur başlatsın.
   tokens.delete(key);
+  inflight.delete(key);
 
   const entry = store.get(key);
   if (entry) {
@@ -1186,6 +1247,7 @@ export function dropHtmlCacheKey(key) {
 function dropLocalKey(key) {
   // Uçuştaki tazeleme de geçersiz: silinen girdiyi geri yazmamalı.
   tokens.delete(key);
+  inflight.delete(key);
   invalidated.delete(key);
   return drop(key);
 }

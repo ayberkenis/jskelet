@@ -463,6 +463,16 @@ export declare const DEFAULT_BUILD: {
          * @type {((id: string) => string | null | undefined) | null}
          */
         chunkGroup: ((id: string) => string | null | undefined) | null;
+        /**
+         * Ortak modülleri ayrı chunk yerine çatı entry'sine toplar; `null`
+         * kapalı. Ayrıntı `src/build/hoist-shared.mjs`.
+         * @type {{ into: string, minImporters: number, exclude: string[] } | null}
+         */
+        hoistShared: {
+            into: string;
+            minImporters: number;
+            exclude: string[];
+        } | null;
     };
     assets: {
         /** CDN / CloudFront origin; sonunda `/` yok. Yalnızca config. */

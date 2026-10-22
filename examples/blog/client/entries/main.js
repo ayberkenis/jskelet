@@ -11,7 +11,8 @@ registerAll({
   "contact-form": () => import("../islands/contact-form.js"),
 });
 
-start();
+// Island kodu kullanıcı oraya bir ekran kala inmeye başlar.
+start({ rootMargin: "100% 0px" });
 
 /** Kırık görselleri placeholder'a çevirir; `data-safe-image` taşıyanlar için. */
 startSafeImages();

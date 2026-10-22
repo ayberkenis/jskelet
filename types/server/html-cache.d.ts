@@ -39,6 +39,7 @@ export type HtmlEntry = {
     storedAt: number;
     sharedEncodings: number;
     produceMs: number;
+    etag?: string;
 };
 /**
  * Erken tazeleme lead'i: son render süresinin 2 katı (en az 250 ms), TTL'in
@@ -49,6 +50,31 @@ export type HtmlEntry = {
  * @returns {number}
  */
 export declare function earlyRefreshLeadMs(produceMs: number, ttlMs: number): number;
+/**
+ * L1'de bu anahtar için (taze ya da bayat) bir girdi var mı? Yanıtın render
+ * beklemeden gideceğini kestirmek için; L2'ye bakmaz.
+ *
+ * @param {string} key
+ * @returns {boolean}
+ */
+export declare function hasHtmlCacheEntry(key: string): boolean;
+/**
+ * Arkadaki encode ve L2 paylaşımlarının bitmesini bekler. Testler ve
+ * kapanış içindir; istek yolu beklemez.
+ *
+ * @returns {Promise<void>}
+ */
+export declare function settleHtmlCacheWrites(): Promise<void>;
+/**
+ * Zayıf doğrulayıcı, girdi başına bir kez. Zayıf olması bilinçli: aynı
+ * doğrulayıcı brotli, gzip ve ham gövdede geçerli (anlamca aynı temsil).
+ * Biçim Express'in varsayılanıyla aynı, böylece sıkıştırmasız yoldan
+ * verilmiş eski bir ETag de eşleşir.
+ *
+ * @param {string} html
+ * @returns {string}
+ */
+export declare function htmlEtag(html: string): string;
 /**
  * Bayt sayacını store'dan yeniden hesaplar. Testler elle `encoded` doldurunca
  * çağırır; hot path `rememberHtmlEncoding` delta kullanır.
@@ -69,7 +95,8 @@ export declare function setHtmlCacheByteBudget(bytes: number | null): void;
  * @param {number} ttlSeconds 0 → cache yok
  * @param {() => Promise<{ html: string, status: number }>} producer
  * @returns {Promise<{ html: string, status: number, cached: boolean,
- *   stale?: boolean, early?: boolean, encoded?: Map<string, Buffer> }>}
+ *   stale?: boolean, early?: boolean, encoded?: Map<string, Buffer>,
+ *   etag?: string }>}
  */
 export declare function withHtmlCache(key: string, ttlSeconds: number, producer: () => Promise<{
     html: string;
@@ -81,6 +108,7 @@ export declare function withHtmlCache(key: string, ttlSeconds: number, producer:
     stale?: boolean;
     early?: boolean;
     encoded?: Map<string, Buffer>;
+    etag?: string;
 }>;
 /**
  * Store'u tamamen boşaltır. Dev sunucusu manifest her değiştiğinde bunu

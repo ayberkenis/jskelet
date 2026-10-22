@@ -1,4 +1,11 @@
 /**
+ * Normalize edilmiş preconnect origin'leri: config listesi + CDN asset
+ * prefix'i. `<head>` ipuçları ve 103 Early Hints aynı listeyi kullanır.
+ *
+ * @returns {string[]}
+ */
+export declare function preconnectOrigins(): string[];
+/**
  * `jskelet.config.mjs` → `preconnect: ["https://cdn.example.com"]`.
  * Üçüncü taraf kaynaklar (görsel CDN'i, API origin'i, font host'u) buraya
  * yazılır. Boş liste geçerli bir yapılandırmadır.

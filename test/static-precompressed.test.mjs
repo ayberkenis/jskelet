@@ -9,7 +9,10 @@ import path from "node:path";
 import process from "node:process";
 import { afterEach, test } from "node:test";
 import { Writable } from "node:stream";
-import { staticPrecompressed } from "../src/server/middleware/static-precompressed.js";
+import {
+  existingFilesOnly,
+  staticPrecompressed,
+} from "../src/server/middleware/static-precompressed.js";
 
 /** @type {string[]} */
 const temps = [];
@@ -72,6 +75,30 @@ test("production caches a missing precompressed file", async () => {
   } finally {
     process.env.NODE_ENV = prev;
   }
+});
+
+test("express.static only sees paths that are files on disk", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "jskelet-static-"));
+  temps.push(dir);
+  await fs.mkdir(path.join(dir, "docs"));
+  await fs.writeFile(path.join(dir, "favicon.ico"), "x");
+
+  /** @type {string[]} */
+  const served = [];
+  const mw = existingFilesOnly(dir, (req, _res, next) => {
+    served.push(req.path);
+    next();
+  });
+
+  for (const urlPath of ["/", "/docs", "/posts/merhaba", "/../etc/passwd", "/favicon.ico"]) {
+    await run(mw, urlPath);
+  }
+  assert.deepEqual(served, ["/favicon.ico"]);
+
+  // Çalışırken eklenen dosya hemen servis edilir.
+  await fs.writeFile(path.join(dir, "yeni.txt"), "x");
+  await run(mw, "/yeni.txt");
+  assert.deepEqual(served, ["/favicon.ico", "/yeni.txt"]);
 });
 
 test("development sees a precompressed file that appears later", async () => {

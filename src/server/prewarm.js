@@ -803,13 +803,25 @@ let visitDraining = false;
  * @returns {boolean}
  */
 export function isOnVisitPrewarm() {
-  if (process.env.PREWARM === "0") return false;
+  let config;
   try {
-    return getConfig().prewarm?.onVisit?.enabled === true;
+    config = getConfig();
   } catch {
     return false;
   }
+  // Her public yanıtta çağrılıyor; `process.env` okuması (Windows'ta bir
+  // sistem çağrısı) yük altında profilde %2 görünüyordu.
+  if (onVisitFor !== config) {
+    onVisitFor = config;
+    onVisitEnabled =
+      process.env.PREWARM !== "0" && config.prewarm?.onVisit?.enabled === true;
+  }
+  return onVisitEnabled;
 }
+
+/** @type {object | null} */
+let onVisitFor = null;
+let onVisitEnabled = false;
 
 /**
  * Yanıt gövdesindeki linkleri soğuksa kuyruğa alır. İstek yolunu bloklamamak
@@ -834,12 +846,8 @@ export function noteVisitWarm(html, context) {
   const freshReq = requestForHost(visitForwardedHost);
 
   const perPage = Number(getConfig().prewarm?.onVisit?.perPage) || 20;
-  const links = extractSameOriginLinks(html, {
-    limit: perPage,
-    basePath: context.path,
-  });
 
-  for (const path of links) {
+  for (const path of visitLinks(html, context.path, perPage)) {
     if (path === context.path) continue;
     if (isHtmlCacheFresh(path, freshReq)) continue;
     if (!enqueueWarmPath(path)) break;
@@ -847,6 +855,35 @@ export function noteVisitWarm(html, context) {
 
   enqueueInvalidatedForVisit();
   if (visitPending.length) void drainVisitWarm();
+}
+
+/** @type {Map<string, { html: string, perPage: number, links: string[] }>} */
+const visitLinkCache = new Map();
+
+// Girdi HTML'i de tuttuğu için küçük: kazanç sıcak sayfalarda, uzun kuyruk
+// her seferinde yeniden taransa da olur.
+const VISIT_LINK_CACHE_MAX = 100;
+
+/**
+ * HIT'ler aynı cache girdisinin aynı string'ini taşır; her ziyarette 30 KB'lık
+ * gövdeyi regex'le baştan taramak gereksiz. Aynı referansta karşılaştırma
+ * anında biter, içerik değiştiyse yeniden çıkarılır.
+ *
+ * @param {string} html
+ * @param {string} path
+ * @param {number} perPage
+ * @returns {string[]}
+ */
+function visitLinks(html, path, perPage) {
+  const known = visitLinkCache.get(path);
+  if (known && known.html === html && known.perPage === perPage) return known.links;
+
+  const links = extractSameOriginLinks(html, { limit: perPage, basePath: path });
+  if (!known && visitLinkCache.size >= VISIT_LINK_CACHE_MAX) {
+    visitLinkCache.delete(visitLinkCache.keys().next().value);
+  }
+  visitLinkCache.set(path, { html, perPage, links });
+  return links;
 }
 
 /**

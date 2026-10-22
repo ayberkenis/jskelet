@@ -41,7 +41,7 @@ JSkelet bu gözlemi mimarinin merkezine alır:
  ├─ trailingSlash                  config trailingSlash: true ise 308
  ├─ robots.txt                     kullanıcının gövdesine framework Disallow'u ekler
  ├─ staticPrecompressed            build'de üretilmiş .br/.gz kopyalar (kalite 11)
- ├─ express.static                 public/ altındaki dosyalar
+ ├─ express.static                 public/ altındaki dosyalar (yalnızca var olan yollar)
  ├─ (dev) devtools                 yalnızca NODE_ENV=development
  ├─ admin (açıksa)                 /_jskelet/admin
  ├─ image optimizer (remote)       /_jskelet/image — allowHosts doluysa
@@ -84,6 +84,10 @@ sebebi var ve yer değiştirmek sessiz bozulmalara yol açıyor.
   5 kullanır.
   Hash'li ve `immutable` bir dosyayı her istekte yeniden sıkıştırmak boşa CPU.
   Üretimde `stat` sonucu (var ya da yok) süreç belleğinde kalır; dev'de kalmaz.
+  `express.static`in kendisi yalnızca diskte dosyası olan yolları görür.
+  Kendi hâline bırakılınca her sayfa isteği (ve her dizin) için stack
+  trace'li bir 404 hatası kurup sonra devrediyor; yük altında bu, cache
+  HIT'inin CPU'sunun ~%15'iydi.
 - **Admin paneli** (açıksa, `admin().enabled` / `JSKELET_ADMIN`): statikten
   sonra, body parser ve route'lardan önce. Kendi gövde ayrıştırıcısını taşır;
   uygulama aynı yolu gölgeleyemez. Kapalıyken modül yüklenmez.
@@ -96,7 +100,9 @@ sebebi var ve yer değiştirmek sessiz bozulmalara yol açıyor.
   middleware içinde) da fırlatılabilir.
 
 Framework `x-powered-by`'ı kapatır ve yerine markalanabilir bir başlık yazar,
-`etag`i `strong` yapar ve `trust proxy`yi açar. `trust proxy` ters proxy
+`etag`i `strong` yapar (önbelleklenebilir HTML sayfaları kendi zayıf
+doğrulayıcısını taşır, bkz. [06-cache.md](./06-cache.md)) ve `trust proxy`yi
+açar. `trust proxy` ters proxy
 arkasında doğru protokol ve istemci IP'si için gerekli
 ([10-dagitim.md](./10-dagitim.md)).
 

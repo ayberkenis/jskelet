@@ -22,8 +22,17 @@ let testRoot = null;
 
 let pruned = false;
 
-/** Yazımı uçuşta olan dosyalar. @type {Set<string>} */
-const writing = new Set();
+/** Yazımı uçuşta olan dosyalar → anahtarları. @type {Map<string, string>} */
+const writing = new Map();
+
+/**
+ * Yazımı sürerken silinen dosyalar. Tmp henüz `rename` edilmediği için
+ * silme onu görmez; yazım bitince purge edilmiş değeri geri koymasın diye
+ * tmp atılır.
+ *
+ * @type {Set<string>}
+ */
+const discarded = new Set();
 
 /**
  * Uçuştaki yazım bitince yazılacak son değer.
@@ -179,7 +188,7 @@ export function diskSetJson(kind, key, value) {
     queued.set(file, { kind, key, value });
     return Promise.resolve();
   }
-  writing.add(file);
+  writing.set(file, key);
 
   const write = (/** @type {string | Buffer} */ payload) => {
     // PID tek başına yetmez: aynı süreçteki iki yazım aynı tmp'yi paylaşırdı.
@@ -187,7 +196,7 @@ export function diskSetJson(kind, key, value) {
     return fs
       .mkdir(path.dirname(file), { recursive: true })
       .then(() => fs.writeFile(tmp, frame(key, payload)))
-      .then(() => fs.rename(tmp, file))
+      .then(() => (discarded.has(file) ? fs.rm(tmp, { force: true }) : fs.rename(tmp, file)))
       .catch((error) => {
         fs.rm(tmp, { force: true }).catch(() => {});
         console.warn(
@@ -199,6 +208,7 @@ export function diskSetJson(kind, key, value) {
 
   const done = () => {
     writing.delete(file);
+    discarded.delete(file);
     const next = queued.get(file);
     if (!next) return undefined;
     queued.delete(file);
@@ -220,8 +230,19 @@ export function diskDrop(kind, keys) {
 
   for (const key of keys) {
     const file = filePath(kind, key);
-    if (file) fs.rm(file, { force: true }).catch(() => {});
+    if (!file) continue;
+    discardPending(file);
+    fs.rm(file, { force: true }).catch(() => {});
   }
+}
+
+/**
+ * @param {string} file
+ * @returns {void}
+ */
+function discardPending(file) {
+  queued.delete(file);
+  if (writing.has(file)) discarded.add(file);
 }
 
 /**
@@ -234,6 +255,10 @@ export async function diskDropMatching(kind, match) {
   if (!root) return 0;
 
   const folder = path.join(root, kind);
+  for (const [file, key] of writing) {
+    if (path.dirname(file) === folder && (!match || match(key))) discardPending(file);
+  }
+
   /** @type {string[]} */
   let names;
   try {

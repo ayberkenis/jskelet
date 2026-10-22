@@ -10,6 +10,27 @@ one is listed under a **Breaking** heading.
 
 ### Changed
 
+- Cacheable HTML pages carry a weak `ETag` on every encoding and answer a
+  matching `If-None-Match` with `304 Not Modified`. Previously the validator
+  was only written for uncompressed responses, so browsers that accept brotli
+  downloaded the full page on every navigation. The value is computed once
+  per cache entry. Private pages and fragments still send no ETag.
+- A cache MISS no longer waits for the stored brotli body (quality 5) or for
+  the write to Redis/disk. Both happen in the background; the response that
+  rendered the page compresses its own body at quality 4. This takes
+  0.7–2 ms off the MISS TTFB.
+- `express.static` only runs for paths that exist as files under `public/`.
+  It used to build a 404 error with a stack trace for every page request
+  before handing it on. Together with the access log changes below, a cached
+  page in the blog example went from about 1,850 to about 10,200 requests per
+  second under load.
+- Access log lines are written to stdout once per event-loop turn instead of
+  once per request, and the timestamp is no longer formatted through `Intl`
+  on every line. Under load the two cost about 45% of the CPU of a cache HIT.
+- `Accept-Encoding` negotiation results are remembered per header value, and
+  `onVisit` prewarm extracts links from a cached page once instead of on
+  every visit.
+
 - Responses that are compressed on every request (dynamic, `private` and
   `fragment` HTML, plus anything the compression middleware handles) use
   brotli quality 4 instead of 5. Cached HTML is still stored at quality 5,
@@ -89,6 +110,17 @@ one is listed under a **Breaking** heading.
 
 ### Fixed
 
+- The blog example's `search`, `tabs` and `contact-form` islands passed
+  arguments to `qs()` / `qsa()` in the wrong order (`selector, root` instead of
+  `root, selector`), so they failed to mount.
+- `clearHtmlCache()`, `invalidateHtmlCache()` and `dropHtmlCacheKey()` also
+  forget renders that are still running. Before, a request that arrived right
+  after a purge joined the in-flight render and received HTML produced from
+  the data that had just been invalidated.
+- A purge that lands while a page is being written to the `.jskelet/cache/`
+  disk tier no longer lets that write put the purged HTML back. The same holds
+  for a background share that finishes after a soft invalidation.
+
 - Without Redis, every HTML cache hit rewrote the page to the
   `.jskelet/cache/` disk tier. `storeEncoded` defaults to on, but only the
   Redis path updated the "already shared" counter. Hits no longer write. In the
@@ -115,6 +147,24 @@ one is listed under a **Breaking** heading.
   `*.s3.region.amazonaws.com` (one label). Fetch errors are also shortened.
 
 ### Added
+
+- `build.client.hoistShared` folds modules shared between islands into the
+  shell entry (`main.js`), instead of letting esbuild emit one small chunk per
+  `main` + island combination. Everything the shell imports statically, and
+  every module reached by at least `minImporters` islands or entries, goes
+  into the shell. Islands then contain only their own code. `exclude`
+  (bare packages or path prefixes, like `groups`) and group members stay in
+  their own files. Only the names islands actually import are kept, so the
+  shell stays tree-shaken. In the blog example, every page now loads `main.js`
+  plus its own islands. Before, it also loaded a 3.8 KB shared chunk.
+- `start({ rootMargin })` sets how far ahead the visibility observer starts
+  loading an island (`IntersectionObserver` syntax, default `"200px 0px"`).
+  `"100% 0px"` starts one screen early. An invalid value warns and falls
+  back to the default.
+- `earlyHints` config option: sends `103 Early Hints` with the `preconnect`
+  origins and selected build assets (`main.js` by default) while a page is
+  rendering. It is skipped when the page comes from the HTML cache. Off by
+  default; see `docs/07`.
 
 - `formatDate(value, locale, options)` in `jskelet/html`: the same output as
   `new Date(value).toLocaleDateString(locale, options)`, with a cached

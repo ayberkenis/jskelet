@@ -1,0 +1,371 @@
+/**
+ * `build.client.hoistShared`: ortak modüllerin çatı entry'sine toplanması.
+ */
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { test } from "node:test";
+import { pathToFileURL } from "node:url";
+import { initBuildPaths } from "../src/build/paths.mjs";
+import {
+  findHostEntry,
+  parseUsage,
+  planHoist,
+  proxySource,
+} from "../src/build/hoist-shared.mjs";
+import { buildClient } from "../src/build/tasks/client.mjs";
+import { normalizeBuild } from "../src/config/index.js";
+
+/**
+ * @param {Record<string, { imports?: { path: string, kind: string, original?: string }[], format?: string }>} inputs
+ * @returns {import('esbuild').Metafile}
+ */
+function metafile(inputs) {
+  /** @type {any} */
+  const out = { inputs: {}, outputs: {} };
+  for (const [file, input] of Object.entries(inputs)) {
+    out.inputs[file] = {
+      bytes: 1,
+      format: input.format ?? "esm",
+      imports: (input.imports ?? []).map((item) => ({
+        original: `./${item.path}`,
+        ...item,
+      })),
+    };
+  }
+  return out;
+}
+
+const stat = (/** @type {string} */ target) => ({ path: target, kind: "import-statement" });
+const dyn = (/** @type {string} */ target) => ({ path: target, kind: "dynamic-import" });
+
+test("findHostEntry accepts a path or a manifest name", () => {
+  const entries = ["client/entries/chart.js", "client/entries/main.ts"];
+  assert.equal(findHostEntry(entries, "main.js"), "client/entries/main.ts");
+  assert.equal(findHostEntry(entries, "client/entries/main.js"), "client/entries/main.ts");
+  assert.equal(findHostEntry(entries, "./client/entries/chart.js"), "client/entries/chart.js");
+  assert.equal(findHostEntry(entries, "other.js"), null);
+});
+
+test("planHoist: host closure and modules shared by islands are hoisted", () => {
+  const plan = planHoist(
+    metafile({
+      "e/main.js": { imports: [stat("l/log.js"), dyn("c/a.js"), dyn("c/b.js"), dyn("c/solo.js")] },
+      "l/log.js": {},
+      "l/util.js": { imports: [stat("l/deep.js")] },
+      "l/deep.js": {},
+      "l/own.js": {},
+      "c/a.js": { imports: [stat("l/log.js"), stat("l/util.js")] },
+      "c/b.js": { imports: [stat("l/util.js")] },
+      "c/solo.js": { imports: [stat("l/own.js")] },
+    }),
+    {
+      root: "/app",
+      entries: ["e/main.js"],
+      hoist: { into: "main.js", minImporters: 2, exclude: [] },
+    },
+  );
+
+  assert.equal(plan.host, "e/main.js");
+  for (const file of ["e/main.js", "l/log.js", "l/util.js", "l/deep.js"]) {
+    assert.ok(plan.hoisted.has(file), `${file} should be hoisted`);
+  }
+  assert.ok(!plan.hoisted.has("l/own.js"));
+  assert.ok(!plan.hoisted.has("c/a.js"));
+
+  // `deep.js` yalnızca hoisted `util.js` tarafından çekiliyor: proxy gerekmez.
+  assert.deepEqual([...plan.registered.keys()].sort(), ["l/log.js", "l/util.js"]);
+});
+
+test("planHoist: excluded vendors and their dependencies stay out", () => {
+  const plan = planHoist(
+    metafile({
+      "e/main.js": { imports: [dyn("c/a.js"), dyn("c/b.js")] },
+      "c/a.js": { imports: [stat("l/chart-helper.js"), stat("l/fmt.js")] },
+      "c/b.js": { imports: [stat("l/chart-helper.js"), stat("l/fmt.js")] },
+      "l/chart-helper.js": { imports: [stat("node_modules/heavy/index.js")] },
+      "l/fmt.js": {},
+      "node_modules/heavy/index.js": { imports: [stat("node_modules/heavy-dep/index.js")] },
+      "node_modules/heavy-dep/index.js": {},
+    }),
+    {
+      root: "/app",
+      entries: ["e/main.js"],
+      hoist: { into: "main.js", minImporters: 2, exclude: ["heavy"] },
+    },
+  );
+
+  assert.ok(plan.hoisted.has("l/fmt.js"));
+  assert.ok(!plan.hoisted.has("node_modules/heavy/index.js"));
+  assert.ok(!plan.hoisted.has("node_modules/heavy-dep/index.js"), "vendor deps follow the vendor");
+  assert.ok(!plan.hoisted.has("l/chart-helper.js"), "importers of a vendor stay with it");
+});
+
+test("planHoist: group members are never hoisted", () => {
+  const plan = planHoist(
+    metafile({
+      "e/main.js": { imports: [dyn("c/a.js"), dyn("c/b.js")] },
+      "c/a.js": { imports: [stat("node_modules/chart.js/dist/chart.js")] },
+      "c/b.js": { imports: [stat("node_modules/chart.js/dist/chart.js")] },
+      "node_modules/chart.js/dist/chart.js": {},
+    }),
+    {
+      root: "/app",
+      entries: ["e/main.js"],
+      hoist: { into: "main.js", minImporters: 2, exclude: [] },
+      groupOptions: { root: "/app", groups: { charts: ["chart.js"] }, chunkGroup: null },
+    },
+  );
+  assert.ok(!plan.hoisted.has("node_modules/chart.js/dist/chart.js"));
+});
+
+test("planHoist: minImporters raises the bar", () => {
+  const plan = planHoist(
+    metafile({
+      "e/main.js": { imports: [dyn("c/a.js"), dyn("c/b.js")] },
+      "c/a.js": { imports: [stat("l/x.js")] },
+      "c/b.js": { imports: [stat("l/x.js")] },
+      "l/x.js": {},
+    }),
+    {
+      root: "/app",
+      entries: ["e/main.js"],
+      hoist: { into: "main.js", minImporters: 3, exclude: [] },
+    },
+  );
+  assert.ok(!plan.hoisted.has("l/x.js"));
+  assert.equal(plan.registered.size, 0);
+});
+
+test("planHoist: missing host disables hoisting", () => {
+  const plan = planHoist(metafile({ "e/main.js": {} }), {
+    root: "/app",
+    entries: ["e/main.js"],
+    hoist: { into: "shell.js", minImporters: 2, exclude: [] },
+  });
+  assert.equal(plan.host, null);
+  assert.equal(plan.hoisted.size, 0);
+});
+
+test("proxySource handles reserved and non-identifier export names", () => {
+  const source = proxySource(3, "esm", ["default", "delete", "a-b"]);
+  assert.match(source, /_0 as default/);
+  assert.match(source, /_1 as delete/);
+  assert.match(source, /_2 as "a-b"/);
+  assert.match(proxySource(1, "cjs", []), /module\.exports/);
+});
+
+test("parseUsage reads used names from esbuild output", () => {
+  const p = (/** @type {number} */ id) => `"jskelet-hoist-usage:${id}"`;
+  const usage = parseUsage([
+    `import { on, qs as q } from ${p(0)};\nimport get from ${p(1)};\n`,
+    `import get2, { "a-b" as ab } from ${p(1)};\nimport * as ns from ${p(2)};\n`,
+    `import ${p(3)};\nconst lazy = () => import(${p(4)});\nexport * from ${p(5)};\n`,
+  ]);
+  assert.deepEqual([...(usage.get(0) ?? [])].sort(), ["on", "qs"]);
+  assert.deepEqual([...(usage.get(1) ?? [])].sort(), ["a-b", "default"]);
+  assert.equal(usage.get(2), null);
+  assert.deepEqual([...(usage.get(3) ?? [])], []);
+  assert.equal(usage.get(4), null);
+  assert.equal(usage.get(5), null);
+});
+
+test("normalizeBuild: hoistShared", () => {
+  assert.equal(normalizeBuild({}).client.hoistShared, null);
+  assert.deepEqual(normalizeBuild({ client: { hoistShared: true } }).client.hoistShared, {
+    into: "main.js",
+    minImporters: 2,
+    exclude: [],
+  });
+  assert.deepEqual(
+    normalizeBuild({
+      client: {
+        hoistShared: { into: "client/entries/main.js", minImporters: 1, exclude: ["yup", 3] },
+      },
+    }).client.hoistShared,
+    { into: "client/entries/main.js", minImporters: 2, exclude: ["yup"] },
+  );
+});
+
+/**
+ * @param {Record<string, string>} files
+ * @param {unknown} hoistShared
+ */
+function makeFixture(files, hoistShared) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "jskelet-hoist-"));
+  for (const [file, contents] of Object.entries(files)) {
+    const full = path.join(root, file);
+    fs.mkdirSync(path.dirname(full), { recursive: true });
+    fs.writeFileSync(full, contents);
+  }
+  const publicDir = path.join(root, "public");
+  const config = /** @type {any} */ ({
+    root,
+    dirs: {
+      client: path.join(root, "client"),
+      public: publicDir,
+      assets: path.join(publicDir, "assets"),
+      generated: path.join(root, ".jskelet"),
+    },
+    clientEnv: [],
+    build: normalizeBuild({
+      client: {
+        hoistShared,
+        groups: { charts: ["./client/charts/"] },
+      },
+    }),
+  });
+  return { root, config };
+}
+
+/** @param {string} dir */
+function listJs(dir) {
+  /** @type {string[]} */
+  const out = [];
+  const walk = (/** @type {string} */ current) => {
+    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+      const full = path.join(current, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else if (entry.name.endsWith(".js")) out.push(full);
+    }
+  };
+  walk(dir);
+  return out;
+}
+
+const FIXTURE = {
+  "client/entries/main.js": `
+import { log } from "../lib/log.js";
+log("main");
+export const islands = {
+  a: () => import("../islands/a.js"),
+  b: () => import("../islands/b.js"),
+  c: () => import("../islands/c.js"),
+};
+`,
+  "client/lib/log.js": `
+export const calls = [];
+export function log(value) { calls.push(value); }
+export function unusedHelper() { return "UNUSED_MARKER"; }
+`,
+  "client/lib/http.js": `
+import { log } from "./log.js";
+export default function get(url) { log("get " + url); return url; }
+`,
+  "client/lib/data.json": `{ "answer": 42 }`,
+  "client/islands/a.js": `
+import get from "@/client/lib/http.js";
+import data from "../lib/data.json";
+import { draw } from "../charts/draw.js";
+export function mount() { return [get("/a"), data.answer, draw()]; }
+`,
+  "client/islands/b.js": `
+import get from "../lib/http.js";
+import { calls } from "../lib/log.js";
+import data from "../lib/data.json";
+import { draw } from "../charts/draw.js";
+export function mount() { get("/b"); return [calls, data.answer, draw()]; }
+`,
+  "client/islands/c.js": `
+export function mount() { return "c only"; }
+`,
+  "client/charts/draw.js": `export function draw() { return "drawn"; }`,
+};
+
+test("buildClient: hoistShared folds shared modules into main and keeps behaviour", async () => {
+  const { root, config } = makeFixture(FIXTURE, { into: "client/entries/main.js" });
+  try {
+    initBuildPaths(config);
+    const manifest = await buildClient(config);
+    const outDir = path.join(root, "public", "assets", "js");
+
+    const metafile = JSON.parse(
+      fs.readFileSync(path.join(root, ".jskelet", "metafile.json"), "utf8"),
+    );
+    /** @type {Map<string, string[]>} */
+    const owners = new Map();
+    for (const [outFile, output] of Object.entries(metafile.outputs)) {
+      if (!outFile.endsWith(".js")) continue;
+      for (const input of Object.keys(output.inputs ?? {})) {
+        const list = owners.get(input) ?? [];
+        list.push(outFile);
+        owners.set(input, list);
+      }
+    }
+
+    const mainOut = Object.entries(metafile.outputs).find(
+      ([, output]) => output.entryPoint === "client/entries/main.js",
+    )?.[0];
+    assert.ok(mainOut);
+    for (const shared of ["client/lib/log.js", "client/lib/http.js", "client/lib/data.json"]) {
+      assert.deepEqual(owners.get(shared), [mainOut], `${shared} should live only in main`);
+    }
+
+    // main + üç island + grup chunk'ı; paylaşılan küçük parça yok.
+    assert.equal(listJs(outDir).length, 5);
+
+    const preload = JSON.parse(
+      fs.readFileSync(path.join(root, ".jskelet", "preload.json"), "utf8"),
+    );
+    assert.deepEqual(preload["client/lib/http.js"], preload["client/entries/main.js"]);
+
+    const mainFile = path.join(root, "public", manifest["main.js"]);
+    assert.ok(
+      !fs.readFileSync(mainFile, "utf8").includes("UNUSED_MARKER"),
+      "exports no island uses stay tree-shaken",
+    );
+
+    const mainUrl = pathToFileURL(mainFile).href;
+    const main = await import(mainUrl);
+    const a = await main.islands.a();
+    const b = await main.islands.b();
+    assert.deepEqual(a.mount(), ["/a", 42, "drawn"]);
+    const [calls, answer] = b.mount();
+    // Aynı `log.js` örneği: island'ın çağrıları çatının dizisine düşer.
+    assert.deepEqual(calls, ["main", "get /a", "get /b"]);
+    assert.equal(answer, 42);
+  } finally {
+    delete globalThis.__jskeletHoist;
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("buildClient: hoistShared proxies CommonJS modules through interop", async () => {
+  const { root, config } = makeFixture(
+    {
+      "client/entries/main.js": `
+import { legacy } from "../lib/legacy.cjs";
+export const fromMain = legacy;
+export const islands = { a: () => import("../islands/a.js") };
+`,
+      "client/lib/legacy.cjs": `module.exports = { legacy: "yes" };`,
+      "client/islands/a.js": `
+import legacy from "../lib/legacy.cjs";
+export function mount() { return legacy.legacy; }
+`,
+    },
+    true,
+  );
+  try {
+    initBuildPaths(config);
+    const manifest = await buildClient(config);
+    const main = await import(pathToFileURL(path.join(root, "public", manifest["main.js"])).href);
+    assert.equal(main.fromMain, "yes");
+    assert.equal((await main.islands.a()).mount(), "yes");
+  } finally {
+    delete globalThis.__jskeletHoist;
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("buildClient: without hoistShared the shared modules split out", async () => {
+  const { root, config } = makeFixture(FIXTURE, null);
+  try {
+    initBuildPaths(config);
+    await buildClient(config);
+    assert.ok(listJs(path.join(root, "public", "assets", "js")).length > 5);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});

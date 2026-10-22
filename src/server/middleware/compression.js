@@ -45,6 +45,27 @@ const BROTLI_LIVE = {
 function negotiate(header) {
   if (!header) return null;
 
+  const known = negotiated.get(header);
+  if (known !== undefined) return known;
+
+  const result = parseAcceptEncoding(header);
+  // Gerçek trafikte bir avuç farklı başlık var; tavan, rastgele değer
+  // gönderen bir istemcinin haritayı şişirmesini engeller.
+  if (negotiated.size >= NEGOTIATED_MAX) negotiated.clear();
+  negotiated.set(header, result);
+  return result;
+}
+
+/** Başlık metni → pazarlık sonucu. @type {Map<string, "br" | "gzip" | null>} */
+const negotiated = new Map();
+
+const NEGOTIATED_MAX = 256;
+
+/**
+ * @param {string} header
+ * @returns {"br" | "gzip" | null}
+ */
+function parseAcceptEncoding(header) {
   /** @type {Map<string, number>} */
   const weights = new Map();
 
@@ -96,6 +117,8 @@ export function encodeText(text, encoding, options = {}) {
  * @returns {boolean}
  */
 function shouldCompress(res) {
+  // Gövdesiz yanıt: 304'e boş bir brotli akışı eklemek gövde göndermek olur.
+  if (res.statusCode === 204 || res.statusCode === 304) return false;
   if (res.getHeader("content-encoding")) return false;
   if (res.getHeader("cache-control")?.toString().includes("no-transform")) {
     return false;

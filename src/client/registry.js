@@ -194,19 +194,30 @@ export function unmount(root = document) {
 /** @type {IntersectionObserver | null} */
 let lazyObserver = null;
 
+const DEFAULT_ROOT_MARGIN = "200px 0px";
+let rootMargin = DEFAULT_ROOT_MARGIN;
+
+/** @param {IntersectionObserverEntry[]} entries */
+function onIntersect(entries) {
+  for (const entry of entries) {
+    if (!entry.isIntersecting) continue;
+    lazyObserver?.unobserve(entry.target);
+    mountWhenReady(/** @type {HTMLElement} */ (entry.target));
+  }
+}
+
 function getLazyObserver() {
   if (lazyObserver) return lazyObserver;
 
-  lazyObserver = new IntersectionObserver(
-    (entries) => {
-      for (const entry of entries) {
-        if (!entry.isIntersecting) continue;
-        lazyObserver.unobserve(entry.target);
-        mountWhenReady(/** @type {HTMLElement} */ (entry.target));
-      }
-    },
-    { rootMargin: "200px 0px" },
-  );
+  try {
+    lazyObserver = new IntersectionObserver(onIntersect, { rootMargin });
+  } catch (error) {
+    // Geçersiz bir `rootMargin` (`"1 ekran"`) SyntaxError atar; island'ların
+    // hiç bağlanmaması yerine varsayılan mesafeyle devam edilir.
+    console.warn(`[island] invalid rootMargin "${rootMargin}", using "${DEFAULT_ROOT_MARGIN}"`, error);
+    rootMargin = DEFAULT_ROOT_MARGIN;
+    lazyObserver = new IntersectionObserver(onIntersect, { rootMargin });
+  }
 
   return lazyObserver;
 }
@@ -301,7 +312,24 @@ export function observeDocument() {
   return observer;
 }
 
-export function start() {
+/**
+ * @typedef {object} StartOptions
+ * @property {string} [rootMargin] Görünürlük gözlemcisinin önden yükleme
+ *   mesafesi; `IntersectionObserver` sözdizimi. Varsayılan `"200px 0px"`.
+ *   Yüzdeler viewport'a göredir: `"100% 0px"` island'ı bir ekran kala indirir.
+ */
+
+/** @param {StartOptions} [options] */
+export function start(options = {}) {
+  if (typeof options.rootMargin === "string" && options.rootMargin.trim()) {
+    rootMargin = options.rootMargin.trim();
+    // Gözlemci önceden (`hydrate()` doğrudan çağrılmış) kurulduysa host'lar
+    // eski mesafede kalırdı. Bağlanmamış host'lar `mounted`'a yazılmadığı için
+    // aşağıdaki `hydrate()` onları yeni gözlemciye yeniden verir.
+    lazyObserver?.disconnect();
+    lazyObserver = null;
+  }
+
   const run = () => {
     hydrate();
     observeDocument();

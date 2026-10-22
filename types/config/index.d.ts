@@ -209,6 +209,10 @@ export type ResolvedConfig = {
     devGate: boolean;
     devGateBypass: string[];
     preconnect: string[];
+    /**
+     * 103 Early Hints; varsayılan kapalı.
+     */
+    earlyHints: EarlyHintsConfig;
     navigation: NavigationConfig;
     security: SecurityConfig;
     prewarmSkip: string[];
@@ -239,6 +243,24 @@ export type BuildClientConfig = {
     splitting: boolean;
     groups: Record<string, string[]>;
     chunkGroup: ((id: string) => string | null | undefined) | null;
+    /**
+     * `null` kapalı.
+     */
+    hoistShared: BuildClientHoistConfig | null;
+};
+export type BuildClientHoistConfig = {
+    /**
+     * Çatı entry'si: `client/entries/main.js` ya da `main.js`.
+     */
+    into: string;
+    /**
+     * Bir modülün çatıya taşınması için onu kullanan kök sayısı (≥ 2).
+     */
+    minImporters: number;
+    /**
+     * Yerinde kalacak bare paketler / yol önekleri.
+     */
+    exclude: string[];
 };
 export type BuildAssetsUploadConfig = {
     enabled: boolean;
@@ -300,6 +322,13 @@ export declare function splitS3BucketPath(value: string | null): {
  * @returns {LogsConfig}
  */
 export declare function normalizeLogs(raw: unknown): LogsConfig;
+export type EarlyHintsConfig = {
+    enabled: boolean;
+    /**
+     * Manifest anahtarları; `null` → `["main.js"]`.
+     */
+    assets: string[] | null;
+};
 export type SecurityConfig = {
     trustProxy: boolean;
     cookieSecret: string | null;

@@ -17,7 +17,9 @@
  *      (Content-Encoding dolu) üzerine yazılmaz.
  *   4. staticPrecompressed → express.static — build'de üretilmiş `.br`/`.gz`
  *      kopyalar varsa onlar servis edilir (kalite 11), yoksa istek altındaki
- *      static'e düşer ve middleware anında sıkıştırır (kalite 5).
+ *      static'e düşer ve middleware anında sıkıştırır. express.static yalnızca
+ *      diskte dosyası olan yolları görür: aksi hâlde her sayfa isteği için
+ *      stack trace'li bir 404 hatası kurup devrediyor.
  *   4b. admin paneli (açıksa) — statikten sonra, route'lardan önce: kendi
  *      gövde ayrıştırıcısını taşır ve uygulama yolunu gölgeleyemez.
  *   4c. image optimizer (images.remote) — uzak görselleri webp'ye çevirir;
@@ -38,7 +40,7 @@ import { compression } from "./middleware/compression.js";
 import { robotsTxtMiddleware } from "./middleware/robots-txt.js";
 import { headersMiddleware } from "./middleware/headers.js";
 import { csrf } from "./middleware/csrf.js";
-import { staticPrecompressed } from "./middleware/static-precompressed.js";
+import { existingFilesOnly, staticPrecompressed } from "./middleware/static-precompressed.js";
 import { devGate } from "./middleware/dev-gate.js";
 import { redirects } from "./middleware/redirects.js";
 import { trailingSlash } from "./middleware/trailing-slash.js";
@@ -120,19 +122,22 @@ export async function createApp(options = {}) {
 
   app.use(staticPrecompressed(config.dirs.public));
   app.use(
-    express.static(config.dirs.public, {
-      index: false,
-      redirect: false,
-      // Hash'siz dosyalar (favicon, robots eki, elle konmuş görseller) içerik
-      // değişse de aynı adla kalıyor; bir yıllık cache onları güncellenemez
-      // hâle getiriyordu. Hash'li çıktı aşağıda ayrıca immutable işaretlenir.
-      maxAge: "1h",
-      setHeaders(res, filePath) {
-        if (filePath.includes(`${path.sep}assets${path.sep}`)) {
-          res.setHeader("Cache-Control", IMMUTABLE_CACHE);
-        }
-      },
-    }),
+    existingFilesOnly(
+      config.dirs.public,
+      express.static(config.dirs.public, {
+        index: false,
+        redirect: false,
+        // Hash'siz dosyalar (favicon, robots eki, elle konmuş görseller) içerik
+        // değişse de aynı adla kalıyor; bir yıllık cache onları güncellenemez
+        // hâle getiriyordu. Hash'li çıktı aşağıda ayrıca immutable işaretlenir.
+        maxAge: "1h",
+        setHeaders(res, filePath) {
+          if (filePath.includes(`${path.sep}assets${path.sep}`)) {
+            res.setHeader("Cache-Control", IMMUTABLE_CACHE);
+          }
+        },
+      }),
+    ),
   );
 
   // Dev overlay yalnızca development'ta; dinamik import sayesinde prod

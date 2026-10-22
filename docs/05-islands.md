@@ -77,6 +77,11 @@ Her island bir `IntersectionObserver`'a verilir (`rootMargin: "200px 0px"`).
 Ekranda olanlar zaten ilk gözlemde tetiklenir; ekran dışındakiler kaydırılana
 kadar hiç indirilmez. Element bir kez görününce gözlemden çıkarılır.
 
+Önden yükleme mesafesi `start({ rootMargin })` ile değişir. Yüzdeler
+viewport'a göredir: `"100% 0px"` island'ın kodunu kullanıcı oraya bir ekran
+kala indirmeye başlar. Büyük değer ilk yükü değil, kaydırma sırasındaki
+indirmeyi öne çeker; ekranın çok altındaki ağır island'lar yine bekler.
+
 Bağlama işi ayrıca boş zamana kaydırılır (`requestIdleCallback`,
 `timeout: 500`; desteklenmiyorsa `setTimeout(fn, 0)`): aynı anda görünen çok
 sayıda island tek bir uzun task'a dönüşürse TBT ve INP bozulur.
@@ -153,7 +158,10 @@ Paylaşılan `@/lib` modülleri sunucuda da import ediliyorsa **`.js` kalsın** 
 Node runtime `.ts` çözmez; `.ts` yalnızca esbuild client hattında derlenir.
 
 Kod bölme (`splitting: true`) açık: iki entry'nin paylaştığı modüller ortak bir
-chunk'a çıkar ve iki kez indirilmez.
+chunk'a çıkar ve iki kez indirilmez. Her island da ayrı bir entry sayıldığı
+için bu, island sayısı arttıkça çok sayıda küçük ortak parçaya dönüşebilir;
+`build.client.hoistShared` ortak modülleri bunun yerine `main.js`'e toplar
+([08-build.md](./08-build.md#ortak-modülleri-çatıya-toplama-buildclienthoistshared)).
 
 `client/islands/` bir zorunluluk değil, yalnızca yaygın düzen; island modülleri
 entry'den erişilebilen herhangi bir yerde olabilir. `@/` alias'ı hem sunucuda
@@ -204,7 +212,7 @@ island'ları da yakalar (infinite scroll, portal, fragment yükleme).
 `MutationObserver` örneğini döndürür, böylece gerekirse `disconnect()`
 edilebilir.
 
-### `start()`
+### `start(options?)`
 
 Tipik bootstrap: `DOMContentLoaded` beklenir (gerekiyorsa), sonra `hydrate()` ve
 `observeDocument()` çağrılır.
@@ -213,6 +221,17 @@ Tipik bootstrap: `DOMContentLoaded` beklenir (gerekiyorsa), sonra `hydrate()` ve
 registerAll({ /* … */ });
 start();
 ```
+
+| Seçenek | Varsayılan | Anlamı |
+| --- | --- | --- |
+| `rootMargin` | `"200px 0px"` | Görünürlük gözlemcisinin önden yükleme mesafesi; `IntersectionObserver` sözdizimi. |
+
+```js
+start({ rootMargin: "100% 0px" }); // bir ekran kala indir
+```
+
+Geçersiz bir değer (`"1 ekran"`) konsola uyarı basar ve varsayılana döner;
+island'lar yine bağlanır.
 
 ### Bağlanma davranışı ve hatalar
 

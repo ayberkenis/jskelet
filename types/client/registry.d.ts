@@ -52,4 +52,19 @@ export declare function unmount(root?: ParentNode): void;
 export declare function hydrate(root?: ParentNode): void;
 /** Sonradan DOM'a eklenen island'ları da yakalar (infinite scroll, portal). */
 export declare function observeDocument(): MutationObserver;
-export declare function start(): void;
+export type StartOptions = {
+    /**
+     * Görünürlük gözlemcisinin önden yükleme
+     * mesafesi; `IntersectionObserver` sözdizimi. Varsayılan `"200px 0px"`.
+     * Yüzdeler viewport'a göredir: `"100% 0px"` island'ı bir ekran kala indirir.
+     */
+    rootMargin?: string;
+};
+/**
+ * @typedef {object} StartOptions
+ * @property {string} [rootMargin] Görünürlük gözlemcisinin önden yükleme
+ *   mesafesi; `IntersectionObserver` sözdizimi. Varsayılan `"200px 0px"`.
+ *   Yüzdeler viewport'a göredir: `"100% 0px"` island'ı bir ekran kala indirir.
+ */
+/** @param {StartOptions} [options] */
+export declare function start(options?: StartOptions): void;

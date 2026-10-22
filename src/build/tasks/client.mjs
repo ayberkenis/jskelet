@@ -16,6 +16,7 @@ import path from "node:path";
 import process from "node:process";
 import * as esbuild from "esbuild";
 import { chunkGroupsPlugin } from "../chunk-groups.mjs";
+import { analyzeHoist, hoistSharedPlugin } from "../hoist-shared.mjs";
 import { paths, patchManifest, pruneAssets } from "../paths.mjs";
 import * as log from "../../log.mjs";
 
@@ -195,10 +196,12 @@ export async function buildClient(config, { watch = false } = {}) {
     splitting: true,
     groups: {},
     chunkGroup: null,
+    hoistShared: null,
   };
   const splitting = clientBuild.splitting !== false;
   const groups = splitting ? (clientBuild.groups ?? {}) : {};
   const chunkGroup = splitting ? (clientBuild.chunkGroup ?? null) : null;
+  const hoist = splitting ? (clientBuild.hoistShared ?? null) : null;
 
   const groupPlugin = splitting
     ? chunkGroupsPlugin({
@@ -208,12 +211,33 @@ export async function buildClient(config, { watch = false } = {}) {
       })
     : null;
 
+  /** @type {esbuild.BuildOptions} */
+  let options;
+
+  const hoistShared = hoist
+    ? hoistSharedPlugin({
+        root: config.root,
+        hoist,
+        analyze: () =>
+          analyzeHoist(options, {
+            root: config.root,
+            entries: entryPoints,
+            hoist,
+            groupOptions: { root: config.root, groups, chunkGroup },
+            plugins: [aliasPlugin(config.root)],
+          }),
+      })
+    : null;
+
+  // Hoist alias'tan önce: `@/lib/x` import'u alias tarafından çözülürse proxy
+  // kararı hiç verilemez.
   /** @type {esbuild.Plugin[]} */
-  const plugins = [aliasPlugin(config.root)];
+  const plugins = [];
+  if (hoistShared) plugins.push(hoistShared.plugin);
+  plugins.push(aliasPlugin(config.root));
   if (groupPlugin) plugins.push(groupPlugin);
 
-  /** @type {esbuild.BuildOptions} */
-  const options = {
+  options = {
     entryPoints,
     outdir: outDir,
     absWorkingDir: config.root,
@@ -239,28 +263,30 @@ export async function buildClient(config, { watch = false } = {}) {
       : {}),
   };
 
+  const getPlan = () => hoistShared?.getPlan() ?? null;
+
   if (watch) {
     const context = await esbuild.context({
       ...options,
-      plugins: [...options.plugins, rebuildReporter(config, entryRoot)],
+      plugins: [...options.plugins, rebuildReporter(config, entryRoot, getPlan)],
     });
     const result = await context.rebuild();
     await context.watch();
-    writeMetafile(result.metafile, config);
+    writeMetafile(result.metafile, config, getPlan());
     const manifest = toManifest(result.metafile, config, entryRoot);
-    log.detail(summarizeClientBuild(manifest, result.metafile));
+    log.detail(summarizeClientBuild(manifest, result.metafile, getPlan()));
     return manifest;
   }
 
   const result = await esbuild.build(options);
-  writeMetafile(result.metafile, config);
+  writeMetafile(result.metafile, config, getPlan());
   const manifest = toManifest(result.metafile, config, entryRoot);
   const bytes = Object.values(result.metafile.outputs).reduce(
     (sum, output) => sum + output.bytes,
     0,
   );
   log.detail(
-    `${summarizeClientBuild(manifest, result.metafile)}, ${log.size(bytes)}`,
+    `${summarizeClientBuild(manifest, result.metafile, getPlan())}, ${log.size(bytes)}`,
   );
   return manifest;
 }
@@ -271,9 +297,10 @@ export async function buildClient(config, { watch = false } = {}) {
  *
  * @param {Record<string, string>} manifest
  * @param {esbuild.Metafile} [metafile]
+ * @param {import('../hoist-shared.mjs').HoistPlan | null} [plan]
  * @returns {string}
  */
-function summarizeClientBuild(manifest, metafile) {
+function summarizeClientBuild(manifest, metafile, plan = null) {
   const entries = Object.keys(manifest).length;
   const entryLabel = `${entries} ${entries === 1 ? "entry" : "entries"}`;
   if (!metafile) return entryLabel;
@@ -282,7 +309,11 @@ function summarizeClientBuild(manifest, metafile) {
     (file) => file.endsWith(".js") || file.endsWith(".mjs"),
   );
   const chunks = outputs.length;
-  return `${entryLabel}, ${chunks} ${chunks === 1 ? "file" : "files"}`;
+  const label = `${entryLabel}, ${chunks} ${chunks === 1 ? "file" : "files"}`;
+  if (!plan?.host || !plan.registered.size) return label;
+
+  const shared = plan.registered.size;
+  return `${label}, ${shared} shared ${shared === 1 ? "module" : "modules"} → ${path.posix.basename(plan.host)}`;
 }
 
 /**
@@ -292,8 +323,9 @@ function summarizeClientBuild(manifest, metafile) {
  *
  * @param {esbuild.Metafile} [metafile]
  * @param {import('../../config/index.js').ResolvedConfig} config
+ * @param {import('../hoist-shared.mjs').HoistPlan | null} [plan]
  */
-function writeMetafile(metafile, config) {
+function writeMetafile(metafile, config, plan = null) {
   if (!metafile) return;
   try {
     fs.mkdirSync(paths.generated, { recursive: true });
@@ -308,7 +340,7 @@ function writeMetafile(metafile, config) {
   try {
     fs.writeFileSync(
       path.join(paths.generated, "preload.json"),
-      `${JSON.stringify(toPreloadMap(metafile, config.root, config.dirs.public))}\n`,
+      `${JSON.stringify(toPreloadMap(metafile, config.root, config.dirs.public, plan))}\n`,
     );
   } catch {
     // Harita yoksa `modulePreload()` hiçbir şey basmaz; sayfa yine çalışır.
@@ -331,12 +363,17 @@ function writeMetafile(metafile, config) {
  * değişir (esbuild hash'i import edilen chunk adlarını içerir), yani
  * `buildId` ve HTML cache isim alanı kendiliğinden yenilenir.
  *
+ * `hoistShared` açıkken çatıya taşınan modüllerin kendi çıktısı yoktur;
+ * `modulePreload()` onları tanımadığı için uyarmasın diye çatının listesine
+ * bağlanırlar.
+ *
  * @param {esbuild.Metafile} metafile
  * @param {string} root Proje kökü (`absWorkingDir`).
  * @param {string} publicDir
+ * @param {import('../hoist-shared.mjs').HoistPlan | null} [plan]
  * @returns {Record<string, string[]>}
  */
-export function toPreloadMap(metafile, root, publicDir) {
+export function toPreloadMap(metafile, root, publicDir, plan = null) {
   const toUrl = (/** @type {string} */ outputPath) =>
     `/${path
       .relative(publicDir, path.resolve(root, outputPath))
@@ -369,6 +406,16 @@ export function toPreloadMap(metafile, root, publicDir) {
     map[source.split(path.sep).join("/")] = order;
   }
 
+  const hostOrder = plan?.host ? map[plan.host] : undefined;
+  if (hostOrder) {
+    for (const file of plan?.hoisted ?? []) {
+      // `modulePreload()` uygulama kaynağıyla çağrılır; vendor dosyaları
+      // haritayı yalnızca şişirirdi.
+      if (file.includes("node_modules/")) continue;
+      map[file] ??= hostOrder;
+    }
+  }
+
   return map;
 }
 
@@ -377,9 +424,10 @@ export function toPreloadMap(metafile, root, publicDir) {
  *
  * @param {import('../../config/index.js').ResolvedConfig} config
  * @param {string} entryRoot
+ * @param {() => import('../hoist-shared.mjs').HoistPlan | null} getPlan
  * @returns {esbuild.Plugin}
  */
-function rebuildReporter(config, entryRoot) {
+function rebuildReporter(config, entryRoot, getPlan) {
   // İlk `rebuild()` ve `watch()`'un kendi açılış turu adım satırında zaten
   // görünüyor; canlı bildirim gerçek değişikliklerle başlar.
   let skip = 2;
@@ -394,7 +442,7 @@ function rebuildReporter(config, entryRoot) {
 
       build.onEnd((result) => {
         if (result.metafile) {
-          writeMetafile(result.metafile, config);
+          writeMetafile(result.metafile, config, getPlan());
           // Entry adları hash'li: yeni hash manifest'e yazılmazsa HTML eski
           // (artık var olmayan) bundle'ı ister ve island'ların hiçbiri açılmaz.
           for (const [key, url] of Object.entries(

@@ -10,9 +10,9 @@ const MIN_LENGTH = 10;
  * @returns {() => void}
  */
 export function mount(element) {
-  const field = qs("textarea", element);
-  const error = qs("[data-form-error]", element);
-  const submit = qs("button[type=submit]", element);
+  const field = qs(element, "textarea");
+  const error = qs(element, "[data-form-error]");
+  const submit = qs(element, "button[type=submit]");
 
   return on(element, "submit", (event) => {
     const value = field?.value.trim() ?? "";

@@ -33,6 +33,10 @@ export declare function size(bytes: number): string;
  * sunucunun bulunduğu makinenin diline göre `ÖÖ/ÖS` ya da `AM/PM` basılmasına
  * yol açıyordu; log satırının genişliği sabit kalmalı.
  *
+ * `toLocaleTimeString` her çağrıda bir Intl biçimlendiricisi kuruyordu ve
+ * erişim logu açıkken HIT yanıtının en pahalı adımıydı; değer saniyede bir
+ * değiştiği için bir kez hesaplanır.
+ *
  * @returns {string} `01:49:02`
  */
 export declare function clock(): string;

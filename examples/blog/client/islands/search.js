@@ -11,9 +11,9 @@ import { debounce, on, qs, qsa } from "jskelet/client";
  * @returns {() => void}
  */
 export function mount(element) {
-  const input = qs("[data-search-input]", element);
-  const empty = qs("[data-search-empty]", element);
-  const cards = qsa("article", qs("[data-search-list]", element) ?? element);
+  const input = qs(element, "[data-search-input]");
+  const empty = qs(element, "[data-search-empty]");
+  const cards = qsa(qs(element, "[data-search-list]") ?? element, "article");
 
   if (!input) return () => {};
 

@@ -291,6 +291,21 @@ Yalnızca `Cache-Control` / `s-maxage` okuyan bir ara katman (nginx
 `proxy_cache`) bu HTML'i artık önbelleklemez. Cloudflare `CDN-Cache-Control`
 okur.
 
+### Doğrulayıcı: `ETag` ve 304
+
+Önbelleklenebilir her yanıt zayıf bir `ETag` taşır (`W/"<bayt>-<sha1>"`,
+Express'in varsayılanıyla aynı biçim). Değer girdi yazılırken bir kez
+hesaplanır, istek başına hash yoktur. İstek `If-None-Match` ile aynı değeri
+gönderirse gövde yerine `304 Not Modified` döner.
+
+`max-age=0` tarayıcıyı her gezinmede sunucuya sorduruyor; doğrulayıcı olmadan
+bu soru her seferinde sayfanın tamamını indirmek demekti. Doğrulayıcı zayıf,
+çünkü aynı sayfanın brotli, gzip ve ham gövdesi anlamca aynı temsil: hangi
+kodlamayla alınmış olursa olsun 304 alır.
+
+Kişiye özel ve dinamik yanıtlar (`private, no-store`) ve fragment'lar ETag
+taşımaz.
+
 ## Sıkıştırılmış gövdenin saklanması
 
 Önbelleğe alınan her girdi bir `encoded` haritası taşır ve HTML ile aynı ömrü
@@ -304,6 +319,12 @@ devreye girmez.
 
 `HEAD` istekleri sıkıştırılmaz (gövde yok). İstemci ne brotli ne gzip kabul
 ediyorsa düz HTML gönderilir.
+
+Saklanan brotli kopyası (kalite 5) girdi yazıldıktan sonra **arkada**
+üretilir; Redis/disk kademesine paylaşım da onun ardından gider. Sayfayı
+render ettiren ilk istek onu beklemez, kendi gövdesini ucuz kaliteyle (4)
+sıkıştırıp gönderir. Bu, MISS yanıtının TTFB'sinden sayfa boyutuna göre
+0.7–2 ms siler.
 
 ## İstek içi memoizasyon: `cache()`
 

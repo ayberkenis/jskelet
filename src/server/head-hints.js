@@ -14,6 +14,41 @@ import { esc, jsonScript } from "../views/helpers/html.js";
 /** @type {string | null} */
 let cached = null;
 
+/** @type {string[] | null} */
+let origins = null;
+
+/**
+ * Normalize edilmiş preconnect origin'leri: config listesi + CDN asset
+ * prefix'i. `<head>` ipuçları ve 103 Early Hints aynı listeyi kullanır.
+ *
+ * @returns {string[]}
+ */
+export function preconnectOrigins() {
+  if (origins) return origins;
+
+  /** @type {Set<string>} */
+  const unique = new Set();
+
+  for (const origin of getConfig().preconnect) {
+    try {
+      unique.add(new URL(origin).origin);
+    } catch {
+      console.warn(`[head] invalid preconnect URL, skipped: ${origin}`);
+    }
+  }
+
+  // CDN asset prefix config'e yazılmadan da preconnect alsın.
+  try {
+    const prefix = getConfig().build?.assets?.prefix;
+    if (prefix) unique.add(new URL(prefix).origin);
+  } catch {
+    /* geçersiz prefix — config zaten uyarmış olabilir */
+  }
+
+  origins = [...unique];
+  return origins;
+}
+
 /**
  * `jskelet.config.mjs` → `preconnect: ["https://cdn.example.com"]`.
  * Üçüncü taraf kaynaklar (görsel CDN'i, API origin'i, font host'u) buraya
@@ -24,26 +59,7 @@ let cached = null;
 export function preconnectHints() {
   if (cached != null) return cached;
 
-  /** @type {Set<string>} */
-  const origins = new Set();
-
-  for (const origin of getConfig().preconnect) {
-    try {
-      origins.add(new URL(origin).origin);
-    } catch {
-      console.warn(`[head] invalid preconnect URL, skipped: ${origin}`);
-    }
-  }
-
-  // CDN asset prefix config'e yazılmadan da preconnect alsın.
-  try {
-    const prefix = getConfig().build?.assets?.prefix;
-    if (prefix) origins.add(new URL(prefix).origin);
-  } catch {
-    /* geçersiz prefix — config zaten uyarmış olabilir */
-  }
-
-  cached = [...origins]
+  cached = preconnectOrigins()
     .map((origin) => `<link rel="preconnect" href="${esc(origin)}">`)
     .join("");
 

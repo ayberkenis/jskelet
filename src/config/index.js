@@ -160,6 +160,7 @@ const CONFIG_FILE = "jskelet.config.mjs";
  *   ancak bu bayrak veya `DEV_GATE=1` ile açılır.
  * @property {string[]} devGateBypass
  * @property {string[]} preconnect
+ * @property {EarlyHintsConfig} earlyHints 103 Early Hints; varsayılan kapalı.
  * @property {NavigationConfig} navigation
  * @property {SecurityConfig} security
  * @property {string[]} prewarmSkip
@@ -176,6 +177,12 @@ const CONFIG_FILE = "jskelet.config.mjs";
  * @property {boolean} splitting
  * @property {Record<string, string[]>} groups
  * @property {((id: string) => string | null | undefined) | null} chunkGroup
+ * @property {BuildClientHoistConfig | null} hoistShared `null` kapalı.
+ *
+ * @typedef {object} BuildClientHoistConfig
+ * @property {string} into Çatı entry'si: `client/entries/main.js` ya da `main.js`.
+ * @property {number} minImporters Bir modülün çatıya taşınması için onu kullanan kök sayısı (≥ 2).
+ * @property {string[]} exclude Yerinde kalacak bare paketler / yol önekleri.
  *
  * @typedef {object} BuildAssetsUploadConfig
  * @property {boolean} enabled
@@ -1089,6 +1096,39 @@ function normalizeNavigation(raw, brand) {
 }
 
 /**
+ * @typedef {object} EarlyHintsConfig
+ * @property {boolean} enabled
+ * @property {string[] | null} assets Manifest anahtarları; `null` → `["main.js"]`.
+ */
+
+/**
+ * `true` → preconnect + `main.js`; `{ assets }` → listedeki varlıklar.
+ *
+ * @param {unknown} raw
+ * @returns {EarlyHintsConfig}
+ */
+function normalizeEarlyHints(raw) {
+  if (raw === undefined || raw === false || raw === null) {
+    return { enabled: false, assets: null };
+  }
+  if (raw === true) return { enabled: true, assets: null };
+
+  if (typeof raw === "object" && !Array.isArray(raw)) {
+    const source = /** @type {Record<string, unknown>} */ (raw);
+    const assets =
+      source.assets === undefined
+        ? null
+        : asArray(source.assets, "earlyHints.assets").filter(
+            (entry) => typeof entry === "string" && entry,
+          );
+    return { enabled: source.enabled !== false, assets: /** @type {string[] | null} */ (assets) };
+  }
+
+  console.warn(`[config] earlyHints is invalid (${String(raw)}), early hints are off`);
+  return { enabled: false, assets: null };
+}
+
+/**
  * @typedef {object} SecurityConfig
  * @property {boolean} trustProxy
  * @property {string | null} cookieSecret
@@ -1193,7 +1233,54 @@ function defaultBuildClient() {
     splitting: DEFAULT_BUILD.client.splitting,
     groups: {},
     chunkGroup: null,
+    hoistShared: null,
   };
+}
+
+/**
+ * `build.client.hoistShared`. `true` varsayılanlarla açar; bozuk alanlar
+ * uyarıyla varsayılana döner, ayarın tamamı düşmez.
+ *
+ * @param {unknown} raw
+ * @returns {BuildClientHoistConfig | null}
+ */
+function normalizeHoistShared(raw) {
+  if (raw == null || raw === false) return null;
+
+  /** @type {BuildClientHoistConfig} */
+  const resolved = { into: "main.js", minImporters: 2, exclude: [] };
+  if (raw === true) return resolved;
+
+  if (typeof raw !== "object" || Array.isArray(raw)) {
+    console.warn("[config] build.client.hoistShared must be an object or true, ignoring it");
+    return null;
+  }
+
+  const source = /** @type {Record<string, any>} */ (raw);
+
+  if (source.into != null) {
+    if (typeof source.into === "string" && source.into.trim()) {
+      resolved.into = source.into.trim();
+    } else {
+      console.warn('[config] build.client.hoistShared.into must be a string, using "main.js"');
+    }
+  }
+
+  if (source.minImporters != null) {
+    const value = Number(source.minImporters);
+    // 1 her island modülünü çatıya taşır; tembel yükleme tamamen kaybolur.
+    if (Number.isInteger(value) && value >= 2) {
+      resolved.minImporters = value;
+    } else {
+      console.warn("[config] build.client.hoistShared.minImporters must be an integer >= 2, using 2");
+    }
+  }
+
+  resolved.exclude = asArray(source.exclude, "build.client.hoistShared.exclude")
+    .filter((entry) => typeof entry === "string" && entry.trim())
+    .map((entry) => String(entry).trim());
+
+  return resolved;
 }
 
 /**
@@ -1407,17 +1494,19 @@ export function normalizeBuild(raw) {
     }
   }
 
+  const hoistShared = normalizeHoistShared(client.hoistShared);
+
   if (
     !splitting &&
-    (Object.keys(groups).length > 0 || chunkGroup)
+    (Object.keys(groups).length > 0 || chunkGroup || hoistShared)
   ) {
     console.warn(
-      "[config] build.client.groups / chunkGroup require splitting; " +
+      "[config] build.client.groups / chunkGroup / hoistShared require splitting; " +
         "they are ignored while splitting is false",
     );
   }
 
-  return { client: { splitting, groups, chunkGroup }, assets };
+  return { client: { splitting, groups, chunkGroup, hoistShared }, assets };
 }
 
 /**
@@ -1703,6 +1792,7 @@ export async function loadConfig(options = {}) {
     devGate: normalizeDevGate(source),
     devGateBypass: source.devGateBypass ?? DEFAULT_DEV_GATE_BYPASS,
     preconnect: source.preconnect ?? [],
+    earlyHints: normalizeEarlyHints(source.earlyHints),
     navigation: normalizeNavigation(source.navigation, brand),
     security: normalizeSecurity(source.security),
     prewarmSkip: source.prewarmSkip ?? DEFAULT_PREWARM_SKIP,

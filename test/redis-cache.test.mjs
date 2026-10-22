@@ -16,7 +16,8 @@ import {
   getHtmlCacheEntries,
   getHtmlCacheSize,
   invalidateHtmlCache,
-  withHtmlCache,
+  settleHtmlCacheWrites,
+  withHtmlCache as withHtmlCacheAsync,
 } from "../src/server/html-cache.js";
 import {
   clearDataCache,
@@ -33,6 +34,18 @@ import {
 
 /** @param {number} ms */
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * L2 yazımı MISS yanıtından sonra arkada biter; buradaki testler o yazımın
+ * sonucunu ölçtüğü için onu da bekler.
+ *
+ * @type {typeof withHtmlCacheAsync}
+ */
+async function withHtmlCache(key, ttlSeconds, producer) {
+  const result = await withHtmlCacheAsync(key, ttlSeconds, producer);
+  await settleHtmlCacheWrites();
+  return result;
+}
 
 /** `setRedisClientForTests` bu öneki kuruyor; anahtarları elle kurmak için. */
 const PREFIX = "_jskelet:default:test";

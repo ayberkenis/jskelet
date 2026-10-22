@@ -41,7 +41,7 @@ Request
  ├─ trailingSlash                  308 when config trailingSlash is true
  ├─ robots.txt                     appends framework Disallow rules to the user's body
  ├─ staticPrecompressed            .br/.gz copies produced at build (quality 11)
- ├─ express.static                 files under public/
+ ├─ express.static                 files under public/ (only paths that exist)
  ├─ (dev) devtools                 only when NODE_ENV=development
  ├─ admin (if enabled)             /_jskelet/admin
  ├─ image optimizer (remote)       /_jskelet/image — when allowHosts is set
@@ -86,6 +86,10 @@ position has a reason, and moving things around leads to silent breakage.
   Recompressing a hashed,
   `immutable` file on every request is wasted CPU. In production the `stat`
   result (present or missing) stays in process memory; in development it does not.
+  `express.static` itself only sees paths that are files on disk. Left alone,
+  it builds a 404 error with a stack trace for every page request (and for
+  every directory) before handing it on; under load that was about 15% of the
+  CPU of a cache HIT.
 - **Admin panel** (when `admin().enabled` / `JSKELET_ADMIN`): after static,
   before body parsers and routes. Carries its own body parsers so the app
   cannot shadow the path. When off, the module is never loaded.
@@ -98,7 +102,8 @@ position has a reason, and moving things around leads to silent breakage.
   controller as well (e.g. inside a middleware).
 
 The framework turns off `x-powered-by` and writes a brandable header in its
-place, sets `etag` to `strong` and enables `trust proxy`. `trust proxy` is
+place, sets `etag` to `strong` (cacheable HTML pages carry their own weak
+validator, see [06-caching.md](./06-caching.md)) and enables `trust proxy`. `trust proxy` is
 required for the correct protocol and client IP behind a reverse proxy
 ([10-deployment.md](./10-deployment.md)).
 

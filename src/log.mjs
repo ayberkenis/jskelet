@@ -90,8 +90,36 @@ export function size(bytes) {
 
 /** @param {string} text */
 function write(text) {
+  // Erişim satırları diğer çıktının önüne geçmesin: sıra korunur.
+  if (httpLines.length) flushHttp();
   stream.write(text);
 }
+
+/**
+ * Bekleyen erişim satırları. Stdout dosya ya da pipe olduğunda her `write`
+ * senkron bir sistem çağrısı; yük altında satır başına yazım, HIT yanıtının
+ * CPU'sunun dörtte birini yiyordu. Satırlar olay döngüsü turu başına tek
+ * yazımda gider.
+ *
+ * @type {string[]}
+ */
+const httpLines = [];
+
+function flushHttp() {
+  if (!httpLines.length) return;
+  const text = httpLines.join("");
+  httpLines.length = 0;
+  stream.write(text);
+}
+
+/** @param {string} text */
+function writeHttp(text) {
+  if (!httpLines.length) setImmediate(flushHttp);
+  httpLines.push(text);
+}
+
+// `process.exit()` kuyruğu beklemez; son satırlar kaybolmasın.
+process.on("exit", flushHttp);
 
 function clearLine() {
   if (isTTY) write("\r\u001b[2K");
@@ -102,10 +130,29 @@ function clearLine() {
  * sunucunun bulunduğu makinenin diline göre `ÖÖ/ÖS` ya da `AM/PM` basılmasına
  * yol açıyordu; log satırının genişliği sabit kalmalı.
  *
+ * `toLocaleTimeString` her çağrıda bir Intl biçimlendiricisi kuruyordu ve
+ * erişim logu açıkken HIT yanıtının en pahalı adımıydı; değer saniyede bir
+ * değiştiği için bir kez hesaplanır.
+ *
  * @returns {string} `01:49:02`
  */
 export function clock() {
-  return new Date().toLocaleTimeString("en-GB", { hour12: false });
+  const now = Date.now();
+  const second = Math.floor(now / 1000);
+  if (second === clockSecond) return clockText;
+
+  const date = new Date(now);
+  clockSecond = second;
+  clockText = `${pad2(date.getHours())}:${pad2(date.getMinutes())}:${pad2(date.getSeconds())}`;
+  return clockText;
+}
+
+let clockSecond = -1;
+let clockText = "";
+
+/** @param {number} value */
+function pad2(value) {
+  return value < 10 ? `0${value}` : String(value);
 }
 
 /**
@@ -298,7 +345,7 @@ export function http(info) {
     const tint =
       info.status >= 500 ? c.red : info.status >= 400 ? c.yellow : c.green;
 
-    write(
+    writeHttp(
       `${c.gray(clock())}  ${c.bold(info.method.padEnd(6))}` +
       `${c.gray(truncate(info.url, 28).padEnd(30))}` +
       `${tint(String(info.status))} ${c.gray(ms(info.ms).padStart(TIME))}` +
