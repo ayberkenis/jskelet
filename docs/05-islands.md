@@ -255,41 +255,44 @@ start();
 | Seçenek | Varsayılan | Anlamı |
 | --- | --- | --- |
 | `rootMargin` | `"200px 0px"` | Görünürlük gözlemcisinin önden yükleme mesafesi; `IntersectionObserver` sözdizimi. |
-| `drive` | kapalı | `{ root: "#page-content" }` (veya `"#page-content"`). Aynı origin gezinmede layout yerinde kalır; yalnızca o bölge takas edilir. |
+| `drive` | kapalı | `true` (veya `{ root: "body" }`). Stimulus/Turbo tarzı belge ziyareti. |
 
 ```js
-start({ rootMargin: "100% 0px", drive: { root: "#page-content" } });
+start({ rootMargin: "100% 0px", drive: true });
 ```
 
 Geçersiz bir `rootMargin` (`"1 ekran"`) konsola uyarı basar ve varsayılana
 döner; island'lar yine bağlanır.
 
-### `startDrive({ root })` ve `driveTo(url)`
+### `startDrive()` ve `driveTo(url)`
 
-Çatı API'si. Tam sayfa HTML çekilir, `root` seçicisindeki parça takas edilir,
-header / footer / overlay'deki island'lar **sökülmez**. `swap()` fragment
-ucuna gider; drive tam belge ister.
-
-Layout sözleşmesi:
+Belge ziyareti. Tam HTML çekilir, `body` (veya verilen `root`) yazılır.
+`data-permanent` + `id` taşıyan düğüm **canlı kalır** — `mount()` yeniden
+çalışmaz. Bu bir içerik kuyusu değil: kalıcı olan, işaretlediğiniz controller
+host'udur (tema düğmesi, overlay). Header'ın geri kalanı (aktif nav, logo)
+yeni belgeden gelir.
 
 ```html
-<header data-island="roof" data-island-eager>…</header>
-<main id="page-content">{{{ body }}}</main>
+<button id="theme-toggle" data-permanent data-island="theme-toggle" data-island-eager>
+<div id="jskelet-overlays" data-permanent></div>
 ```
 
-`start({ drive: { root: "#page-content" } })` `startDrive`'ı çağırır. Aynı
-origin `<a href>` tıklaması yakalanır; `data-swap`, `data-no-drive`,
+```js
+start({ drive: true });
+// startDrive()          → body
+// startDrive("#frame")  → Turbo Frame gibi yalnızca o bölge
+```
+
+Aynı origin `<a href>` yakalanır; `data-swap`, `data-no-drive`,
 `target="_blank"`, indirme, origin dışı ve yalnızca hash tarayıcıya bırakılır.
-Geri / ileri `popstate` ile aynı kuyuyu doldurur.
+Geri / ileri `popstate` ile aynı ziyareti yapar.
 
-Başarılı takastan sonra bölge `jskelet:drive` olayı basar
-(`detail.url`, `detail.title`). Hata `jskelet:drive-error`. Yeni belgede `root`
-yoksa tam sayfa gezinmeye düşülür.
+Başarıda `jskelet:drive` (`detail.url`, `detail.title`), hatada
+`jskelet:drive-error`. Yeni belgede `root` yoksa tam sayfa gezinmeye düşülür.
+Yeni sayfada aynı `id` yoksa kalıcı host sökülür.
 
-Çatı island'larını `root` **dışına** koyun; `unmount()` yalnızca kuyunun
-içini söker. Sayfaya özel `entries` drive sırasında yeniden basılmaz — o
-island'ları `main.js` `registerAll` haritasına yazın (dinamik import ilk yükü
-büyütmez).
+Sayfaya özel `entries` drive sırasında yeniden basılmaz — o island'ları
+`main.js` `registerAll` haritasına yazın.
 
 ### Bağlanma davranışı ve hatalar
 

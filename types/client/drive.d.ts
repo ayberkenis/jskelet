@@ -1,8 +1,8 @@
 export type DriveOptions = {
     /**
-     * Takas edilecek bölge; CSS seçici (`#page-content`).
+     * Yazılacak bölge; varsayılan `"body"`.
      */
-    root: string;
+    root?: string;
 };
 export type DriveToOptions = {
     /**
@@ -23,16 +23,32 @@ export type DriveToOptions = {
  */
 export declare function driveableUrl(event: Event): URL | null;
 /**
+ * Canlı `data-permanent[id]` düğümlerini ağaçtan ayır. İç içe olanlar
+ * dışarıdakinin içinde kalır; iki kez taşınmasın.
+ *
+ * @param {ParentNode} root
+ * @returns {HTMLElement[]}
+ */
+export declare function collectPermanent(root: ParentNode): HTMLElement[];
+/**
+ * Yeni ağaçtaki aynı `id` + `data-permanent` yuvasına canlı düğümü koy.
+ * Yuva yoksa (yeni sayfa bu controller'ı istemiyor) sök.
+ *
+ * @param {ParentNode} root
+ * @param {HTMLElement[]} kept
+ */
+export declare function restorePermanent(root: ParentNode, kept: HTMLElement[]): void;
+/**
  * @param {string} href
  * @param {DriveToOptions} [options]
  * @returns {Promise<boolean>}
  */
 export declare function driveTo(href: string, options?: DriveToOptions): Promise<boolean>;
 /**
- * Aynı origin bağlantıları `root` bölgesine sürer. Layout (çatı) yerinde
- * kalır. `start({ drive: { root: "#page-content" } })` bunu çağırır.
+ * Aynı origin bağlantıları belge ziyaretine çevirir. `data-permanent`
+ * controller host'ları sökülmez. `start({ drive: true })` bunu çağırır.
  *
- * @param {DriveOptions | string} options
+ * @param {DriveOptions | string | boolean} [options]
  * @returns {() => void}
  */
-export declare function startDrive(options: DriveOptions | string): () => void;
+export declare function startDrive(options?: DriveOptions | string | boolean): () => void;

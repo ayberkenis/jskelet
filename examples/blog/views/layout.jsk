@@ -25,17 +25,15 @@
   <body :class="bodyClass">
     {#include "partials/header"}
 
-    {#
-      `#page-content`: `start({ drive })` yalnızca bu kuyuyu takas eder.
-      Header / footer / overlay çatı island'larıyla yerinde kalır.
-    #}
-    <main id="page-content" class="min-w-0 flex-1">{{{ body }}}</main>
+    <main class="min-w-0 flex-1">{{{ body }}}</main>
 
     {#include "partials/footer"}
 
     {# Overlay portal: modal/drawer içeriği buraya taşınır, böylece
-       `overflow: hidden` taşıyan bir ata element onu kırpmaz. #}
-    <div id="jskelet-overlays"></div>
+       `overflow: hidden` taşıyan bir ata element onu kırpmaz.
+       `data-permanent`: drive ziyaretinde canlı düğüm (ve içindeki
+       island) yerinde kalır — içerik kuyusu değil, controller host'u. #}
+    <div id="jskelet-overlays" data-permanent></div>
 
     <BodyScripts :entries="entries" :devtools="devtools" :devBasePath="devBasePath" />
   </body>

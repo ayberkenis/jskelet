@@ -126,8 +126,8 @@ Dört davranış var, hepsi HTML'den kontrol edilir:
   araması gibi ilk ekranda duran ama tıklanmadan ihtiyaç duyulmayan island'lar
   için — görünürlük ve idle orada yine indirirdi.
 
-Tam sayfa gezinme çatıyı da söker. `start({ drive: { root: "#page-content" } })`
-yalnızca o kuyuyu takas eder; header island'ları yerinde kalır.
+Tam sayfa gezinme çatıyı da söker. `start({ drive: true })` belgeyi ziyaret
+eder; `data-permanent` controller host'ları sökülmez.
 
 İki ek ayrıntı ölçümden geldi:
 

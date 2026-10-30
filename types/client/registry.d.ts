@@ -31,9 +31,9 @@ export declare function hydrate(root?: ParentNode): void;
 export declare function observeDocument(): MutationObserver;
 export type DriveStartOptions = {
     /**
-     * Takas edilecek bölge; CSS seçici (`#page-content`).
+     * Yazılacak bölge; varsayılan `"body"`.
      */
-    root: string;
+    root?: string;
 };
 export type StartOptions = {
     /**
@@ -43,24 +43,22 @@ export type StartOptions = {
      */
     rootMargin?: string;
     /**
-     * Layout yerinde kalsın diye
-     * aynı origin gezinmeyi `root` bölgesine sürer. `{ root: "#page-content" }`
-     * ya da `"#page-content"`.
+     * Stimulus/Turbo tarzı
+     * belge ziyareti. `true` → `body`. `data-permanent` + `id` host'lar sökülmez.
      */
-    drive?: DriveStartOptions | string;
+    drive?: true | DriveStartOptions | string;
 };
 /**
  * @typedef {object} DriveStartOptions
- * @property {string} root Takas edilecek bölge; CSS seçici (`#page-content`).
+ * @property {string} [root] Yazılacak bölge; varsayılan `"body"`.
  */
 /**
  * @typedef {object} StartOptions
  * @property {string} [rootMargin] Görünürlük gözlemcisinin önden yükleme
  *   mesafesi; `IntersectionObserver` sözdizimi. Varsayılan `"200px 0px"`.
  *   Yüzdeler viewport'a göredir: `"100% 0px"` island'ı bir ekran kala indirir.
- * @property {DriveStartOptions | string} [drive] Layout yerinde kalsın diye
- *   aynı origin gezinmeyi `root` bölgesine sürer. `{ root: "#page-content" }`
- *   ya da `"#page-content"`.
+ * @property {true | DriveStartOptions | string} [drive] Stimulus/Turbo tarzı
+ *   belge ziyareti. `true` → `body`. `data-permanent` + `id` host'lar sökülmez.
  */
 /** @param {StartOptions} [options] */
 export declare function start(options?: StartOptions): void;

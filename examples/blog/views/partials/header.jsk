@@ -20,11 +20,14 @@
       {/each}
 
       {#
-        `data-island-eager`: görünürlüğü beklemeden hemen bağlanır. Global
-        davranışlar (tema, menü, çerez bandı) için doğru seçim.
+        `data-island-eager`: görünürlüğü beklemeden hemen bağlanır.
+        `data-permanent`: drive ziyaretinde bu düğüm (controller) canlı kalır;
+        header'ın geri kalanı yeni belgeden gelir.
       #}
       <button
         type="button"
+        id="theme-toggle"
+        data-permanent
         data-island="theme-toggle"
         data-island-eager
         class="rounded border border-slate-300 px-2 py-1"

@@ -9,7 +9,7 @@
  *     counter: () => import("../islands/counter.ts"),
  *   });
  *
- *   start({ drive: { root: "#page-content" } });
+ *   start({ drive: true });
  */
 export {
   register,

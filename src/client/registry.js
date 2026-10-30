@@ -417,7 +417,7 @@ export function observeDocument() {
 
 /**
  * @typedef {object} DriveStartOptions
- * @property {string} root Takas edilecek bölge; CSS seçici (`#page-content`).
+ * @property {string} [root] Yazılacak bölge; varsayılan `"body"`.
  */
 
 /**
@@ -425,9 +425,8 @@ export function observeDocument() {
  * @property {string} [rootMargin] Görünürlük gözlemcisinin önden yükleme
  *   mesafesi; `IntersectionObserver` sözdizimi. Varsayılan `"200px 0px"`.
  *   Yüzdeler viewport'a göredir: `"100% 0px"` island'ı bir ekran kala indirir.
- * @property {DriveStartOptions | string} [drive] Layout yerinde kalsın diye
- *   aynı origin gezinmeyi `root` bölgesine sürer. `{ root: "#page-content" }`
- *   ya da `"#page-content"`.
+ * @property {true | DriveStartOptions | string} [drive] Stimulus/Turbo tarzı
+ *   belge ziyareti. `true` → `body`. `data-permanent` + `id` host'lar sökülmez.
  */
 
 /** @param {StartOptions} [options] */

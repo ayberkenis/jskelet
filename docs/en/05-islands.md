@@ -267,41 +267,45 @@ start();
 | Option | Default | Meaning |
 | --- | --- | --- |
 | `rootMargin` | `"200px 0px"` | Look-ahead distance of the visibility observer; `IntersectionObserver` syntax. |
-| `drive` | off | `{ root: "#page-content" }` (or `"#page-content"`). Same-origin navigation keeps the layout in place and swaps only that region. |
+| `drive` | off | `true` (or `{ root: "body" }`). A Stimulus/Turbo-style document visit. |
 
 ```js
-start({ rootMargin: "100% 0px", drive: { root: "#page-content" } });
+start({ rootMargin: "100% 0px", drive: true });
 ```
 
 An invalid `rootMargin` (`"1 screen"`) prints a console warning and falls back
 to the default; islands still mount.
 
-### `startDrive({ root })` and `driveTo(url)`
+### `startDrive()` and `driveTo(url)`
 
-The shell API. The full HTML document is fetched, the region matching `root`
-is swapped, and islands in the header / footer / overlay are **not**
-unmounted. `swap()` talks to a fragment endpoint; drive asks for the whole
-document.
-
-Layout contract:
+A document visit. The full HTML is fetched and `body` (or the given `root`)
+is written. A node carrying `data-permanent` + `id` **stays live** —
+`mount()` does not run again. This is not a content well: what persists is
+the controller host you marked (theme button, overlay). The rest of the
+header (active nav, logo) comes from the new document.
 
 ```html
-<header data-island="roof" data-island-eager>…</header>
-<main id="page-content">{{{ body }}}</main>
+<button id="theme-toggle" data-permanent data-island="theme-toggle" data-island-eager>
+<div id="jskelet-overlays" data-permanent></div>
 ```
 
-`start({ drive: { root: "#page-content" } })` calls `startDrive`. Same-origin
-`<a href>` clicks are intercepted; `data-swap`, `data-no-drive`,
+```js
+start({ drive: true });
+// startDrive()          → body
+// startDrive("#frame")  → only that region, like a Turbo Frame
+```
+
+Same-origin `<a href>` clicks are intercepted; `data-swap`, `data-no-drive`,
 `target="_blank"`, downloads, cross-origin links and hash-only clicks are
-left to the browser. Back / forward refill the same well via `popstate`.
+left to the browser. Back / forward run the same visit via `popstate`.
 
-After a successful swap the region fires `jskelet:drive`
-(`detail.url`, `detail.title`). Failures fire `jskelet:drive-error`. If the
-new document has no `root`, it falls through to a full navigation.
+Success fires `jskelet:drive` (`detail.url`, `detail.title`); failures fire
+`jskelet:drive-error`. If the new document has no `root`, it falls through to
+a full navigation. If the new page has no matching `id`, the permanent host
+is unmounted.
 
-Keep roof islands **outside** `root`; `unmount()` only tears down the well.
 Per-page `entries` are not replayed during a drive — put those islands in the
-`main.js` `registerAll` map (a dynamic import does not grow the first load).
+`main.js` `registerAll` map.
 
 ### Mount behaviour and errors
 

@@ -1,20 +1,20 @@
 /**
- * Layout yerinde kalır, yalnızca seçilen bölge değişir.
+ * Stimulus / Turbo Drive tarzı gezinme: belge gelir, controller host'u
+ * yerinde kalır. Bir "içerik kuyusu" chunk'ı yok.
  *
- * Tam sayfa gezinme header / çatı island'larını söker ve `main.js`'i yeniden
- * çalıştırır. Bu modül aynı origin `<a>` tıklamasını yakalar, tam HTML'i
- * çeker, `root` seçicisindeki parçayı takas eder. Çatı `#page-content`
- * dışındaysa `unmount()` ona dokunmaz.
+ * `data-permanent` + `id` taşıyan düğüm (çatı, overlay, tema düğmesi) canlı
+ * tutulur; `mount()` yeniden çalışmaz. Geri kalan DOM yeni belgeden gelir,
+ * içindeki island'lar sökülüp yeniden bağlanır.
  *
  * `swap()` fragment ucuna gider (`X-Requested-With: fragment`). Drive tam
- * belge ister; sunucu layout'u basmaya devam eder, istemci yalnızca gövde
- * kuyusunu kullanır.
+ * belge ister. `root` verilirse (Turbo Frame gibi) yalnızca o bölge
+ * yazılır; verilmezse `body`.
  */
 import { hydrate, unmount } from "./registry.js";
 
 /**
  * @typedef {object} DriveOptions
- * @property {string} root Takas edilecek bölge; CSS seçici (`#page-content`).
+ * @property {string} [root] Yazılacak bölge; varsayılan `"body"`.
  */
 
 /**
@@ -29,13 +29,32 @@ let activeRoot = null;
 /** @type {AbortController | null} */
 let inFlight = null;
 
+const DEFAULT_ROOT = "body";
+
 /**
- * @param {DriveOptions | string} options
+ * `CSS.escape` Node test ortamında yok; id yalnızca seçicide kullanılıyor.
+ *
+ * @param {string} id
+ * @returns {string}
+ */
+function escapeId(id) {
+  if (typeof CSS !== "undefined" && typeof CSS.escape === "function") {
+    return CSS.escape(id);
+  }
+  return id.replace(/([^\w-])/g, "\\$1");
+}
+
+/**
+ * @param {DriveOptions | string | boolean | undefined} options
  * @returns {string}
  */
 function readRoot(options) {
-  if (typeof options === "string") return options.trim();
-  return typeof options?.root === "string" ? options.root.trim() : "";
+  if (options === true || options == null) return DEFAULT_ROOT;
+  if (typeof options === "string") return options.trim() || DEFAULT_ROOT;
+  if (typeof options.root === "string" && options.root.trim()) {
+    return options.root.trim();
+  }
+  return DEFAULT_ROOT;
 }
 
 /**
@@ -91,19 +110,56 @@ function findRoot(parsed, selector) {
 }
 
 /**
+ * Canlı `data-permanent[id]` düğümlerini ağaçtan ayır. İç içe olanlar
+ * dışarıdakinin içinde kalır; iki kez taşınmasın.
+ *
+ * @param {ParentNode} root
+ * @returns {HTMLElement[]}
+ */
+export function collectPermanent(root) {
+  /** @type {HTMLElement[]} */
+  const kept = [];
+  for (const node of [...root.querySelectorAll("[data-permanent][id]")]) {
+    const el = /** @type {HTMLElement} */ (node);
+    if (kept.some((live) => live.contains(el))) continue;
+    el.remove();
+    kept.push(el);
+  }
+  return kept;
+}
+
+/**
+ * Yeni ağaçtaki aynı `id` + `data-permanent` yuvasına canlı düğümü koy.
+ * Yuva yoksa (yeni sayfa bu controller'ı istemiyor) sök.
+ *
+ * @param {ParentNode} root
+ * @param {HTMLElement[]} kept
+ */
+export function restorePermanent(root, kept) {
+  for (const live of kept) {
+    const slot = root.querySelector(`#${escapeId(live.id)}`);
+    const dataset = /** @type {HTMLElement} */ (slot)?.dataset;
+    if (slot && typeof slot.replaceWith === "function" && dataset && "permanent" in dataset) {
+      slot.replaceWith(live);
+    } else {
+      unmount(live);
+    }
+  }
+}
+
+/**
  * @param {HTMLElement} element
  * @param {string} html
  */
 function replaceRegion(element, html) {
+  const kept = collectPermanent(element);
   unmount(element);
   element.innerHTML = html;
+  restorePermanent(element, kept);
   hydrate(element);
 }
 
 /**
- * Yeni belgeden başlığı ve bölge HTML'ini oku. `root` yoksa `null` —
- * çağıran tam sayfaya düşer.
- *
  * @param {string} html
  * @param {string} selector
  * @returns {{ title: string, html: string, lang: string } | null}
@@ -217,19 +273,14 @@ export async function driveTo(href, options = {}) {
 }
 
 /**
- * Aynı origin bağlantıları `root` bölgesine sürer. Layout (çatı) yerinde
- * kalır. `start({ drive: { root: "#page-content" } })` bunu çağırır.
+ * Aynı origin bağlantıları belge ziyaretine çevirir. `data-permanent`
+ * controller host'ları sökülmez. `start({ drive: true })` bunu çağırır.
  *
- * @param {DriveOptions | string} options
+ * @param {DriveOptions | string | boolean} [options]
  * @returns {() => void}
  */
-export function startDrive(options) {
+export function startDrive(options = true) {
   const root = readRoot(options);
-  if (!root) {
-    console.warn("[drive] root selector missing");
-    return () => {};
-  }
-
   activeRoot = root;
 
   /** @param {Event} event */

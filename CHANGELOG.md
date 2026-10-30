@@ -15,12 +15,12 @@ one is listed under a **Breaking** heading.
   the hidden-host path, so a header search field can sit above the fold
   without pulling its module until the user focuses it. Empty or invalid
   event lists warn and do not mount.
-- `start({ drive: { root: "#page-content" } })` / `startDrive({ root })` keep
-  the layout in place on same-origin navigation. The full document is
-  fetched and only that region is swapped, so roof islands outside the well
-  are not unmounted. Fires `jskelet:drive` (`detail.url`, `detail.title`).
-  `data-no-drive` leaves a link as a full page load. The blog example wraps
-  `<main id="page-content">` and turns drive on.
+- `start({ drive: true })` / `startDrive()` visit the document the Stimulus /
+  Turbo way: the full HTML is fetched, `body` is written, and nodes marked
+  `data-permanent` plus `id` keep their live island (theme toggle, overlay).
+  There is no content well. `startDrive("#frame")` still targets one region.
+  Fires `jskelet:drive`. `data-no-drive` leaves a full page load. The blog
+  example turns drive on.
 
 ### Fixed
 

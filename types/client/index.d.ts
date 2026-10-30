@@ -9,7 +9,7 @@
  *     counter: () => import("../islands/counter.ts"),
  *   });
  *
- *   start({ drive: { root: "#page-content" } });
+ *   start({ drive: true });
  */
 export { register, registerAll, hydrate, unmount, observeDocument, start, } from "./registry.js";
 export { swap, startSwapLinks } from "./swap.js";
