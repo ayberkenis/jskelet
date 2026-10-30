@@ -15,6 +15,19 @@ one is listed under a **Breaking** heading.
   the hidden-host path, so a header search field can sit above the fold
   without pulling its module until the user focuses it. Empty or invalid
   event lists warn and do not mount.
+- `start({ drive: { root: "#page-content" } })` / `startDrive({ root })` keep
+  the layout in place on same-origin navigation. The full document is
+  fetched and only that region is swapped, so roof islands outside the well
+  are not unmounted. Fires `jskelet:drive` (`detail.url`, `detail.title`).
+  `data-no-drive` leaves a link as a full page load. The blog example wraps
+  `<main id="page-content">` and turns drive on.
+
+### Fixed
+
+- `build.client.hoistShared` proxies now include named imports from modules
+  reached through nested `import()`, not only the first-level island graph.
+  A sidebar chart that asked the hoisted helper for an extra name used to
+  fail the build with `No matching export`.
 
 ### Changed
 

@@ -367,6 +367,56 @@ test("buildClient: hoistShared folds shared modules into main and keeps behaviou
   }
 });
 
+test("buildClient: nested import() extra names land on the hoist proxy", async () => {
+  const { root, config } = makeFixture(
+    {
+      "client/entries/main.js": `
+export const islands = {
+  roof: () => import("../islands/roof.js"),
+  news: () => import("../islands/news.js"),
+};
+`,
+      "client/lib/api.js": `
+export const quote = () => "quote";
+export const chart = () => "chart";
+export const unused = () => "UNUSED_MARKER";
+`,
+      "client/islands/roof.js": `
+import { quote } from "../lib/api.js";
+export function mount() {
+  return import("./sidebar-tools.js").then((mod) => mod.mount());
+}
+export const fromRoof = quote;
+`,
+      "client/islands/news.js": `
+import { quote } from "../lib/api.js";
+export function mount() { return quote(); }
+`,
+      "client/islands/sidebar-tools.js": `
+import { chart } from "../lib/api.js";
+export function mount() { return chart(); }
+`,
+    },
+    { exclude: ["./client/islands/sidebar-tools.js"] },
+  );
+  try {
+    initBuildPaths(config);
+    const manifest = await buildClient(config);
+    const mainFile = path.join(root, "public", manifest["main.js"]);
+    assert.ok(
+      !fs.readFileSync(mainFile, "utf8").includes("UNUSED_MARKER"),
+      "unused api exports stay tree-shaken",
+    );
+
+    const main = await import(pathToFileURL(mainFile).href);
+    assert.equal((await main.islands.news()).mount(), "quote");
+    assert.equal(await (await main.islands.roof()).mount(), "chart");
+  } finally {
+    delete globalThis.__jskeletHoist;
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("buildClient: excluded island reaches hoisted helpers through a proxy", async () => {
   const { root, config } = makeFixture(
     {

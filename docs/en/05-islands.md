@@ -4,7 +4,8 @@ This document explains how interactivity is added: the `data-island` contract,
 passing props, the four hydration strategies and the IntersectionObserver
 logic, the structure of `client/entries/*` and loading extra entries per page,
 the runtime API (`register`, `registerAll`, `hydrate`, `observeDocument`,
-`start`), `createStore` for sharing state between islands, the DOM helpers,
+`start`, `startDrive`), `createStore` for sharing state between islands, the
+DOM helpers,
 `startSafeImages` and the deferred panel (fragment) pattern. *Why* the model
 looks like this is in [02-architecture.md](./02-architecture.md), and how the
 bundle is produced is in [08-build.md](./08-build.md).
@@ -266,13 +267,41 @@ start();
 | Option | Default | Meaning |
 | --- | --- | --- |
 | `rootMargin` | `"200px 0px"` | Look-ahead distance of the visibility observer; `IntersectionObserver` syntax. |
+| `drive` | off | `{ root: "#page-content" }` (or `"#page-content"`). Same-origin navigation keeps the layout in place and swaps only that region. |
 
 ```js
-start({ rootMargin: "100% 0px" }); // download one screen ahead
+start({ rootMargin: "100% 0px", drive: { root: "#page-content" } });
 ```
 
-An invalid value (`"1 screen"`) prints a console warning and falls back to the
-default; islands still mount.
+An invalid `rootMargin` (`"1 screen"`) prints a console warning and falls back
+to the default; islands still mount.
+
+### `startDrive({ root })` and `driveTo(url)`
+
+The shell API. The full HTML document is fetched, the region matching `root`
+is swapped, and islands in the header / footer / overlay are **not**
+unmounted. `swap()` talks to a fragment endpoint; drive asks for the whole
+document.
+
+Layout contract:
+
+```html
+<header data-island="roof" data-island-eager>…</header>
+<main id="page-content">{{{ body }}}</main>
+```
+
+`start({ drive: { root: "#page-content" } })` calls `startDrive`. Same-origin
+`<a href>` clicks are intercepted; `data-swap`, `data-no-drive`,
+`target="_blank"`, downloads, cross-origin links and hash-only clicks are
+left to the browser. Back / forward refill the same well via `popstate`.
+
+After a successful swap the region fires `jskelet:drive`
+(`detail.url`, `detail.title`). Failures fire `jskelet:drive-error`. If the
+new document has no `root`, it falls through to a full navigation.
+
+Keep roof islands **outside** `root`; `unmount()` only tears down the well.
+Per-page `entries` are not replayed during a drive — put those islands in the
+`main.js` `registerAll` map (a dynamic import does not grow the first load).
 
 ### Mount behaviour and errors
 

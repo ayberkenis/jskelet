@@ -126,6 +126,9 @@ Dört davranış var, hepsi HTML'den kontrol edilir:
   araması gibi ilk ekranda duran ama tıklanmadan ihtiyaç duyulmayan island'lar
   için — görünürlük ve idle orada yine indirirdi.
 
+Tam sayfa gezinme çatıyı da söker. `start({ drive: { root: "#page-content" } })`
+yalnızca o kuyuyu takas eder; header island'ları yerinde kalır.
+
 İki ek ayrıntı ölçümden geldi:
 
 - **Bağlama işi boş zamana kaydırılır** (`requestIdleCallback`, `timeout: 500`).

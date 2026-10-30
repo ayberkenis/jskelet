@@ -154,7 +154,9 @@ client.
 - **Islands.** Interactivity attaches to elements carrying `data-island`.
   Modules are dynamically imported on visibility by default;
   `data-island-eager`, `data-island-idle` and `data-island-on` pick a
-  different strategy. A small store handles sharing state between islands.
+  different strategy. `start({ drive: { root: "#page-content" } })` keeps the
+  layout in place and swaps only that region. A small store handles sharing
+  state between islands.
 - **HTML TTL cache.** Per-route `revalidate`, stale-while-revalidate on expiry,
   query allowlists, dependency tracking from `withDataCache`, and prewarm that
   fills the cache at boot. `invalidateHtmlCache()` stales a path, pattern or

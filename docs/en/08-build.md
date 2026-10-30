@@ -309,7 +309,10 @@ How it works:
    the shell. Application code can use lazy `import()` without checking
    whether the module ended up in the shell. Only plain string specifiers
    are rewritten; a variable or template `` import(`./${name}.js`) `` falls
-   back to the proxy path and emits a small file.
+   back to the proxy path and emits a small file. The proxy also writes the
+   named imports of modules loaded through nested `import()` — not just the
+   first-level island graph — otherwise a sidebar chart that asks for an
+   extra name fails the build with `No matching export`.
 6. esbuild's own shared code (interop helpers, the `process.env` define) is
    needed by the shell and every island, so it still lands in a separate
    chunk. At the end of the build every chunk the shell imports statically is

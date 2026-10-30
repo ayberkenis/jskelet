@@ -3,9 +3,9 @@
 Bu belge etkileşimin nasıl eklendiğini anlatır: `data-island` sözleşmesi, props
 geçişi, dört hidrasyon stratejisi ve IntersectionObserver mantığı,
 `client/entries/*` yapısı ve sayfa başına ek entry yükleme, runtime API'si
-(`register`, `registerAll`, `hydrate`, `observeDocument`, `start`), island'lar
-arası durum paylaşımı için `createStore`, DOM yardımcıları, `startSafeImages` ve
-ertelenmiş panel (fragment) deseni. Modelin *neden* böyle olduğu
+(`register`, `registerAll`, `hydrate`, `observeDocument`, `start`,
+`startDrive`), island'lar arası durum paylaşımı için `createStore`, DOM
+yardımcıları, `startSafeImages` ve ertelenmiş panel (fragment) deseni. Modelin *neden* böyle olduğu
 [02-mimari.md](./02-mimari.md)'de, bundle'ın nasıl üretildiği
 [08-build.md](./08-build.md)'de.
 
@@ -255,13 +255,41 @@ start();
 | Seçenek | Varsayılan | Anlamı |
 | --- | --- | --- |
 | `rootMargin` | `"200px 0px"` | Görünürlük gözlemcisinin önden yükleme mesafesi; `IntersectionObserver` sözdizimi. |
+| `drive` | kapalı | `{ root: "#page-content" }` (veya `"#page-content"`). Aynı origin gezinmede layout yerinde kalır; yalnızca o bölge takas edilir. |
 
 ```js
-start({ rootMargin: "100% 0px" }); // bir ekran kala indir
+start({ rootMargin: "100% 0px", drive: { root: "#page-content" } });
 ```
 
-Geçersiz bir değer (`"1 ekran"`) konsola uyarı basar ve varsayılana döner;
-island'lar yine bağlanır.
+Geçersiz bir `rootMargin` (`"1 ekran"`) konsola uyarı basar ve varsayılana
+döner; island'lar yine bağlanır.
+
+### `startDrive({ root })` ve `driveTo(url)`
+
+Çatı API'si. Tam sayfa HTML çekilir, `root` seçicisindeki parça takas edilir,
+header / footer / overlay'deki island'lar **sökülmez**. `swap()` fragment
+ucuna gider; drive tam belge ister.
+
+Layout sözleşmesi:
+
+```html
+<header data-island="roof" data-island-eager>…</header>
+<main id="page-content">{{{ body }}}</main>
+```
+
+`start({ drive: { root: "#page-content" } })` `startDrive`'ı çağırır. Aynı
+origin `<a href>` tıklaması yakalanır; `data-swap`, `data-no-drive`,
+`target="_blank"`, indirme, origin dışı ve yalnızca hash tarayıcıya bırakılır.
+Geri / ileri `popstate` ile aynı kuyuyu doldurur.
+
+Başarılı takastan sonra bölge `jskelet:drive` olayı basar
+(`detail.url`, `detail.title`). Hata `jskelet:drive-error`. Yeni belgede `root`
+yoksa tam sayfa gezinmeye düşülür.
+
+Çatı island'larını `root` **dışına** koyun; `unmount()` yalnızca kuyunun
+içini söker. Sayfaya özel `entries` drive sırasında yeniden basılmaz — o
+island'ları `main.js` `registerAll` haritasına yazın (dinamik import ilk yükü
+büyütmez).
 
 ### Bağlanma davranışı ve hatalar
 

@@ -302,6 +302,9 @@ Nasıl çalışır:
    `import()` yazarken modülün çatıda olup olmadığını düşünmek gerekmez.
    Yalnızca düz string specifier'lar çözülür; değişkenli ya da şablonlu
    `` import(`./${ad}.js`) `` proxy yoluna düşer ve küçük bir dosya üretir.
+   Proxy, birinci seviye island'ların yanı sıra `import()` ile yüklenen iç
+   modüllerin named import'larını da yazar; aksi hâlde sidebar chart gibi
+   iç dosya ekstra bir ad isteyince build `No matching export` ile düşer.
 6. esbuild'in kendi ortak kodu (interop yardımcıları, `process.env`
    define'ı) çatı ile island'ların hepsine gerektiği için yine ayrı bir chunk'a
    düşer. Build sonunda çatının static import ettiği bütün chunk'lar çatıya

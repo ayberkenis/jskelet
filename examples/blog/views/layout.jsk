@@ -25,7 +25,11 @@
   <body :class="bodyClass">
     {#include "partials/header"}
 
-    <main class="min-w-0 flex-1">{{{ body }}}</main>
+    {#
+      `#page-content`: `start({ drive })` yalnızca bu kuyuyu takas eder.
+      Header / footer / overlay çatı island'larıyla yerinde kalır.
+    #}
+    <main id="page-content" class="min-w-0 flex-1">{{{ body }}}</main>
 
     {#include "partials/footer"}
 

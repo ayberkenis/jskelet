@@ -9,10 +9,11 @@
  *     counter: () => import("../islands/counter.ts"),
  *   });
  *
- *   start();
+ *   start({ drive: { root: "#page-content" } });
  */
 export { register, registerAll, hydrate, unmount, observeDocument, start, } from "./registry.js";
 export { swap, startSwapLinks } from "./swap.js";
+export { startDrive, driveTo } from "./drive.js";
 export { enhanceForm, startForms } from "./form.js";
 export { createStore } from "./store.js";
 export { debounce, on, onClick, qs, qsa, raf, toggleClass, getOverlayRoot, } from "./dom.js";

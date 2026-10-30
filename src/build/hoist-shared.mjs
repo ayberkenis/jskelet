@@ -366,7 +366,9 @@ function namedClause(clause) {
  * Girdi esbuild'in minify'sız ESM çıktısı; external import'ları her zaman
  * `import d, { a, b as c } from "x";` biçiminde yazdığı için düzenli ifade
  * yeterli. Tanınmayan her kullanım (`import()`, `require`, `* as`,
- * `export *`) güvenli tarafta kalıp modülün tamamını ister.
+ * `export *`) güvenli tarafta kalıp modülün tamamını ister. İç `import()`
+ * ile yüklenen dosyalar da turun entry listesinde olduğu için onların
+ * named import'ları proxy'ye yazılır.
  *
  * @param {string[]} texts
  * @returns {Map<number, Set<string> | null>}
@@ -490,7 +492,27 @@ export async function analyzeHoist(options, { root, entries, hoist, groupOptions
     },
   };
 
-  const used = await esbuild.build({ ...probe, metafile: false, plugins: [marker, ...plugins] });
+  // Birinci seviye island'ların static grafiği yetmez: `import()` ile
+  // yüklenen iç modül (sidebar chart vb.) hoisted yardımcıdan ekstra ad
+  // isteyebilir. O dosyaları da kullanım turunun entry'si yapıyoruz; yoksa
+  // proxy yalnızca görünen adları yazar ve asıl build `No matching export`
+  // ile düşer.
+  /** @type {string[]} */
+  const nested = [];
+  for (const [file, input] of Object.entries(graph.metafile?.inputs ?? {})) {
+    if (!isFileInput(file) || plan.hoisted.has(file) || !HOISTABLE_EXT.test(file)) {
+      continue;
+    }
+    const usesHoisted = (input.imports ?? []).some((item) => plan.registered.has(item.path));
+    if (usesHoisted) nested.push(path.resolve(root, file));
+  }
+
+  const used = await esbuild.build({
+    ...probe,
+    entryPoints: [...new Set([...(options.entryPoints ?? []).map(String), ...nested])],
+    metafile: false,
+    plugins: [marker, ...plugins],
+  });
   const usage = parseUsage((used.outputFiles ?? []).map((file) => file.text));
 
   /** @type {string[]} */

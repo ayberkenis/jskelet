@@ -129,6 +129,9 @@ There are four behaviours, all controlled from the HTML:
   the user interacts — a header search field — because visibility and idle
   would still download them.
 
+A full page load also tears down the shell. `start({ drive: { root:
+"#page-content" } })` swaps only that well; header islands stay mounted.
+
 Two further details came out of measurement:
 
 - **The attaching work is deferred to idle time** (`requestIdleCallback`,

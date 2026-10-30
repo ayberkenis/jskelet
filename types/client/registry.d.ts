@@ -1,31 +1,3 @@
-/**
- * Island registry.
- *
- * Sunucu HTML'i tamdır; JS yalnızca davranış ekler. Bir element
- * `data-island="ad"` taşıdığında ilgili modül dinamik import edilir ve
- * `mount(element, props)` çağrılır.
- *
- * Hidrasyon **varsayılan olarak görünürlüğe bağlıdır**: her island bir
- * IntersectionObserver'a verilir, ekranda olanlar zaten ilk gözlemde tetiklenir,
- * ekran dışındakiler kaydırılana kadar hiç indirilmez. Ana sayfadaki grafik
- * kütüphanesi gibi ağır modüller böylece ilk yükten tamamen çıkar.
- *
- * `data-island-eager` görünürlükten bağımsız, hemen bağlanmayı zorlar
- * (header, çerez bandı gibi global davranışlar için).
- *
- * `data-island-idle` görünür olsa bile sayfa sakinleşene (load + boş zaman)
- * kadar bekletir. İlk ekranda görünen ama kritik olmayan ağır modüller
- * (ör. grafik kütüphanesi çeken mini grafik) LCP ile yarışmasın diye.
- * Gizli (zero-box) host'larda da aynı yol kullanılır — `hydrate()` onları
- * `mountWhenReady` ile bağlar, hemen `mountIsland` çağırmaz.
- *
- * `data-island-on="focusin, click"` paketi ilk etkileşime kadar indirmez.
- * Header araması gibi ilk ekranda duran ama tıklanmadan ihtiyaç duyulmayan
- * island'lar için: görünürlük, idle, eager ve gizli-host yolu bu işaret
- * varken atlanır.
- *
- * `data-island-props` JSON ise parse edilip props olarak geçer.
- */
 export type MountFn = (element: HTMLElement, props: object) => void | (() => void);
 /**
  * @param {string} name
@@ -57,6 +29,12 @@ export declare function unmount(root?: ParentNode): void;
 export declare function hydrate(root?: ParentNode): void;
 /** Sonradan DOM'a eklenen island'ları da yakalar (infinite scroll, portal). */
 export declare function observeDocument(): MutationObserver;
+export type DriveStartOptions = {
+    /**
+     * Takas edilecek bölge; CSS seçici (`#page-content`).
+     */
+    root: string;
+};
 export type StartOptions = {
     /**
      * Görünürlük gözlemcisinin önden yükleme
@@ -64,12 +42,25 @@ export type StartOptions = {
      * Yüzdeler viewport'a göredir: `"100% 0px"` island'ı bir ekran kala indirir.
      */
     rootMargin?: string;
+    /**
+     * Layout yerinde kalsın diye
+     * aynı origin gezinmeyi `root` bölgesine sürer. `{ root: "#page-content" }`
+     * ya da `"#page-content"`.
+     */
+    drive?: DriveStartOptions | string;
 };
+/**
+ * @typedef {object} DriveStartOptions
+ * @property {string} root Takas edilecek bölge; CSS seçici (`#page-content`).
+ */
 /**
  * @typedef {object} StartOptions
  * @property {string} [rootMargin] Görünürlük gözlemcisinin önden yükleme
  *   mesafesi; `IntersectionObserver` sözdizimi. Varsayılan `"200px 0px"`.
  *   Yüzdeler viewport'a göredir: `"100% 0px"` island'ı bir ekran kala indirir.
+ * @property {DriveStartOptions | string} [drive] Layout yerinde kalsın diye
+ *   aynı origin gezinmeyi `root` bölgesine sürer. `{ root: "#page-content" }`
+ *   ya da `"#page-content"`.
  */
 /** @param {StartOptions} [options] */
 export declare function start(options?: StartOptions): void;
