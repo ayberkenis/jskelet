@@ -123,7 +123,9 @@ The cache also only kicks in for `GET` requests.
 `${varyPrefix}${path}?${the allowed query parameters, sorted}`
 ```
 
-`varyPrefix` is empty by default. For a request without a query the key is
+`varyPrefix` is empty when there is no host / header / `fn` segment and no
+stylesheet. When CSS exists, the default `cache().vary.assets` adds
+`a=<cssHash>|`. For a request without a query the key is
 `${varyPrefix}${path}?`. **A request that carries a query parameter is dynamic
 by default**: it never enters the cache and is sent with `private, no-store`.
 Caching every variant of a path mints an unbounded number of keys
@@ -176,6 +178,14 @@ Example keys: `h=tr.investvio.com|/instruments/aapl?`,
 | `host` | `boolean` | Adds the public Host as `h=…` |
 | `headers` | `string[]` | Adds the given request headers as `name=value` |
 | `fn` | `(req) => string \| null` | Appends the return value as a segment (full control) |
+| `assets` | `boolean` | Adds the stylesheet content hash as `a=…` (default `true`) |
+
+`assets: true` (the default) ties the hashed CSS URLs embedded in the HTML to
+the key. When `*.css` entries in the manifest change, the L1 entry is dropped
+and Redis is never asked for the previous `a=` key — so a `DEL` timeout
+during invalidation cannot resurrect HTML that still points at the old
+stylesheet. `false` is the old behaviour (stamping a hash from `vary.fn` is
+only a temporary application-side workaround).
 
 **Prewarm:** the default warm-up goes through `http://127.0.0.1:<port>`. With
 `vary.host` that only warms the loopback key; locale sites need multiple
@@ -919,7 +929,10 @@ Because the id sits in the prefix, a new version automatically writes into a
 new namespace and the old keys die with their TTL — no manual cleanup and no
 `FLUSHDB`. A layout change that touches no CSS or JS still gets a new
 namespace, so the old `<head>` does not come back from Redis after a restart
-or deploy. Route handlers and `jskelet.config.mjs` are not part of the
+or deploy. `vary.assets` (the default) adds another layer: the stylesheet hash
+sits in `{vary|}` as `a=`. If CSS is rewritten while the process is still up,
+the looked-up key changes even when `buildId` in the prefix is frozen, so a
+Redis `DEL` timeout cannot resurrect the old HTML. Route handlers and `jskelet.config.mjs` are not part of the
 fingerprint; when they change what a page renders, use `invalidateHtmlCache()`
 or `clearHtmlCache()`.
 
@@ -1532,6 +1545,11 @@ filled the cache.
   without `cache().vary.host: true` the first locale's HTML is served to the
   other host. If prewarm only hits `127.0.0.1`, add the locale hosts via
   `prewarm.origins`.
+- **CSS changed, the page still prints the old sheet.** With
+  `cache().vary.assets: false` the HTML key does not carry the stylesheet hash;
+  a Redis command timeout serves the previous HTML from the same key. The
+  default is on — stamping a hash from `vary.fn` is only a temporary
+  application-side workaround.
 - **The warm-up never runs.** `prewarm: false` (on-demand) intentionally
   installs no background warming. In classic mode `hooks.prewarmPaths` is not
   defined, `PREWARM=0` is set, or `cache().prewarm.enabled === false`. In

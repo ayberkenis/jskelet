@@ -1,11 +1,15 @@
 /**
- * HTML cache anahtarına host / header / özel fn ile sabit vary parçası ekler.
+ * HTML cache anahtarına host / header / stylesheet hash / özel fn ile sabit
+ * vary parçası ekler.
  *
  * CDN zaten tam URL ile ayırır; asıl risk origin L1 ve Redis HTML anahtarı —
  * host'tan locale üreten sitelerde `vary.host: true` olmadan ilk locale'in
- * HTML'i diğer host'a servis edilir.
+ * HTML'i diğer host'a servis edilir. `vary.assets` (varsayılan açık) CSS
+ * içerik hash'ini anahtara yazar: hash değişince eski kayıt bulunmaz, Redis
+ * zaman aşımında stale HTML geri gelmez.
  */
 import { getConfig } from "../config/index.js";
+import { getStylesheetHash } from "./assets.js";
 
 /**
  * Public Host: `x-forwarded-host` (ilk değer) yoksa `Host`. Lowercase, portsuz.
@@ -54,15 +58,16 @@ function headerValue(req, name) {
 }
 
 /**
- * Anahtarın başına eklenen önek: `h=tr.example.com|` veya
- * `h=…&x-locale=tr|`. Vary yoksa boş string.
+ * Anahtarın başına eklenen önek: `h=tr.example.com|`,
+ * `h=…&x-locale=tr|` veya `h=…&a=<cssHash>|`. Vary yoksa boş string.
+ *
+ * Stylesheet hash'i istekten bağımsızdır; `req` olmasa da `vary.assets`
+ * açıksa yazılır. Host / header / fn `req` ister.
  *
  * @param {{ headers?: Record<string, unknown>, get?: (name: string) => string | undefined }} [req]
  * @returns {string}
  */
 export function buildVaryPrefix(req) {
-  if (!req) return "";
-
   let vary;
   try {
     vary = getConfig().cacheVary;
@@ -70,28 +75,43 @@ export function buildVaryPrefix(req) {
     return "";
   }
 
-  if (!vary || (!vary.host && !vary.headers.length && !vary.fn)) return "";
+  const assetsOn = vary?.assets !== false;
+  if (
+    !vary ||
+    (!vary.host && !vary.headers.length && !vary.fn && !assetsOn)
+  ) {
+    return "";
+  }
 
   /** @type {string[]} */
   const parts = [];
 
-  if (vary.host) {
+  if (req && vary.host) {
     const host = publicHost(req);
     if (host) parts.push(`h=${host}`);
   }
 
-  for (const name of vary.headers) {
-    const value = headerValue(req, name).trim();
-    if (value) parts.push(`${name}=${value}`);
+  if (req) {
+    for (const name of vary.headers) {
+      const value = headerValue(req, name).trim();
+      if (value) parts.push(`${name}=${value}`);
+    }
+
+    if (typeof vary.fn === "function") {
+      try {
+        const custom = vary.fn(/** @type {import('express').Request} */ (req));
+        if (custom != null && custom !== "") parts.push(String(custom));
+      } catch (error) {
+        console.warn("[cache] cache().vary.fn threw, ignoring it", error);
+      }
+    }
   }
 
-  if (typeof vary.fn === "function") {
-    try {
-      const custom = vary.fn(/** @type {import('express').Request} */ (req));
-      if (custom != null && custom !== "") parts.push(String(custom));
-    } catch (error) {
-      console.warn("[cache] cache().vary.fn threw, ignoring it", error);
-    }
+  // İstekten bağımsız sürüm damgası. Redis DEL zaman aşımında eski HTML
+  // aynı anahtarda kalırdı; `a=` değişince bakılan kayıt başkadır.
+  if (assetsOn) {
+    const hash = getStylesheetHash();
+    if (hash) parts.push(`a=${hash}`);
   }
 
   return parts.length ? `${parts.join("&")}|` : "";

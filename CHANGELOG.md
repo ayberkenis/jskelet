@@ -10,6 +10,12 @@ one is listed under a **Breaking** heading.
 
 ### Added
 
+- HTML cache keys include a stylesheet content hash when `cache().vary.assets`
+  is on (the default): `a=<cssHash>|` from the `*.css` entries in the
+  manifest. A CSS change drops in-process HTML entries and looks up a
+  different Redis key, so a command timeout during invalidation cannot
+  resurrect HTML that still points at the previous hashed stylesheet.
+  `assets: false` restores the old key shape.
 - `data-island-on="focusin, click"` defers an island's download until the
   first matching event on the host. It wins over eager, idle, visibility and
   the hidden-host path, so a header search field can sit above the fold

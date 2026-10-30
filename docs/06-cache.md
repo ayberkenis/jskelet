@@ -117,8 +117,9 @@ saklayabiliyordu.
 `${varyPrefix}${yol}?${izin verilen query parametreleri, sıralı}`
 ```
 
-`varyPrefix` varsayılan olarak boştur. Query'siz bir istek için anahtar
-`${varyPrefix}${yol}?` biçimindedir. **Query parametresi taşıyan istek
+`varyPrefix` host / header / `fn` yoksa ve stylesheet yoksa boştur. CSS
+varsa varsayılan `cache().vary.assets` öneke `a=<cssHash>|` ekler. Query'siz
+bir istek için anahtar `${varyPrefix}${yol}?` biçimindedir. **Query parametresi taşıyan istek
 varsayılan olarak dinamiktir**: önbelleğe hiç girmez ve `private, no-store`
 ile gider. Bir yolun bütün varyantlarını cache'lemek `?utm_source=…` gibi
 sonsuz sayıda anahtar üretiyor ve 500 girdilik store'da LRU, gerçek
@@ -168,6 +169,13 @@ cache: () => ({
 | `host` | `boolean` | Public Host'u `h=…` olarak anahtara ekler |
 | `headers` | `string[]` | Verilen istek başlıklarını (`ad=değer`) ekler |
 | `fn` | `(req) => string \| null` | Dönüş değeri bir segment olarak eklenir (tam kontrol) |
+| `assets` | `boolean` | Stylesheet içerik hash'ini `a=…` olarak ekler (varsayılan `true`) |
+
+`assets: true` (varsayılan) HTML'in gömdüğü hash'li CSS URL'lerini anahtara
+bağlar. Manifest'teki `*.css` girdileri değişince L1 kaydı düşer ve Redis
+eski `a=` anahtarını hiç aramaz — invalidation `DEL` zaman aşımında kalsa
+bile eski stylesheet'e işaret eden HTML geri gelmez. `false` eski davranıştır
+(uygulama tarafında `vary.fn` ile hash basmak geçici bir kaçış yoludur).
 
 **Prewarm:** varsayılan ısıtma `http://127.0.0.1:<port>` üzerinden gider. 
 `vary.host` açıksa bu yalnızca loopback anahtarını ısıtır; locale sitelerinde
@@ -899,6 +907,10 @@ Kimlik önekte durduğu için yeni sürüm kendiliğinden yeni bir isim alanına
 yazar, eski anahtarlar TTL ile ölür — elle temizlik ya da `FLUSHDB` gerekmez.
 CSS'e ve JS'e dokunmayan bir layout değişikliği de yeni isim alanı alır;
 eski `<head>` yeniden başlatma ya da deploy sonrasında Redis'ten geri gelmez.
+`vary.assets` (varsayılan) bir katman daha ekler: stylesheet hash'i `{vary|}`
+içinde `a=` olarak durur. Süreç ayaktayken CSS yeniden yazılırsa `buildId`
+önekte donmuş kalsa bile bakılan anahtar değişir; Redis `DEL` zaman aşımı
+eski HTML'i geri getiremez.
 Route handler'ları ve `jskelet.config.mjs` parmak izine girmez; bir sayfanın
 çıktısını onlar değiştiriyorsa `invalidateHtmlCache()` ya da
 `clearHtmlCache()` kullanın.
@@ -1523,6 +1535,10 @@ turunun gerçekten `MISS` → önbellek doldurup doldurmadığını buradan gör
   `cache().vary.host: true` yoksa ilk locale'in HTML'i diğer host'a servis
   edilir. Prewarm yalnızca `127.0.0.1` ile ısınıyorsa `prewarm.origins` ile
   locale host'larını ekleyin.
+- **CSS değişti, sayfa eski stilleri basıyor.** `cache().vary.assets: false`
+  ise HTML anahtarı stylesheet hash'i taşımaz; Redis komut zaman aşımında
+  eski HTML aynı anahtardan geri gelir. Varsayılan açıktır — uygulama tarafında
+  `vary.fn` ile hash basmak geçici bir kaçış yoludur.
 - **Isıtma hiç çalışmıyor.** `prewarm: false` (on-demand) bilinçli olarak
   hiçbir arka plan ısıtması kurmaz. Klasik modda `hooks.prewarmPaths` tanımlı
   değil, `PREWARM=0` ayarlı ya da `cache().prewarm.enabled === false`. `onVisit`

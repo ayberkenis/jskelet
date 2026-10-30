@@ -15,6 +15,7 @@
  * prefix'i atlar; `icon()` sprite için bunu kullanır. Origin hâlâ
  * `public/assets/` servis eder.
  */
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
@@ -23,9 +24,28 @@ import { getTemplatesFingerprint } from "../build/templates-fingerprint.mjs";
 
 const isDev = process.env.NODE_ENV === "development";
 
-/** @type {{ manifest: Record<string, string>, generated: string } | null} */
+/**
+ * @typedef {{ manifest: Record<string, string>, generated: string, stamp: string }} AssetState
+ * @type {AssetState | null}
+ */
 let cached = null;
 let warned = false;
+
+/**
+ * Manifest'in ucuz kimliği. İçerik hash'i her `asset()` çağrısında pahalı;
+ * mtime + size, aynı uzunluktaki yeni CSS hash'inde bile yazmayı yakalar.
+ *
+ * @param {string} generated
+ * @returns {string}
+ */
+function manifestStamp(generated) {
+  try {
+    const stat = fs.statSync(path.join(generated, "manifest.json"));
+    return `${stat.mtimeMs}:${stat.size}`;
+  } catch {
+    return "";
+  }
+}
 
 function load() {
   const { generated } = getConfig().dirs;
@@ -44,15 +64,19 @@ function load() {
     }
   }
 
-  return { manifest, generated };
+  return { manifest, generated, stamp: manifestStamp(generated) };
 }
 
 function state() {
-  // Dev'de her istekte yeniden okunur (watch build hash'leri değiştirir);
-  // prod'da bir kez. `generated` yolu değiştiyse (test / başka kök) de
-  // yenilenir — aksi hâlde eski manifest takılı kalır.
   const generated = getConfig().dirs.generated;
-  if (isDev || !cached || cached.generated !== generated) cached = load();
+  const stamp = manifestStamp(generated);
+  // Dev'de her istekte yeniden okunur (watch build hash'leri değiştirir).
+  // Prod'da stamp değişince de yenilenir: CSS yeniden yazılıp süreç ayakta
+  // kaldığında `asset()` eski hash'li URL basmasın. `generated` yolu
+  // değiştiyse (test / başka kök) de aynı.
+  if (isDev || !cached || cached.generated !== generated || cached.stamp !== stamp) {
+    cached = load();
+  }
   return cached;
 }
 
@@ -114,6 +138,91 @@ export function asset(name, options = {}) {
  */
 export function hasAsset(name) {
   return Boolean(state().manifest[name]);
+}
+
+/**
+ * Manifest'teki stylesheet URL'lerinin kısa içeriği. HTML cache anahtarına
+ * `a=` olarak girer: CSS hash'i değişince eski kayıt bulunmaz. Redis
+ * invalidation zaman aşımında eski HTML'i geri getiremez, çünkü bakılan
+ * anahtar artık başka.
+ *
+ * @param {Record<string, string>} manifest
+ * @returns {string} 10 hex karakter, stylesheet yoksa boş.
+ */
+function hashStylesheets(manifest) {
+  const lines = Object.entries(manifest)
+    .filter(([name]) => name.endsWith(".css"))
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    .map(([name, url]) => `${name}=${url}`);
+  if (!lines.length) return "";
+  return crypto.createHash("sha256").update(lines.join("\n")).digest("hex").slice(0, 10);
+}
+
+/**
+ * @type {{ generated: string, stamp: string, hash: string } | null}
+ */
+let stylesheetHashCache = null;
+
+/** @type {Set<(next: string, prev: string) => void>} */
+const stylesheetHashListeners = new Set();
+
+/**
+ * Stylesheet hash'i değişince (aynı `generated` kökünde) çağrılır. HTML
+ * cache L1'i buradan düşürür; Redis/disk eski `a=` anahtarında kalır ve
+ * TTL ile ölür.
+ *
+ * @param {(next: string, prev: string) => void} listener
+ * @returns {void}
+ */
+export function onStylesheetHashChange(listener) {
+  stylesheetHashListeners.add(listener);
+}
+
+/**
+ * Manifest'teki CSS girdilerinin içerik hash'i. `cache().vary.assets`
+ * bunu HTML anahtarına `a=<hash>` olarak yazar.
+ *
+ * @returns {string}
+ */
+export function getStylesheetHash() {
+  /** @type {AssetState} */
+  let current;
+  try {
+    current = state();
+  } catch {
+    return "";
+  }
+
+  if (
+    stylesheetHashCache &&
+    stylesheetHashCache.generated === current.generated &&
+    stylesheetHashCache.stamp === current.stamp
+  ) {
+    return stylesheetHashCache.hash;
+  }
+
+  const next = hashStylesheets(current.manifest);
+  const prev =
+    stylesheetHashCache && stylesheetHashCache.generated === current.generated
+      ? stylesheetHashCache.hash
+      : null;
+  stylesheetHashCache = {
+    generated: current.generated,
+    stamp: current.stamp,
+    hash: next,
+  };
+
+  if (prev !== null && prev !== next) {
+    for (const listener of stylesheetHashListeners) {
+      try {
+        listener(next, prev);
+      } catch (error) {
+        console.warn("[assets] stylesheet hash listener threw", error);
+      }
+    }
+  }
+
+  return next;
 }
 
 /** @type {string | null} */

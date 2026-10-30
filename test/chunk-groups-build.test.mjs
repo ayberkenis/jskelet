@@ -73,7 +73,7 @@ export async function boot() {
     rewrites: [],
     html: [],
     cacheQuery: [],
-    cacheVary: { host: false, headers: [], fn: null },
+    cacheVary: { host: false, headers: [], fn: null, assets: true },
     htmlMaxEntries: 500,
     staleWhileRevalidate: 60,
     data: {},

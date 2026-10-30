@@ -18,7 +18,7 @@
  *   cache()     → { html?: { [source]: saniye },
  *                   staleWhileRevalidate?: number,
  *                   query?: { [source]: string[] | true },
- *                   vary?: { host?: boolean, headers?: string[], fn?: Function },
+ *                   vary?: { host?: boolean, headers?: string[], fn?: Function, assets?: boolean },
  *                   maxEntries?: number,
  *                   data?: {...}, redis?: {...}, prewarm?: {...} }
  *   admin()     → { enabled?, basePath?, allowIps?, blockBots?, … }
@@ -130,10 +130,11 @@ const CONFIG_FILE = "jskelet.config.mjs";
  * @property {{ pattern: CompiledPattern, allow: true | string[] }[]} cacheQuery
  *   Yol deseni başına, HTML cache anahtarına girmesine izin verilen query
  *   parametreleri. Eşleşen kural yoksa query'li istek cache'lenmez.
- * @property {{ host: boolean, headers: string[],
+ * @property {{ host: boolean, headers: string[], assets: boolean,
  *   fn: ((req: import('express').Request) => string | null | undefined) | null }} cacheVary
  *   Anahtara eklenen sabit parçalar (query allowlist'ten bağımsız). Host'tan
- *   locale üreten sitelerde `host: true` zorunlu.
+ *   locale üreten sitelerde `host: true` zorunlu. `assets` (varsayılan
+ *   `true`) stylesheet içerik hash'ini `a=` olarak yazar.
  * @property {number} htmlMaxEntries HTML önbelleğinin girdi sınırı.
  * @property {number} staleWhileRevalidate Edge taze penceresi bittikten sonra
  *   eski HTML'in sunulacağı süre (saniye). 0 ise direktif basılmaz. Süreç içi
@@ -720,7 +721,7 @@ function normalizeQueryRules(raw) {
  */
 function normalizeVary(raw) {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-    return { host: false, headers: [], fn: null };
+    return { host: false, headers: [], fn: null, assets: true };
   }
 
   const source = /** @type {Record<string, unknown>} */ (raw);
@@ -740,6 +741,9 @@ function normalizeVary(raw) {
     host: source.host === true,
     headers,
     fn,
+    // HTML hash'li CSS URL'leri gömer. Kapalıysa CSS değişince eski kayıt
+    // Redis zaman aşımında geri gelebilir; kapatmak bilinçli bir tercih.
+    assets: source.assets !== false,
   };
 }
 

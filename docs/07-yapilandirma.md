@@ -811,9 +811,9 @@ Ayrıntı: [03-routing.md](./03-routing.md).
 ## `cache()`
 
 **Tip:**
-`() => { html?: Record<string, number>, staleWhileRevalidate?: number, query?: Record<string, string[] | true>, vary?: { host?: boolean, headers?: string[], fn?: (req) => string | null }, maxEntries?: number, data?: object, trackUpstream?: boolean, trackDependencies?: boolean, transientRetry?: object | false, upstream?: object, redis?: object, prewarm?: false | object }` —
+`() => { html?: Record<string, number>, staleWhileRevalidate?: number, query?: Record<string, string[] | true>, vary?: { host?: boolean, headers?: string[], fn?: (req) => string | null, assets?: boolean }, maxEntries?: number, data?: object, trackUpstream?: boolean, trackDependencies?: boolean, transientRetry?: object | false, upstream?: object, redis?: object, prewarm?: false | object }` —
 **Varsayılan:**
-`{ html: {}, staleWhileRevalidate: 60, query: {}, vary: { host: false }, maxEntries: 500, data: { maxEntries: 10000, staleFactor: 10 }, trackUpstream: true, trackDependencies: true, transientRetry: { attempts: 1, delayMs: 300, background: true }, upstream: { rate: 0 }, redis: { enabled: false, storeEncoded: true }, prewarm: { enabled: true, mode: "classic", max: 400, intervalSeconds: 0, origins: [] } }` (veya `prewarm: false` → `mode: "off"`)
+`{ html: {}, staleWhileRevalidate: 60, query: {}, vary: { host: false, assets: true }, maxEntries: 500, data: { maxEntries: 10000, staleFactor: 10 }, trackUpstream: true, trackDependencies: true, transientRetry: { attempts: 1, delayMs: 300, background: true }, upstream: { rate: 0 }, redis: { enabled: false, storeEncoded: true }, prewarm: { enabled: true, mode: "classic", max: 400, intervalSeconds: 0, origins: [] } }` (veya `prewarm: false` → `mode: "off"`)
 
 ### `cache().html`
 
@@ -890,6 +890,7 @@ vary: {
   host: true, // h=tr.example.com|…
   // headers: ["x-locale"],
   // fn: (req) => req.hostname.startsWith("tr.") ? "l=tr" : "l=en",
+  // assets: true, // a=<cssHash>|  (varsayılan; CSS değişince HTML kaydı düşer)
 }
 ```
 
@@ -898,6 +899,7 @@ vary: {
 | `host` | `boolean` | `false` | Public Host (`x-forwarded-host` yoksa `Host`), lowercase, portsuz → `h=…` |
 | `headers` | `string[]` | `[]` | İstek başlıkları `ad=değer` olarak eklenir |
 | `fn` | `(req) => string \| null` | — | Dönüş bir segment olarak eklenir |
+| `assets` | `boolean` | `true` | Manifest'teki stylesheet içerik hash'i `a=…` olarak anahtara girer |
 
 Anahtar biçimi: `${vary}|${yol}?${query}` (vary yoksa önek yok). Ayrıntı:
 [06-cache.md](./06-cache.md).

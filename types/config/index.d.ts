@@ -122,11 +122,13 @@ export type ResolvedConfig = {
     }[];
     /**
      *   Anahtara eklenen sabit parçalar (query allowlist'ten bağımsız). Host'tan
-     *   locale üreten sitelerde `host: true` zorunlu.
+     *   locale üreten sitelerde `host: true` zorunlu. `assets` (varsayılan
+     *   `true`) stylesheet içerik hash'ini `a=` olarak yazar.
      */
     cacheVary: {
         host: boolean;
         headers: string[];
+        assets: boolean;
         fn: ((req: import('express').Request) => string | null | undefined) | null;
     };
     /**

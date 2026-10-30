@@ -724,7 +724,9 @@ function resolveQueryPolicy(pathname) {
  *
  * Biçim: `${varyPrefix}${pathname}?${izin verilen query}`.
  * Vary (`cache().vary`) query allowlist'ten bağımsız; host/locale sitelerinde
- * ilk host'un HTML'inin diğerine servis edilmesini engeller.
+ * ilk host'un HTML'inin diğerine servis edilmesini engeller. `vary.assets`
+ * (varsayılan açık) stylesheet hash'ini `a=` olarak yazar — CSS değişince
+ * eski HTML, Redis zaman aşımında bile geri gelmez.
  *
  * Varsayılan olarak query parametresi taşıyan istek dinamiktir: `cache().query`
  * altında eşleşen bir kural olmadıkça cache'e hiç girmez. Aksi hâlde bir yolun

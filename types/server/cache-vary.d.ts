@@ -10,8 +10,11 @@ export declare function publicHost(req: {
     get?: (name: string) => string | undefined;
 }): string;
 /**
- * Anahtarın başına eklenen önek: `h=tr.example.com|` veya
- * `h=…&x-locale=tr|`. Vary yoksa boş string.
+ * Anahtarın başına eklenen önek: `h=tr.example.com|`,
+ * `h=…&x-locale=tr|` veya `h=…&a=<cssHash>|`. Vary yoksa boş string.
+ *
+ * Stylesheet hash'i istekten bağımsızdır; `req` olmasa da `vary.assets`
+ * açıksa yazılır. Host / header / fn `req` ister.
  *
  * @param {{ headers?: Record<string, unknown>, get?: (name: string) => string | undefined }} [req]
  * @returns {string}

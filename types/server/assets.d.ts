@@ -1,3 +1,8 @@
+export type AssetState = {
+    manifest: Record<string, string>;
+    generated: string;
+    stamp: string;
+};
 /**
  * CDN prefix + göreli asset yolu. Zaten mutlak (`https:…`) URL'lere dokunmaz.
  *
@@ -27,6 +32,22 @@ export declare function asset(name: string, options?: AssetOptions): string;
  * @returns {boolean}
  */
 export declare function hasAsset(name: string): boolean;
+/**
+ * Stylesheet hash'i değişince (aynı `generated` kökünde) çağrılır. HTML
+ * cache L1'i buradan düşürür; Redis/disk eski `a=` anahtarında kalır ve
+ * TTL ile ölür.
+ *
+ * @param {(next: string, prev: string) => void} listener
+ * @returns {void}
+ */
+export declare function onStylesheetHashChange(listener: (next: string, prev: string) => void): void;
+/**
+ * Manifest'teki CSS girdilerinin içerik hash'i. `cache().vary.assets`
+ * bunu HTML anahtarına `a=<hash>` olarak yazar.
+ *
+ * @returns {string}
+ */
+export declare function getStylesheetHash(): string;
 /**
  * Bu build'i tanımlayan kısa kimlik: `<asset>-<şablon>`.
  *

@@ -144,6 +144,7 @@ test("publicHost prefers x-forwarded-host and strips the port", () => {
 test("pathOfCacheKey strips the vary prefix before the path", () => {
   assert.equal(pathOfCacheKey("h=tr.example.com|/instruments/aapl?"), "/instruments/aapl");
   assert.equal(pathOfCacheKey("h=x&x-locale=tr|/list?page=2"), "/list");
+  assert.equal(pathOfCacheKey("h=tr.example.com&a=abc123def0|/hello?"), "/hello");
   assert.equal(pathOfCacheKey("/plain?"), "/plain");
 });
 

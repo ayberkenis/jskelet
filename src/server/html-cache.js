@@ -38,6 +38,7 @@ import {
 } from "../config/defaults.js";
 import { collectDependencies } from "./cache-deps.js";
 import { compilePattern, matchPattern } from "../config/pattern.js";
+import { getStylesheetHash, onStylesheetHashChange } from "./assets.js";
 import { pathOfCacheKey, publicHost } from "./cache-vary.js";
 import { diskDrop, diskDropMatching, diskGetJson, diskSetJson, diskShares } from "./disk-cache.js";
 import { encodeText } from "./middleware/compression.js";
@@ -964,6 +965,14 @@ function clearLocal() {
   sharedMissUntil.clear();
 }
 
+// CSS URL'leri değişince L1'deki HTML eski hash'li stylesheet basıyor.
+// Redis/disk kaydı `a=` taşıdığı için eski anahtar hiç okunmaz — SCAN/DEL
+// zaman aşımı eski HTML'i geri getiremez. Paylaşımlı kademeyi burada
+// boşaltmak, yeni hash altında az önce yazılmış taze kayıtları da siler.
+onStylesheetHashChange(() => {
+  clearLocal();
+});
+
 export function getHtmlCacheSize() {
   return store.size;
 }
@@ -1269,6 +1278,22 @@ function hostOfCacheKey(key) {
 }
 
 /**
+ * Vary önekinden `a=` (stylesheet hash) parçasını okur. Yoksa boş string.
+ *
+ * @param {string} key
+ * @returns {string}
+ */
+function assetsOfCacheKey(key) {
+  const sep = key.indexOf("|/");
+  if (sep === -1) return "";
+  const prefix = key.slice(0, sep);
+  for (const part of prefix.split("&")) {
+    if (part.startsWith("a=")) return part.slice(2);
+  }
+  return "";
+}
+
+/**
  * @param {string} key
  * @returns {string}
  */
@@ -1340,10 +1365,11 @@ export function getHtmlCacheEntries() {
  * Yol (query'siz) için taze bir HTML girdisi var mı? Ziyaret ısıtması yalnızca
  * soğuk / bayat hedefleri kuyruğa alır; HIT'leri yeniden çekmez.
  *
- * Gerçek anahtar `h=host|/yol?` biçimindedir: düz `store.get(pathname)` hem
- * vary önekini hem sondaki `?` işaretini kaçırır ve sıcak sayfayı yeniden
- * ısıtır. `vary.host` açıkken yalnızca bu isteğin host'u sayılır; diğer
- * locale'in kopyası bu yolu sıcak yapmaz.
+ * Gerçek anahtar `h=host&a=cssHash|/yol?` biçimindedir: düz
+ * `store.get(pathname)` vary önekini ve sondaki `?` işaretini kaçırır ve
+ * sıcak sayfayı yeniden ısıtır. `vary.host` açıkken yalnızca bu isteğin
+ * host'u sayılır; diğer locale'in kopyası bu yolu sıcak yapmaz. Eski `a=`
+ * hash'li kopya taze sayılmaz.
  *
  * @param {string} pathname
  * @param {{ headers?: Record<string, unknown>, get?: (name: string) => string | undefined }} [req]
@@ -1353,8 +1379,11 @@ export function isHtmlCacheFresh(pathname, req) {
   if (typeof pathname !== "string" || !pathname.startsWith("/")) return false;
 
   let host = "";
+  let assetsHash = "";
   try {
-    if (getConfig().cacheVary?.host && req) host = publicHost(req);
+    const vary = getConfig().cacheVary;
+    if (vary?.host && req) host = publicHost(req);
+    if (vary?.assets !== false) assetsHash = getStylesheetHash();
   } catch {
     // Config yokken (testler) önek aranmaz; yol eşleşmesi yeter.
   }
@@ -1367,6 +1396,9 @@ export function isHtmlCacheFresh(pathname, req) {
     const entry = store.get(key);
     if (!entry || now >= entry.expiresAt) continue;
     if (host && hostOfCacheKey(key) !== host) continue;
+    // Hash değişince `clearLocal` düşürmüş olmalı; yine de eski `a=`
+    // kopyasını taze sayma — prewarm soğuk CSS'li HTML'i atlamasın.
+    if (assetsOfCacheKey(key) !== assetsHash) continue;
     return true;
   }
 
