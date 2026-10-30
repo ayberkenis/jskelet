@@ -304,6 +304,12 @@ Success fires `jskelet:drive` (`detail.url`, `detail.title`); failures fire
 a full navigation. If the new page has no matching `id`, the permanent host
 is unmounted.
 
+`<head>` stays in place; before writing `body`, `driveTo` syncs
+`link[data-jskelet-css]` and `#critical-css` from the fetched document. The
+new sheet loads, then the previous one is removed, so a site with per-page
+CSS does not keep mixing `app.css` / `home.css`. If the next document has no
+`#critical-css`, the live copy is removed too.
+
 Per-page `entries` are not replayed during a drive — put those islands in the
 `main.js` `registerAll` map.
 

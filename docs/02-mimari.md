@@ -127,7 +127,8 @@ Dört davranış var, hepsi HTML'den kontrol edilir:
   için — görünürlük ve idle orada yine indirirdi.
 
 Tam sayfa gezinme çatıyı da söker. `start({ drive: true })` belgeyi ziyaret
-eder; `data-permanent` controller host'ları sökülmez.
+eder; `data-permanent` controller host'ları sökülmez. Ziyaret, çekilen
+belgedeki `link[data-jskelet-css]` ve `#critical-css` öğelerini de hizalar.
 
 İki ek ayrıntı ölçümden geldi:
 

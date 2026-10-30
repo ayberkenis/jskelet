@@ -155,8 +155,9 @@ client.
   Modules are dynamically imported on visibility by default;
   `data-island-eager`, `data-island-idle` and `data-island-on` pick a
   different strategy. `start({ drive: true })` visits the next page without
-  tearing down `data-permanent` controller hosts. A small store handles
-  sharing state between islands.
+  tearing down `data-permanent` controller hosts, and syncs per-page
+  stylesheets from the fetched document. A small store handles sharing
+  state between islands.
 - **HTML TTL cache.** Per-route `revalidate`, stale-while-revalidate on expiry,
   query allowlists, dependency tracking from `withDataCache`, and prewarm that
   fills the cache at boot. `invalidateHtmlCache()` stales a path, pattern or

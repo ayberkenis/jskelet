@@ -130,7 +130,9 @@ There are four behaviours, all controlled from the HTML:
   would still download them.
 
 A full page load also tears down the shell. `start({ drive: true })` visits
-the document; `data-permanent` controller hosts are not unmounted.
+the document; `data-permanent` controller hosts are not unmounted. The visit
+also syncs `link[data-jskelet-css]` and `#critical-css` from the fetched
+document.
 
 Two further details came out of measurement:
 

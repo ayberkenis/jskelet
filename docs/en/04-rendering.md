@@ -510,8 +510,8 @@ stylesheets({ styles: ["home.css"], blocking: "(min-width: 1024px)" });
   produce the default blocking output. The CSP note applies here too: if
   inline `onload` is blocked, the sheet never applies where the query does
   not match.
-- `data-jskelet-css` is how dev hot-swap picks the right link; it is written
-  in both modes.
+- `data-jskelet-css` is how dev hot-swap and drive visits pick the right
+  link; it is written in both modes.
 
 ### `modulePreload(source)`
 

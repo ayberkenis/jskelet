@@ -9,6 +9,7 @@ import {
   driveTo,
   restorePermanent,
   startDrive,
+  syncDrivenHead,
 } from "../src/client/drive.js";
 
 /**
@@ -246,6 +247,14 @@ test("driveTo: body visit keeps data-permanent host identity", async () => {
       return {
         title,
         documentElement: { lang },
+        head: {
+          querySelectorAll() {
+            return [];
+          },
+        },
+        getElementById() {
+          return null;
+        },
         querySelector(sel) {
           if (sel !== "body") return null;
           return { innerHTML: inner };
@@ -277,6 +286,18 @@ test("driveTo: body visit keeps data-permanent host identity", async () => {
   globalThis.document = {
     title: "Old",
     documentElement: { lang: "en" },
+    head: {
+      querySelectorAll() {
+        return [];
+      },
+      append() {},
+    },
+    getElementById() {
+      return null;
+    },
+    importNode(node) {
+      return node;
+    },
     querySelector(sel) {
       if (sel === "body") return body;
       return null;
@@ -318,5 +339,223 @@ test("driveTo: body visit keeps data-permanent host identity", async () => {
     globalThis.HTMLAnchorElement = prev.HTMLAnchorElement;
     globalThis.CustomEvent = prev.CustomEvent;
     globalThis.HTMLElement = prev.HTMLElement;
+  }
+});
+
+/**
+ * @param {string} name
+ * @param {string} href
+ */
+function cssLink(name, href) {
+  const attrs = {
+    rel: "stylesheet",
+    href,
+    "data-jskelet-css": name,
+  };
+  const node = {
+    tagName: "LINK",
+    href,
+    sheet: { cssRules: [] },
+    parentNode: null,
+    attrs,
+    getAttribute(attr) {
+      if (attr === "href") return this.href;
+      return this.attrs[attr] ?? null;
+    },
+    setAttribute(attr, value) {
+      this.attrs[attr] = String(value);
+      if (attr === "href") this.href = String(value);
+    },
+    addEventListener() {},
+    removeEventListener() {},
+    after(other) {
+      const parent = this.parentNode;
+      if (!parent) return;
+      const i = parent.children.indexOf(this);
+      parent.children.splice(i + 1, 0, other);
+      other.parentNode = parent;
+    },
+    remove() {
+      const parent = this.parentNode;
+      if (!parent) return;
+      const i = parent.children.indexOf(this);
+      if (i >= 0) parent.children.splice(i, 1);
+      this.parentNode = null;
+    },
+    cloneNode() {
+      return cssLink(name, this.href);
+    },
+  };
+  return node;
+}
+
+/**
+ * @param {string} css
+ */
+function styleCritical(css) {
+  return {
+    id: "critical-css",
+    tagName: "STYLE",
+    textContent: css,
+    parentNode: null,
+    cloneNode() {
+      return styleCritical(this.textContent);
+    },
+    replaceWith(other) {
+      const parent = this.parentNode;
+      if (!parent) return;
+      const i = parent.children.indexOf(this);
+      parent.children[i] = other;
+      other.parentNode = parent;
+      this.parentNode = null;
+    },
+    remove() {
+      const parent = this.parentNode;
+      if (!parent) return;
+      const i = parent.children.indexOf(this);
+      if (i >= 0) parent.children.splice(i, 1);
+      this.parentNode = null;
+    },
+  };
+}
+
+/**
+ * @param {ReturnType<typeof cssLink>[]} links
+ * @param {object[]} [extra]
+ */
+function makeHead(links = [], extra = []) {
+  const children = [];
+  const head = {
+    children,
+    querySelectorAll(sel) {
+      if (!String(sel).includes("data-jskelet-css")) return [];
+      return children.filter((node) => node.tagName === "LINK" && node.getAttribute?.("data-jskelet-css"));
+    },
+    append(node) {
+      children.push(node);
+      node.parentNode = head;
+    },
+    prepend(node) {
+      children.unshift(node);
+      node.parentNode = head;
+    },
+  };
+  for (const link of links) head.append(link);
+  for (const node of extra) {
+    children.push(node);
+    node.parentNode = head;
+  }
+  return head;
+}
+
+/**
+ * @param {ReturnType<typeof makeHead>} head
+ */
+function installHeadDocument(head) {
+  const prev = globalThis.document;
+  globalThis.document = {
+    head,
+    getElementById(id) {
+      if (id !== "critical-css") return null;
+      return head.children.find((node) => node.id === "critical-css") ?? null;
+    },
+    importNode(node) {
+      if (node.tagName === "LINK") {
+        return cssLink(node.getAttribute("data-jskelet-css"), node.getAttribute("href"));
+      }
+      if (typeof node.cloneNode === "function") return node.cloneNode(true);
+      return node;
+    },
+  };
+  return () => {
+    globalThis.document = prev;
+  };
+}
+
+/**
+ * @param {ReturnType<typeof cssLink>[]} links
+ * @param {ReturnType<typeof styleCritical> | null} [critical]
+ */
+function parsedDoc(links, critical = null) {
+  return {
+    head: makeHead(links),
+    getElementById(id) {
+      if (id !== "critical-css") return null;
+      return critical;
+    },
+  };
+}
+
+test("syncDrivenHead: swaps page stylesheet and drops the previous name", async () => {
+  const app = cssLink("app.css", "/assets/app.css");
+  const head = makeHead([app]);
+  const restore = installHeadDocument(head);
+
+  try {
+    await syncDrivenHead(
+      parsedDoc([cssLink("home.css", "/assets/home.css")]),
+    );
+    const live = head.querySelectorAll(":scope > link[data-jskelet-css]");
+    assert.equal(live.length, 1);
+    assert.equal(live[0].getAttribute("data-jskelet-css"), "home.css");
+    assert.equal(live[0].getAttribute("href"), "/assets/home.css");
+    assert.equal(app.parentNode, null);
+  } finally {
+    restore();
+  }
+});
+
+test("syncDrivenHead: same href keeps the live link", async () => {
+  const app = cssLink("app.css", "/assets/app.css");
+  const head = makeHead([app]);
+  const restore = installHeadDocument(head);
+
+  try {
+    await syncDrivenHead(parsedDoc([cssLink("app.css", "/assets/app.css")]));
+    const live = head.querySelectorAll(":scope > link[data-jskelet-css]");
+    assert.equal(live.length, 1);
+    assert.equal(live[0], app);
+  } finally {
+    restore();
+  }
+});
+
+test("syncDrivenHead: same name with a new href replaces after load", async () => {
+  const current = cssLink("home.css", "/assets/home.aaa.css");
+  const head = makeHead([current]);
+  const restore = installHeadDocument(head);
+
+  try {
+    await syncDrivenHead(parsedDoc([cssLink("home.css", "/assets/home.bbb.css")]));
+    const live = head.querySelectorAll(":scope > link[data-jskelet-css]");
+    assert.equal(live.length, 1);
+    assert.equal(live[0].getAttribute("href"), "/assets/home.bbb.css");
+    assert.equal(current.parentNode, null);
+  } finally {
+    restore();
+  }
+});
+
+test("syncDrivenHead: copies, updates and removes #critical-css", async () => {
+  const restoreEmpty = installHeadDocument(makeHead());
+  try {
+    await syncDrivenHead(parsedDoc([], styleCritical("body{color:red}")));
+    const inserted = globalThis.document.getElementById("critical-css");
+    assert.equal(inserted?.textContent, "body{color:red}");
+  } finally {
+    restoreEmpty();
+  }
+
+  const live = styleCritical("body{color:red}");
+  const head = makeHead([], [live]);
+  const restore = installHeadDocument(head);
+  try {
+    await syncDrivenHead(parsedDoc([], styleCritical("body{color:blue}")));
+    assert.equal(live.textContent, "body{color:blue}");
+
+    await syncDrivenHead(parsedDoc([]));
+    assert.equal(head.children.includes(live), false);
+  } finally {
+    restore();
   }
 });

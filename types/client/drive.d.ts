@@ -39,6 +39,15 @@ export declare function collectPermanent(root: ParentNode): HTMLElement[];
  */
 export declare function restorePermanent(root: ParentNode, kept: HTMLElement[]): void;
 /**
+ * Çekilen belgenin stylesheet'lerini canlı `<head>` ile hizala. Drive
+ * `body`'yi yazar; `<head>` yerinde kalır. Sayfa sheet'i olan her site
+ * aksi halde eski CSS ile yeni HTML görür.
+ *
+ * @param {Document} parsed
+ * @returns {Promise<void>}
+ */
+export declare function syncDrivenHead(parsed: Document): Promise<void>;
+/**
  * @param {string} href
  * @param {DriveToOptions} [options]
  * @returns {Promise<boolean>}

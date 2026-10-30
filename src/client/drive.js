@@ -8,7 +8,10 @@
  *
  * `swap()` fragment ucuna gider (`X-Requested-With: fragment`). Drive tam
  * belge ister. `root` verilirse (Turbo Frame gibi) yalnızca o bölge
- * yazılır; verilmezse `body`.
+ * yazılır; verilmezse `body`. `<head>` yerinde kaldığı için çekilen
+ * belgedeki `link[data-jskelet-css]` ve `#critical-css` canlı head ile
+ * hizalanır; aksi halde sayfa sheet'i olan her site eski CSS ile yeni
+ * HTML görür.
  */
 import { hydrate, unmount } from "./registry.js";
 
@@ -30,6 +33,11 @@ let activeRoot = null;
 let inFlight = null;
 
 const DEFAULT_ROOT = "body";
+const CSS_ATTR = "data-jskelet-css";
+const CSS_SELECTOR = `:scope > link[${CSS_ATTR}]`;
+const CRITICAL_ID = "critical-css";
+/** Yeni sheet hiç yüklenmezse ziyareti sonsuza kadar bekletme. */
+const SHEET_WAIT_MS = 3000;
 
 /**
  * `CSS.escape` Node test ortamında yok; id yalnızca seçicide kullanılıyor.
@@ -148,6 +156,221 @@ export function restorePermanent(root, kept) {
 }
 
 /**
+ * @param {Element} node
+ * @returns {string}
+ */
+function cssName(node) {
+  return node.getAttribute?.(CSS_ATTR) ?? "";
+}
+
+/**
+ * @param {Element} node
+ * @returns {string}
+ */
+function cssHref(node) {
+  return node.getAttribute?.("href") ?? "";
+}
+
+/**
+ * @param {Node} node
+ * @returns {Node}
+ */
+function adoptNode(node) {
+  if (typeof document.importNode === "function") {
+    return document.importNode(node, true);
+  }
+  if (typeof node.cloneNode === "function") {
+    return node.cloneNode(true);
+  }
+  return node;
+}
+
+/**
+ * Aynı isimde href değişti: canlı link'i kopyala (media zaten `all`),
+ * overlay `swapStylesheet` gibi yüklenince eskisi kalksın.
+ *
+ * @param {HTMLLinkElement} existing
+ * @param {string} href
+ * @returns {HTMLLinkElement}
+ */
+function cloneLiveSheet(existing, href) {
+  const node = /** @type {HTMLLinkElement} */ (
+    typeof existing.cloneNode === "function" ? existing.cloneNode(true) : adoptNode(existing)
+  );
+  node.href = href;
+  if (typeof node.setAttribute === "function") node.setAttribute("href", href);
+  return node;
+}
+
+/**
+ * @param {HTMLLinkElement} link
+ * @returns {Promise<void>}
+ */
+function waitForSheet(link) {
+  return new Promise((resolve) => {
+    let settled = false;
+    /** @type {ReturnType<typeof setTimeout> | undefined} */
+    let timer;
+    const done = () => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      resolve();
+    };
+
+    if (!cssHref(link) || link.sheet) {
+      done();
+      return;
+    }
+
+    if (typeof link.addEventListener === "function") {
+      link.addEventListener("load", done, { once: true });
+      link.addEventListener("error", done, { once: true });
+    }
+    timer = setTimeout(done, SHEET_WAIT_MS);
+  });
+}
+
+/**
+ * `head > link[data-jskelet-css]`. noscript içindeki ikizler DOMParser'da
+ * element olur (scripting kapalı); onları alma.
+ *
+ * @param {ParentNode | null | undefined} head
+ * @returns {Element[]}
+ */
+function listCssLinks(head) {
+  if (!head || typeof head.querySelectorAll !== "function") return [];
+  return [...head.querySelectorAll(CSS_SELECTOR)];
+}
+
+/**
+ * @param {HTMLLinkElement} node
+ * @param {HTMLLinkElement | null} anchor
+ * @param {ParentNode} liveHead
+ */
+function insertSheet(node, anchor, liveHead) {
+  if (anchor && typeof anchor.after === "function") {
+    anchor.after(node);
+    return;
+  }
+  if (typeof liveHead.append === "function") {
+    liveHead.append(node);
+  }
+}
+
+/**
+ * @param {Document} parsed
+ * @returns {Promise<void>}
+ */
+async function syncStylesheets(parsed) {
+  const nextHead = parsed.head;
+  const liveHead = document.head;
+  if (!nextHead || !liveHead) return;
+
+  const desired = listCssLinks(nextHead);
+  const live = listCssLinks(liveHead);
+  /** @type {Map<string, Element>} */
+  const liveByName = new Map();
+  for (const node of live) {
+    const name = cssName(node);
+    if (name) liveByName.set(name, node);
+  }
+
+  /** @type {HTMLLinkElement[]} */
+  const incoming = [];
+  let anchor = live.at(-1) ?? null;
+
+  for (const src of desired) {
+    const name = cssName(src);
+    if (!name) continue;
+    const href = cssHref(src);
+    const existing = liveByName.get(name);
+    if (existing && cssHref(existing) === href) {
+      anchor = existing;
+      continue;
+    }
+
+    const node = /** @type {HTMLLinkElement} */ (
+      existing ? cloneLiveSheet(/** @type {HTMLLinkElement} */ (existing), href) : adoptNode(src)
+    );
+    incoming.push(node);
+    insertSheet(node, /** @type {HTMLLinkElement | null} */ (anchor), liveHead);
+    anchor = node;
+  }
+
+  await Promise.all(incoming.map(waitForSheet));
+
+  const desiredNames = new Set(desired.map(cssName).filter(Boolean));
+  for (const node of live) {
+    const name = cssName(node);
+    if (!desiredNames.has(name)) {
+      node.remove();
+      continue;
+    }
+    const wanted = desired.find((item) => cssName(item) === name);
+    if (wanted && cssHref(node) !== cssHref(wanted)) {
+      node.remove();
+    }
+  }
+}
+
+/**
+ * Uygulama `<style id="critical-css">` (veya link) basıyorsa drive onu da
+ * taşır. Framework kendisi bu id'yi yazmaz.
+ *
+ * @param {Document} parsed
+ */
+function syncCriticalCss(parsed) {
+  if (typeof parsed.getElementById !== "function") return;
+  const next = parsed.getElementById(CRITICAL_ID);
+  const current =
+    typeof document.getElementById === "function" ? document.getElementById(CRITICAL_ID) : null;
+
+  if (!next) {
+    current?.remove();
+    return;
+  }
+
+  const sameTag = current && current.tagName.toUpperCase() === next.tagName.toUpperCase();
+  if (sameTag && current.tagName.toUpperCase() === "STYLE") {
+    current.textContent = next.textContent ?? "";
+    return;
+  }
+  if (sameTag && current.tagName.toUpperCase() === "LINK") {
+    const href = cssHref(next);
+    if (href && cssHref(current) !== href) {
+      current.setAttribute("href", href);
+      if ("href" in current) current.href = href;
+    }
+    return;
+  }
+
+  const adopted = /** @type {Element} */ (adoptNode(next));
+  if (current && typeof current.replaceWith === "function") {
+    current.replaceWith(adopted);
+    return;
+  }
+  current?.remove();
+  const liveHead = document.head;
+  if (!liveHead) return;
+  if (typeof liveHead.prepend === "function") liveHead.prepend(adopted);
+  else if (typeof liveHead.append === "function") liveHead.append(adopted);
+}
+
+/**
+ * Çekilen belgenin stylesheet'lerini canlı `<head>` ile hizala. Drive
+ * `body`'yi yazar; `<head>` yerinde kalır. Sayfa sheet'i olan her site
+ * aksi halde eski CSS ile yeni HTML görür.
+ *
+ * @param {Document} parsed
+ * @returns {Promise<void>}
+ */
+export async function syncDrivenHead(parsed) {
+  await syncStylesheets(parsed);
+  syncCriticalCss(parsed);
+}
+
+/**
  * @param {HTMLElement} element
  * @param {string} html
  */
@@ -162,13 +385,14 @@ function replaceRegion(element, html) {
 /**
  * @param {string} html
  * @param {string} selector
- * @returns {{ title: string, html: string, lang: string } | null}
+ * @returns {{ doc: Document, title: string, html: string, lang: string } | null}
  */
 function readDrivenDocument(html, selector) {
   const parsed = new DOMParser().parseFromString(html, "text/html");
   const next = findRoot(parsed, selector);
   if (!next) return null;
   return {
+    doc: parsed,
     title: parsed.title,
     html: next.innerHTML,
     lang: parsed.documentElement?.lang ?? "",
@@ -227,6 +451,12 @@ export async function driveTo(href, options = {}) {
     if (!parsed) {
       location.assign(response.url || url.href);
       return false;
+    }
+
+    try {
+      await syncDrivenHead(parsed.doc);
+    } catch (error) {
+      console.error("[drive] head sync failed", error);
     }
 
     replaceRegion(element, parsed.html);

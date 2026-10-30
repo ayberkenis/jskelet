@@ -20,7 +20,9 @@ one is listed under a **Breaking** heading.
   `data-permanent` plus `id` keep their live island (theme toggle, overlay).
   There is no content well. `startDrive("#frame")` still targets one region.
   Fires `jskelet:drive`. `data-no-drive` leaves a full page load. The blog
-  example turns drive on.
+  example turns drive on. Before the body swap, `driveTo` syncs
+  `link[data-jskelet-css]` and `#critical-css` from the fetched document so
+  per-page stylesheets apply on the visit.
 
 ### Fixed
 

@@ -291,6 +291,12 @@ Başarıda `jskelet:drive` (`detail.url`, `detail.title`), hatada
 `jskelet:drive-error`. Yeni belgede `root` yoksa tam sayfa gezinmeye düşülür.
 Yeni sayfada aynı `id` yoksa kalıcı host sökülür.
 
+`<head>` yerinde kalır; `driveTo` `body`'yi yazmadan önce çekilen belgedeki
+`link[data-jskelet-css]` ve `#critical-css` öğelerini canlı head ile hizalar.
+Yeni sheet yüklenir, sonra eskisi kalkar — sayfa CSS'i olan bir sitede eski
+`app.css` / `home.css` karışmaz. Yeni belgede `#critical-css` yoksa canlı
+kopya da silinir.
+
 Sayfaya özel `entries` drive sırasında yeniden basılmaz — o island'ları
 `main.js` `registerAll` haritasına yazın.
 

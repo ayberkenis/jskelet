@@ -500,8 +500,8 @@ stylesheets({ styles: ["home.css"], blocking: "(min-width: 1024px)" });
   string sorgu sayılmaz, varsayılan blocking çıktısı basılır. CSP notu bu
   modda da geçerlidir: inline `onload` engellenirse eşleşmeyen ekranda sheet
   uygulanmaz.
-- `data-jskelet-css` dev hot-swap'ın doğru linki seçmesi içindir; her iki
-  modda da yazılır.
+- `data-jskelet-css` dev hot-swap'ın ve drive ziyaretinin doğru linki
+  seçmesi içindir; her iki modda da yazılır.
 
 ### `modulePreload(source)`
 
