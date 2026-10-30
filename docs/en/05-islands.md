@@ -1,7 +1,7 @@
 # 05 — Islands
 
 This document explains how interactivity is added: the `data-island` contract,
-passing props, the three hydration strategies and the IntersectionObserver
+passing props, the four hydration strategies and the IntersectionObserver
 logic, the structure of `client/entries/*` and loading extra entries per page,
 the runtime API (`register`, `registerAll`, `hydrate`, `observeDocument`,
 `start`), `createStore` for sharing state between islands, the DOM helpers,
@@ -60,6 +60,7 @@ condition is met. Growing this map does not grow the initial load.
 | `data-island-props='{"…":…}'` | JSON props. If it cannot be parsed an error is printed to the console and `{}` is passed. |
 | `data-island-eager` | Mount immediately, independent of visibility. |
 | `data-island-idle` | Wait until `load` plus idle time even if it is visible. |
+| `data-island-on="focusin, click"` | Do not download the bundle until the first listed event. `eager` / `idle` / visibility / hidden-host are ignored while this attribute is present. |
 | `data-island-ready="true"` | **Written by the framework.** Added after `mount()` returns successfully; CSS and tests can read it. |
 
 Since `data-island-props` is an HTML attribute, wrapping it in single quotes is
@@ -120,6 +121,37 @@ they do not compete with LCP.
 If `document.readyState` is already `complete` when the page loads, the wait is
 skipped and it is deferred straight to idle time.
 
+### `data-island-on`
+
+Does not download the bundle until the first matching event on the host.
+Comma-separated event names: `focusin`, `click`, `pointerdown`,
+`pointerenter`. The listener is installed in the capture phase and removed
+after the first event.
+
+For islands that **sit in the first viewport** but are not needed until the
+user interacts — a header search field is the usual case. Default visibility
+and `idle` do not help here: the box is on screen, so the bundle still
+downloads. A hidden overlay does not help either — zero-box hosts are
+mounted on purpose. `data-island-on` overrides those three paths (and
+`eager`).
+
+```ejs
+<div data-island="search" data-island-on="focusin">
+  <input type="search" placeholder="Search">
+</div>
+```
+
+`focus` does not bubble; write `focusin` so focus on a descendant input is
+seen. If `focus` is given, a warning is printed and the listener is still
+installed, but it only fires when the host itself is focusable.
+
+An empty or invalid list (`data-island-on=""`, `data-island-on="1 screen"`)
+prints a warning and does **not** mount the island — so it cannot fall
+through to an immediate download.
+
+Do not `<ModulePreload>` these islands: preload would request the bundle
+alongside the HTML and undo the deferral.
+
 ### Hidden elements
 
 A `hidden` drawer or dialog has no layout box, and `IntersectionObserver`
@@ -133,7 +165,8 @@ is deliberate: since no write comes in between there is only a single reflow.
 
 The practical consequence: you can start a modal as `hidden` and its island
 will still mount; use `data-island-idle` on a heavy hidden host so it does not
-compete with LCP.
+compete with LCP. Use `data-island-on` when it must not download until the
+user interacts.
 
 ## The `client/` directory
 

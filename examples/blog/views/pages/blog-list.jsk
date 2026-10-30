@@ -7,9 +7,10 @@
 
   {#
     Arama island'ı: sunucu tam listeyi bastığı için JS gelmeden de sayfa
-    kullanılabilir; island yalnızca filtreleme ekler.
+    kullanılabilir; island yalnızca filtreleme ekler. `data-island-on`:
+    kutu ilk ekranda durur ama paket input odaklanana kadar inmez.
   #}
-  <div class="mt-6" data-island="search" data-island-eager>
+  <div class="mt-6" data-island="search" data-island-on="focusin">
     <input
       type="search"
       data-search-input

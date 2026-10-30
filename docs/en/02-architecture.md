@@ -115,7 +115,7 @@ triggered on the very first observation; those off screen are **never
 downloaded** until they are scrolled to. Heavy modules like the chart library on
 the home page thus drop out of the initial load entirely.
 
-There are three behaviours, all controlled from the HTML:
+There are four behaviours, all controlled from the HTML:
 
 - **Default:** tied to visibility.
 - **`data-island-eager`:** independent of visibility, attaches immediately. For
@@ -124,6 +124,10 @@ There are three behaviours, all controlled from the HTML:
   completed and the main thread is free. So that heavy modules that are visible
   in the first viewport but not critical (e.g. a mini chart that pulls in a
   chart library) do not compete with LCP.
+- **`data-island-on`:** does not download the bundle until the first listed
+  event. For islands that sit in the first viewport but are not needed until
+  the user interacts — a header search field — because visibility and idle
+  would still download them.
 
 Two further details came out of measurement:
 
@@ -134,7 +138,8 @@ Two further details came out of measurement:
   drawer/dialog has no layout box and `IntersectionObserver` will never report
   it; that is why `hydrate()` reads the measurements in one pass
   (`getClientRects().length`) and, instead of handing boxless elements to the
-  observer, attaches them immediately.
+  observer, attaches them immediately. `data-island-on` overrides this path
+  too: a hidden host stays unloaded until the event.
 
 One consequence of this: **image error handling is not an island.** An
 image-heavy page can have 80+ `<img>` elements, and attaching a separate island

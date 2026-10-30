@@ -328,7 +328,9 @@ Every `"use client"` component becomes an island. The process:
 3. Pass props as JSON with `data-island-props`.
 4. Add it to the `registerAll()` map in the entry.
 5. Choose the binding strategy: the default (visibility), `data-island-eager`
-   (global behavior) or `data-island-idle` (heavy and non-critical).
+   (global behavior), `data-island-idle` (heavy and non-critical) or
+   `data-island-on` (do not download until the first interaction — a header
+   search field).
 
 For components using Context, `createStore()` is the closest equivalent
 ([05-islands.md](./05-islands.md)).

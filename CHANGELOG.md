@@ -8,6 +8,14 @@ one is listed under a **Breaking** heading.
 
 ## [Unreleased]
 
+### Added
+
+- `data-island-on="focusin, click"` defers an island's download until the
+  first matching event on the host. It wins over eager, idle, visibility and
+  the hidden-host path, so a header search field can sit above the fold
+  without pulling its module until the user focuses it. Empty or invalid
+  event lists warn and do not mount.
+
 ### Changed
 
 - Cacheable HTML pages carry a weak `ETag` on every encoding and answer a

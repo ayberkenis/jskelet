@@ -1,7 +1,7 @@
 # 05 — Island'lar
 
 Bu belge etkileşimin nasıl eklendiğini anlatır: `data-island` sözleşmesi, props
-geçişi, üç hidrasyon stratejisi ve IntersectionObserver mantığı,
+geçişi, dört hidrasyon stratejisi ve IntersectionObserver mantığı,
 `client/entries/*` yapısı ve sayfa başına ek entry yükleme, runtime API'si
 (`register`, `registerAll`, `hydrate`, `observeDocument`, `start`), island'lar
 arası durum paylaşımı için `createStore`, DOM yardımcıları, `startSafeImages` ve
@@ -59,6 +59,7 @@ büyütmek ilk yükü büyütmez.
 | `data-island-props='{"…":…}'` | JSON props. Ayrıştırılamazsa konsola hata basılır ve `{}` geçilir. |
 | `data-island-eager` | Görünürlükten bağımsız, hemen bağla. |
 | `data-island-idle` | Görünür olsa bile `load` + boş zamana kadar bekle. |
+| `data-island-on="focusin, click"` | Listedeki ilk olaya kadar paketi indirme. `eager` / `idle` / görünürlük / gizli host bu işaret varken yok sayılır. |
 | `data-island-ready="true"` | **Framework yazar.** `mount()` başarıyla döndükten sonra eklenir; CSS ve testler bunu okuyabilir. |
 
 `data-island-props` içeriği HTML attribute'u olduğu için tek tırnakla sarmak en
@@ -114,6 +115,34 @@ grafik kütüphanesi çeken bir mini grafik — LCP ile yarışmasın diye.
 Sayfa yüklendiğinde `document.readyState` zaten `complete` ise bekleme atlanır
 ve doğrudan boş zamana kaydırılır.
 
+### `data-island-on`
+
+Paketi host üzerindeki ilk eşleşen olaya kadar indirmez. Virgülle ayrılmış
+olay adları: `focusin`, `click`, `pointerdown`, `pointerenter`. Dinleyici
+capture fazında kurulur, ilk olayda kalkar.
+
+Header araması gibi **ilk ekranda duran** ama tıklanmadan ihtiyaç
+duyulmayan island'lar için. Varsayılan görünürlük ve `idle` burada işe
+yaramaz: kutu ekranda olduğu için paket yine iner. Gizli bir overlay de
+kurtarmaz — sıfır kutulu host'lar bilinçli olarak bağlanır. `data-island-on`
+bu üç yolu (ve `eager`'ı) ezer.
+
+```ejs
+<div data-island="search" data-island-on="focusin">
+  <input type="search" placeholder="Ara">
+</div>
+```
+
+`focus` kabarmaz; altındaki input'a odaklanmayı görmek için `focusin` yazın.
+`focus` verilirse konsola bir uyarı basılır, dinleyici yine kurulur ama yalnızca
+host'un kendisi odaklanabilir olduğunda tetiklenir.
+
+Boş ya da geçersiz bir liste (`data-island-on=""`, `data-island-on="1 ekran"`)
+konsola uyarır ve island **bağlanmaz** — yanlışlıkla hemen inmesin diye.
+
+Bu island'lar için `<ModulePreload>` kullanmayın: preload, ertelemenin
+tersine paketi HTML ile birlikte ister.
+
 ### Gizli elementler
 
 `hidden` bir drawer ya da dialog'un düzen kutusu yoktur ve
@@ -127,6 +156,7 @@ bağlanır.
 
 Pratik sonucu: bir modal'ı `hidden` başlatabilirsiniz, island'ı yine bağlanır;
 ağır bir gizli host için `data-island-idle` LCP ile yarışmayı keser.
+Tıklanana kadar hiç inmesin istiyorsanız `data-island-on` kullanın.
 
 ## `client/` dizini
 

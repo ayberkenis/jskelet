@@ -114,7 +114,7 @@ zaten ilk gözlemde tetiklenir; ekran dışındakiler kaydırılana kadar **hiç
 indirilmez**. Ana sayfadaki grafik kütüphanesi gibi ağır modüller böylece ilk
 yükten tamamen çıkar.
 
-Üç davranış var, hepsi HTML'den kontrol edilir:
+Dört davranış var, hepsi HTML'den kontrol edilir:
 
 - **Varsayılan:** görünürlüğe bağlı.
 - **`data-island-eager`:** görünürlükten bağımsız, hemen bağlanır. Header,
@@ -122,6 +122,9 @@ yükten tamamen çıkar.
 - **`data-island-idle`:** görünür olsa bile `load` tamamlanıp ana iş parçacığı
   boşalana kadar bekler. İlk ekranda görünen ama kritik olmayan ağır modüller
   (ör. grafik kütüphanesi çeken mini grafik) LCP ile yarışmasın diye.
+- **`data-island-on`:** listedeki ilk olaya kadar paketi indirmez. Header
+  araması gibi ilk ekranda duran ama tıklanmadan ihtiyaç duyulmayan island'lar
+  için — görünürlük ve idle orada yine indirirdi.
 
 İki ek ayrıntı ölçümden geldi:
 
@@ -132,7 +135,8 @@ yükten tamamen çıkar.
   drawer/dialog'un düzen kutusu yoktur ve `IntersectionObserver` onu asla
   bildirmez; bu yüzden `hydrate()` ölçümleri tek seferde okur
   (`getClientRects().length`) ve kutusu olmayanları gözlemciye vermek yerine
-  hemen bağlar.
+  hemen bağlar. `data-island-on` bu yolu da ezer: gizli host tıklanana kadar
+  inmez.
 
 Buradan çıkan bir sonuç: **görsel hata yönetimi island değildir.** Görsel
 ağırlıklı bir sayfada 80+ `<img>` olabiliyor ve her birine ayrı island bağlamak

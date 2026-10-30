@@ -2379,7 +2379,7 @@ const ABOUT = {
     <div class="steps">
       <div class="step"><span class="n">1</span><span><b>Marking</b><span>The EJS partial puts <code>data-island="name"</code> on the root element.</span></span></div>
       <div class="step"><span class="n">2</span><span><b>Module</b><span>A file with the same name lives under <code>client/islands/</code> and exports the mount function.</span></span></div>
-      <div class="step"><span class="n">3</span><span><b>Loading</b><span><code>client/core/registry.js</code> dynamically imports the module once an IntersectionObserver sees the element approach the viewport.</span></span></div>
+      <div class="step"><span class="n">3</span><span><b>Loading</b><span>The registry dynamically imports the module on visibility by default. <code>data-island-eager</code>, <code>data-island-idle</code> and <code>data-island-on</code> pick a different moment.</span></span></div>
       <div class="step"><span class="n">4</span><span><b>Mounting</b><span>If the mount succeeds, <code>data-island-ready</code> is written on the element. The <b>Island</b> card on the Performance tab shows this ratio.</span></span></div>
     </div>
     <div class="cards">

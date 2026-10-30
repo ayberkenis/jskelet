@@ -153,8 +153,8 @@ client.
   next slice. URLs stay explicit.
 - **Islands.** Interactivity attaches to elements carrying `data-island`.
   Modules are dynamically imported on visibility by default;
-  `data-island-eager` and `data-island-idle` pick a different strategy. A small
-  store handles sharing state between islands.
+  `data-island-eager`, `data-island-idle` and `data-island-on` pick a
+  different strategy. A small store handles sharing state between islands.
 - **HTML TTL cache.** Per-route `revalidate`, stale-while-revalidate on expiry,
   query allowlists, dependency tracking from `withDataCache`, and prewarm that
   fills the cache at boot. `invalidateHtmlCache()` stales a path, pattern or

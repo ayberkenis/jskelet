@@ -322,7 +322,8 @@ Her `"use client"` bileşeni bir island olur. Süreç:
 3. Props'u `data-island-props` ile JSON olarak geçirin.
 4. Entry'de `registerAll()` haritasına ekleyin.
 5. Bağlanma stratejisini seçin: varsayılan (görünürlük), `data-island-eager`
-   (global davranış) ya da `data-island-idle` (ağır ve kritik olmayan).
+   (global davranış), `data-island-idle` (ağır ve kritik olmayan) ya da
+   `data-island-on` (ilk etkileşime kadar indirme — header araması).
 
 Context kullanan bileşenler için `createStore()` en yakın karşılık
 ([05-islands.md](./05-islands.md)).

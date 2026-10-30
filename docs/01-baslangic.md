@@ -238,8 +238,8 @@ start();
 Değerlerin dinamik import olması kritik: modül yalnızca sayfada o island
 gerçekten varsa **ve** element görünür hâle geldiğinde indirilir. Yani bu
 haritayı büyütmek ilk yükü büyütmez. Hidrasyon stratejileri
-(`data-island-eager`, `data-island-idle`) ve runtime API'sinin tamamı
-[05-islands.md](./05-islands.md)'de.
+(`data-island-eager`, `data-island-idle`, `data-island-on`) ve runtime
+API'sinin tamamı [05-islands.md](./05-islands.md)'de.
 
 ## CLI komutları
 

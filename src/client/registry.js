@@ -19,6 +19,11 @@
  * Gizli (zero-box) host'larda da aynı yol kullanılır — `hydrate()` onları
  * `mountWhenReady` ile bağlar, hemen `mountIsland` çağırmaz.
  *
+ * `data-island-on="focusin, click"` paketi ilk etkileşime kadar indirmez.
+ * Header araması gibi ilk ekranda duran ama tıklanmadan ihtiyaç duyulmayan
+ * island'lar için: görünürlük, idle, eager ve gizli-host yolu bu işaret
+ * varken atlanır.
+ *
  * `data-island-props` JSON ise parse edilip props olarak geçer.
  */
 
@@ -41,6 +46,17 @@ const mounted = new WeakMap();
  * @type {WeakMap<HTMLElement, (() => void)[]>}
  */
 const cleanups = new WeakMap();
+
+/**
+ * `data-island-on` beklerken dinleyiciyi söken fonksiyon.
+ * WeakMap: bağlanmadan DOM'dan çıkan host referans bırakmasın.
+ *
+ * @type {WeakMap<HTMLElement, () => void>}
+ */
+const onWaiters = new WeakMap();
+
+/** DOM olay adı: harf ile başlar, harf / rakam / tire. */
+const ON_EVENT_NAME = /^[a-z][a-z0-9-]*$/i;
 
 /**
  * @param {string} name
@@ -181,12 +197,14 @@ export function unmount(root = document) {
 
   if (element.dataset?.island) {
     lazyObserver?.unobserve(element);
+    stopWaiting(element);
     runCleanups(element);
   }
 
   for (const node of root.querySelectorAll?.("[data-island]") ?? []) {
     const child = /** @type {HTMLElement} */ (node);
     lazyObserver?.unobserve(child);
+    stopWaiting(child);
     runCleanups(child);
   }
 }
@@ -260,6 +278,75 @@ function mountWhenReady(node) {
   schedule(() => mountIsland(node));
 }
 
+/**
+ * Virgülle ayrılmış olay listesi. Boş / geçersiz adlar düşer.
+ *
+ * @param {string | undefined} raw
+ * @returns {string[]}
+ */
+function parseOnEvents(raw) {
+  if (typeof raw !== "string" || !raw.trim()) return [];
+
+  const seen = new Set();
+  /** @type {string[]} */
+  const events = [];
+
+  for (const part of raw.split(",")) {
+    const name = part.trim();
+    if (!name) continue;
+    if (!ON_EVENT_NAME.test(name)) {
+      console.warn(`[island] invalid data-island-on event "${name}"`);
+      continue;
+    }
+    const key = name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    events.push(key);
+  }
+
+  return events;
+}
+
+/** @param {HTMLElement} node */
+function stopWaiting(node) {
+  onWaiters.get(node)?.();
+}
+
+/**
+ * Host üzerinde ilk eşleşen olaya kadar bekler; o anda paket iner.
+ *
+ * Capture: çocuk `stopPropagation` etse de (ve `pointerenter` gibi
+ * kabarmayan olaylarda) host görür. `focus` kabarmaz — `focusin` kullanın.
+ *
+ * @param {HTMLElement} node
+ * @param {string[]} events
+ */
+function waitForInteraction(node, events) {
+  if (onWaiters.has(node) || isMounted(node)) return;
+
+  if (events.includes("focus") && !events.includes("focusin")) {
+    console.warn(
+      `[island] ${node.dataset.island}: data-island-on uses "focus", which does not bubble. Use "focusin" so focus on descendants is seen.`,
+    );
+  }
+
+  const onFirst = () => {
+    stopWaiting(node);
+    mountIsland(node);
+  };
+
+  for (const type of events) {
+    node.addEventListener(type, onFirst, { capture: true });
+  }
+
+  onWaiters.set(node, () => {
+    for (const type of events) {
+      node.removeEventListener(type, onFirst, { capture: true });
+    }
+    onWaiters.delete(node);
+  });
+}
+
 /** @param {ParentNode} [root] */
 export function hydrate(root = document) {
   /** @type {HTMLElement[]} */
@@ -276,6 +363,21 @@ export function hydrate(root = document) {
   const boxed = pending.map((node) => node.getClientRects().length > 0);
 
   pending.forEach((node, i) => {
+    // `data-island-on`: etkileşime kadar indirme. eager / idle / gizli host
+    // ve görünürlük bu işaret varken yok sayılır — aksi hâlde header
+    // araması ilk ekranda durduğu için hemen inerdi.
+    if ("islandOn" in node.dataset) {
+      const events = parseOnEvents(node.dataset.islandOn);
+      if (!events.length) {
+        console.warn(
+          `[island] ${node.dataset.island}: data-island-on has no valid events`,
+        );
+        return;
+      }
+      waitForInteraction(node, events);
+      return;
+    }
+
     // `data-island-eager`: görünürlük / idle yok — hemen bağla.
     if ("islandEager" in node.dataset) {
       mountIsland(node);

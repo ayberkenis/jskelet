@@ -244,8 +244,9 @@ start();
 It is critical that the values are dynamic imports: the module is downloaded
 only if that island actually exists on the page **and** when the element becomes
 visible. In other words, growing this map does not grow the initial payload.
-Hydration strategies (`data-island-eager`, `data-island-idle`) and the complete
-runtime API are in [05-islands.md](./05-islands.md).
+Hydration strategies (`data-island-eager`, `data-island-idle`,
+`data-island-on`) and the complete runtime API are in
+[05-islands.md](./05-islands.md).
 
 ## CLI commands
 

@@ -19,6 +19,11 @@
  * Gizli (zero-box) host'larda da aynı yol kullanılır — `hydrate()` onları
  * `mountWhenReady` ile bağlar, hemen `mountIsland` çağırmaz.
  *
+ * `data-island-on="focusin, click"` paketi ilk etkileşime kadar indirmez.
+ * Header araması gibi ilk ekranda duran ama tıklanmadan ihtiyaç duyulmayan
+ * island'lar için: görünürlük, idle, eager ve gizli-host yolu bu işaret
+ * varken atlanır.
+ *
  * `data-island-props` JSON ise parse edilip props olarak geçer.
  */
 export type MountFn = (element: HTMLElement, props: object) => void | (() => void);
